@@ -2,16 +2,54 @@
 
 A home maintenance app designed to track maintenance tasks, find local services, and answer questions about your home. Created for Shepherd University CIS 485 course.
 
-## Getting Started
+## Features
 
-This project is a starting point for a Flutter application.
+- Track appliances, vehicles, smart devices and custom equipment.
+- Maintenance schedules default to typical manufacturer recommendations from a
+  built-in catalog, and every interval can be changed or reset.
+- Scheduled notifications when maintenance is due, with the reminder time and
+  lead time set by the user.
+- Finds smart devices on the current Wi-Fi network using Bonjour/mDNS and
+  UPnP/SSDP.
+- Settings for notifications, light/dark mode, privacy and home location.
+  All data is stored only on the device.
 
-A few resources to get you started if this is your first Flutter project:
+## Supported platforms
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Android, iOS, Windows and macOS. The `linux` and `web` folders came from the
+Flutter template and are not supported targets. The network scan uses
+`dart:io`, which does not run on the web.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Running
+
+```sh
+flutter pub get
+flutter run            # pick a device
+flutter test           # unit and widget tests
+```
+
+## Project structure
+
+| Folder | Contents |
+| --- | --- |
+| `lib/models/` | Plain data classes: equipment, maintenance tasks, intervals, settings. |
+| `lib/data/` | The built-in equipment catalog and repositories that save data with `shared_preferences`. |
+| `lib/services/` | Notification scheduling, reminder planning and network device discovery. |
+| `lib/state/` | `ChangeNotifier` controllers the UI listens to, plus `ReminderSync`, which reschedules notifications after every change. |
+| `lib/ui/` | Screens and shared widgets. |
+| `test/` | Unit tests for the models, planner and catalog, plus widget tests. |
+
+State is shared with the [provider](https://pub.dev/packages/provider)
+package. `lib/main.dart` creates the controllers and services and provides
+them to the widget tree.
+
+## Platform notes
+
+- **Android:** scheduled notifications need core library desugaring and the
+  receivers declared in `AndroidManifest.xml`. Both are already configured.
+- **iOS / macOS:** the Bonjour service types the app searches for must be
+  listed under `NSBonjourServices` in `Info.plist`. Keep that list in sync with
+  `lib/services/device_discovery_service.dart`. iOS skips the UPnP search
+  because sending multicast packets needs a special entitlement from Apple.
+- **iOS:** a maximum of 64 notifications can be pending, so the app schedules
+  the next 60 reminders and refreshes them whenever it opens or data changes.

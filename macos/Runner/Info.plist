@@ -28,5 +28,30 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>HomeTrackHub scans your home network to find smart devices you may want to track maintenance for.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_hap._tcp</string>
+		<string>_matter._tcp</string>
+		<string>_matterc._udp</string>
+		<string>_googlecast._tcp</string>
+		<string>_airplay._tcp</string>
+		<string>_raop._tcp</string>
+		<string>_spotify-connect._tcp</string>
+		<string>_sonos._tcp</string>
+		<string>_amzn-wplay._tcp</string>
+		<string>_androidtvremote2._tcp</string>
+		<string>_hue._tcp</string>
+		<string>_nanoleafapi._tcp</string>
+		<string>_elg._tcp</string>
+		<string>_home-assistant._tcp</string>
+		<string>_esphomelib._tcp</string>
+		<string>_shelly._tcp</string>
+		<string>_ipp._tcp</string>
+		<string>_printer._tcp</string>
+		<string>_axis-video._tcp</string>
+		<string>_miio._udp</string>
+	</array>
 </dict>
 </plist>
