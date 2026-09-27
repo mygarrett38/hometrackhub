@@ -8,8 +8,7 @@ import 'screens/settings_screen.dart';
 import 'screens/upcoming_screen.dart';
 
 /// The app's main layout with three tabs. Uses a bottom navigation bar on
-/// phones and a side navigation rail on wider screens such as tablets and
-/// desktops.
+/// phones and a side navigation rail on wider screens such as tablets.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 

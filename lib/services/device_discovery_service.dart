@@ -95,9 +95,9 @@ class _KnownService {
   final String suggestedTypeId;
 }
 
-/// Bonjour service types to look for. iOS and macOS only allow browsing for
-/// types listed under NSBonjourServices in Info.plist, so update those files
-/// when changing this list.
+/// Bonjour service types to look for. iOS only allows browsing for
+/// types listed under NSBonjourServices in ios/Runner/Info.plist, so update that
+/// file when changing this list.
 const Map<String, _KnownService> _knownMdnsServices = {
   '_hap._tcp': _KnownService('Apple HomeKit accessory', 'smart_device'),
   '_matter._tcp': _KnownService('Matter smart home device', 'smart_device'),

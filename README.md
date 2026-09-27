@@ -16,9 +16,7 @@ A home maintenance app designed to track maintenance tasks, find local services,
 
 ## Supported platforms
 
-Android, iOS, Windows and macOS. The `linux` and `web` folders came from the
-Flutter template and are not supported targets. The network scan uses
-`dart:io`, which does not run on the web.
+Android and iOS.
 
 ## Running
 
@@ -47,9 +45,9 @@ them to the widget tree.
 
 - **Android:** scheduled notifications need core library desugaring and the
   receivers declared in `AndroidManifest.xml`. Both are already configured.
-- **iOS / macOS:** the Bonjour service types the app searches for must be
-  listed under `NSBonjourServices` in `Info.plist`. Keep that list in sync with
-  `lib/services/device_discovery_service.dart`. iOS skips the UPnP search
+- **iOS:** the Bonjour service types the app searches for must be listed
+  under `NSBonjourServices` in `ios/Runner/Info.plist`. Keep that list in sync
+  with `lib/services/device_discovery_service.dart`. iOS skips the UPnP search
   because sending multicast packets needs a special entitlement from Apple.
 - **iOS:** a maximum of 64 notifications can be pending, so the app schedules
   the next 60 reminders and refreshes them whenever it opens or data changes.

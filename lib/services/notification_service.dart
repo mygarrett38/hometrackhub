@@ -41,9 +41,6 @@ class LocalNotificationService implements NotificationService {
       styleInformation: BigTextStyleInformation(''),
     ),
     iOS: DarwinNotificationDetails(),
-    macOS: DarwinNotificationDetails(),
-    windows: WindowsNotificationDetails(),
-    linux: LinuxNotificationDetails(),
   );
 
   @override
@@ -59,18 +56,6 @@ class LocalNotificationService implements NotificationService {
           requestBadgePermission: false,
           requestSoundPermission: false,
         ),
-        macOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        ),
-        windows: WindowsInitializationSettings(
-          appName: 'HomeTrackHub',
-          appUserModelId: 'HomeTrackHub.HomeTrackHub.Desktop',
-          // Identifies this app to Windows. Must stay the same forever.
-          guid: '3f6c1a2e-8b4d-4e7a-9c15-2d8e6b0f4a71',
-        ),
-        linux: LinuxInitializationSettings(defaultActionName: 'Open'),
       ),
     );
   }
@@ -109,20 +94,9 @@ class LocalNotificationService implements NotificationService {
               sound: true,
             ) ??
             false;
-      case TargetPlatform.macOS:
-        final macOS = _plugin
-            .resolvePlatformSpecificImplementation<
-              MacOSFlutterLocalNotificationsPlugin
-            >();
-        return await macOS?.requestPermissions(
-              alert: true,
-              badge: true,
-              sound: true,
-            ) ??
-            false;
       default:
-        // Windows and Linux do not ask apps to request permission.
-        return true;
+        // The app only supports Android and iOS.
+        return false;
     }
   }
 
@@ -130,7 +104,9 @@ class LocalNotificationService implements NotificationService {
   Future<void> replaceScheduledReminders(
     List<PlannedReminder> reminders,
   ) async {
-    await _cancelScheduledReminders();
+    // Leaves reminders the user has already received in the notification
+    // center and only removes ones that have not been shown yet.
+    await _plugin.cancelAllPendingNotifications();
     for (final reminder in reminders) {
       await _plugin.zonedSchedule(
         id: reminder.id,
@@ -143,19 +119,6 @@ class LocalNotificationService implements NotificationService {
         // fine for home maintenance.
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
-    }
-  }
-
-  Future<void> _cancelScheduledReminders() {
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.macOS:
-        // Leaves reminders the user has already received in the
-        // notification center.
-        return _plugin.cancelAllPendingNotifications();
-      default:
-        // Other platforms do not support cancelling only pending
-        // notifications, so everything is cleared.
-        return _plugin.cancelAll();
     }
   }
 
