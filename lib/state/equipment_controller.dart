@@ -29,6 +29,11 @@ class EquipmentController extends ChangeNotifier {
     return List.unmodifiable(tasks);
   }
 
+  // Whether there are no tasks running
+  bool get hasNoTasks {
+    return _equipment.every((item) => item.tasks.isEmpty);
+  }
+
   /// Network ids of equipment that was added from the network scan.
   Set<String> get networkIds => {
     for (final item in _equipment)

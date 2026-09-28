@@ -21,10 +21,10 @@ class EquipmentListScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('My equipment')),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'equipment_fab',
         onPressed: () => _showAddOptions(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Add equipment'),
+        child: const Icon(Icons.add)
       ),
       body: equipment.isEmpty
           ? const Center(
