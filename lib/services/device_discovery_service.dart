@@ -26,7 +26,7 @@ class DiscoveredDevice {
   /// What kind of device this appears to be, for example "Google Cast device".
   final String kind;
 
-  /// Id of the equipment catalog entry that best matches this device.
+  /// Id of the home item catalog entry that best matches this device.
   final String suggestedTypeId;
 
   final String manufacturer;
@@ -366,7 +366,7 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
   }
 
   /// Guesses what kind of device a UPnP description is for. Returns a
-  /// description and the id of the closest equipment catalog entry.
+  /// description and the id of the closest home item catalog entry.
   (String, String) _classifyUpnpDevice({
     required String deviceType,
     required String manufacturer,

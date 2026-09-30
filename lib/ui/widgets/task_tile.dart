@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/equipment_task.dart';
-import '../../state/equipment_controller.dart';
+import '../../models/home_item_task.dart';
+import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 
 /// A list row for one maintenance task showing how often it repeats, when it
@@ -11,15 +11,15 @@ class TaskTile extends StatelessWidget {
   const TaskTile({
     super.key,
     required this.item,
-    this.showEquipmentName = true,
+    this.showHomeItemName = true,
     this.onTap,
   });
 
-  final EquipmentTask item;
+  final HomeItemTask item;
 
-  /// Whether to include the equipment's name. Hidden on the equipment's own
+  /// Whether to include the home item's name. Hidden on the home item's own
   /// page, where it would be repeated on every row.
-  final bool showEquipmentName;
+  final bool showHomeItemName;
   final VoidCallback? onTap;
 
   @override
@@ -35,7 +35,7 @@ class TaskTile extends StatelessWidget {
         : colors.onSurfaceVariant;
 
     final details = [
-      if (showEquipmentName) item.equipment.name,
+      if (showHomeItemName) item.homeItem.name,
       task.interval.label,
       if (!task.remindersEnabled) 'Reminders off',
     ].join(' · ');
@@ -67,14 +67,14 @@ class TaskTile extends StatelessWidget {
 /// Marks [item] as done today and shows a message with an Undo button.
 Future<void> markTaskDoneWithUndo(
   BuildContext context,
-  EquipmentTask item,
+  HomeItemTask item,
 ) async {
-  final controller = context.read<EquipmentController>();
+  final controller = context.read<HomeItemController>();
   final messenger = ScaffoldMessenger.of(context);
   final previousTask = item.task;
 
   await controller.markTaskDone(
-    item.equipment.id,
+    item.homeItem.id,
     item.task,
     completedOn: dateOnly(DateTime.now()),
   );
@@ -86,7 +86,7 @@ Future<void> markTaskDoneWithUndo(
         content: Text('Marked "${previousTask.title}" as done'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => controller.saveTask(item.equipment.id, previousTask),
+          onPressed: () => controller.saveTask(item.homeItem.id, previousTask),
         ),
       ),
     );

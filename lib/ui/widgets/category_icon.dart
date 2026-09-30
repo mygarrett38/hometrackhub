@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../../models/equipment_category.dart';
+import '../../models/home_item_category.dart';
 
-/// Material icons used to represent each [EquipmentCategory].
-extension EquipmentCategoryIcon on EquipmentCategory {
+/// Material icons used to represent each [HomeItemCategory].
+extension HomeItemCategoryIcon on HomeItemCategory {
   IconData get icon => switch (this) {
-    EquipmentCategory.appliance => Icons.kitchen,
-    EquipmentCategory.hvac => Icons.thermostat,
-    EquipmentCategory.plumbing => Icons.water_drop,
-    EquipmentCategory.electrical => Icons.electrical_services,
-    EquipmentCategory.safety => Icons.local_fire_department,
-    EquipmentCategory.outdoor => Icons.yard,
-    EquipmentCategory.vehicle => Icons.directions_car,
-    EquipmentCategory.smartDevice => Icons.devices_other,
-    EquipmentCategory.other => Icons.handyman,
+    HomeItemCategory.appliance => Icons.kitchen,
+    HomeItemCategory.hvac => Icons.thermostat,
+    HomeItemCategory.plumbing => Icons.water_drop,
+    HomeItemCategory.electrical => Icons.electrical_services,
+    HomeItemCategory.safety => Icons.local_fire_department,
+    HomeItemCategory.outdoor => Icons.yard,
+    HomeItemCategory.vehicle => Icons.directions_car,
+    HomeItemCategory.smartDevice => Icons.devices_other,
+    HomeItemCategory.other => Icons.handyman,
   };
 }

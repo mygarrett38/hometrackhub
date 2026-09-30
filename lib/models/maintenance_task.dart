@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'maintenance_interval.dart';
 
-/// A recurring maintenance job for one piece of equipment, such as
+/// A recurring maintenance job for one home item, such as
 /// "Replace air filter every 3 months".
 @immutable
 class MaintenanceTask {

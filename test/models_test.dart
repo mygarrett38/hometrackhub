@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/models/app_settings.dart';
-import 'package:hometrackhub/models/equipment.dart';
-import 'package:hometrackhub/models/equipment_category.dart';
+import 'package:hometrackhub/models/home_item.dart';
+import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
 
@@ -72,11 +72,11 @@ void main() {
     });
   });
 
-  test('Equipment survives a JSON round trip', () {
-    final equipment = Equipment(
+  test('Home item survives a JSON round trip', () {
+    final homeItem = HomeItem(
       id: 'fridge',
       name: 'Kitchen fridge',
-      category: EquipmentCategory.appliance,
+      category: HomeItemCategory.appliance,
       catalogTypeId: 'refrigerator',
       manufacturer: 'Acme',
       purchaseDate: DateTime(2020, 5, 1),
@@ -93,9 +93,9 @@ void main() {
       ],
     );
 
-    final restored = Equipment.fromJson(equipment.toJson());
+    final restored = HomeItem.fromJson(homeItem.toJson());
 
-    expect(restored.toJson(), equipment.toJson());
+    expect(restored.toJson(), homeItem.toJson());
   });
 
   test('AppSettings uses defaults for values missing from saved data', () {

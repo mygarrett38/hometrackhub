@@ -2,23 +2,23 @@ import 'package:flutter/foundation.dart';
 
 import '../services/notification_service.dart';
 import '../services/reminder_planner.dart';
-import 'equipment_controller.dart';
+import 'home_item_controller.dart';
 import 'settings_controller.dart';
 
 /// Keeps the operating system's scheduled notifications in step with the
-/// user's equipment and settings.
+/// user's home items and settings.
 ///
-/// Whenever equipment or settings change, every reminder is planned again
+/// Whenever home items or settings change, every reminder is planned again
 /// from scratch. This is simpler and less error prone than updating
 /// individual reminders, and the number of reminders is small.
 class ReminderSync {
   ReminderSync({
-    required this._equipment,
+    required this._homeItems,
     required this._settings,
     required this._notifications,
   });
 
-  final EquipmentController _equipment;
+  final HomeItemController _homeItems;
   final SettingsController _settings;
   final NotificationService _notifications;
 
@@ -27,13 +27,13 @@ class ReminderSync {
 
   /// Schedules reminders now and again after every change.
   void start() {
-    _equipment.addListener(sync);
+    _homeItems.addListener(sync);
     _settings.addListener(sync);
     sync();
   }
 
   void dispose() {
-    _equipment.removeListener(sync);
+    _homeItems.removeListener(sync);
     _settings.removeListener(sync);
   }
 
@@ -49,7 +49,7 @@ class ReminderSync {
       do {
         _needsAnotherSync = false;
         final reminders = planReminders(
-          equipment: _equipment.equipment,
+          homeItems: _homeItems.homeItems,
           settings: _settings.settings,
           now: DateTime.now(),
         );

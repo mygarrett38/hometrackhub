@@ -1,62 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/equipment.dart';
-import '../../models/equipment_task.dart';
-import '../../state/equipment_controller.dart';
+import '../../models/home_item.dart';
+import '../../models/home_item_task.dart';
+import '../../state/home_item_controller.dart';
 import '../widgets/category_icon.dart';
 import '../widgets/task_tile.dart';
-import 'equipment_form_screen.dart';
+import 'home_item_form_screen.dart';
 import 'task_form_screen.dart';
 
-/// Shows one piece of equipment and its maintenance schedule.
-class EquipmentDetailScreen extends StatelessWidget {
-  const EquipmentDetailScreen({super.key, required this.equipmentId});
+/// Shows one home item and its maintenance schedule.
+class HomeItemDetailScreen extends StatelessWidget {
+  const HomeItemDetailScreen({super.key, required this.homeItemId});
 
-  final String equipmentId;
+  final String homeItemId;
 
   @override
   Widget build(BuildContext context) {
-    final equipment = context.watch<EquipmentController>().findById(
-      equipmentId,
-    );
+    final homeItem = context.watch<HomeItemController>().findById(homeItemId);
 
-    // The equipment may have just been deleted.
-    if (equipment == null) {
+    // The home item may have just been deleted.
+    if (homeItem == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: Text('This equipment no longer exists.')),
+        body: const Center(child: Text('This home item no longer exists.')),
       );
     }
 
     final tasks = [
-      for (final task in equipment.tasks) EquipmentTask(equipment, task),
+      for (final task in homeItem.tasks) HomeItemTask(homeItem, task),
     ]..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(equipment.name),
+        title: Text(homeItem.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
             tooltip: 'Edit details',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => EquipmentFormScreen(existing: equipment),
+                builder: (_) => HomeItemFormScreen(existing: homeItem),
               ),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete equipment',
-            onPressed: () => _confirmDelete(context, equipment),
+            tooltip: 'Delete home item',
+            onPressed: () => _confirmDelete(context, homeItem),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => TaskFormScreen(equipmentId: equipment.id),
+            builder: (_) => TaskFormScreen(homeItemId: homeItem.id),
           ),
         ),
         icon: const Icon(Icons.add_task),
@@ -65,7 +63,7 @@ class EquipmentDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 88),
         children: [
-          _DetailsCard(equipment: equipment),
+          _DetailsCard(homeItem: homeItem),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(
@@ -83,11 +81,11 @@ class EquipmentDetailScreen extends StatelessWidget {
           for (final item in tasks)
             TaskTile(
               item: item,
-              showEquipmentName: false,
+              showHomeItemName: false,
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) => TaskFormScreen(
-                    equipmentId: equipment.id,
+                    homeItemId: homeItem.id,
                     existing: item.task,
                   ),
                 ),
@@ -98,14 +96,14 @@ class EquipmentDetailScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, Equipment equipment) async {
-    final controller = context.read<EquipmentController>();
+  Future<void> _confirmDelete(BuildContext context, HomeItem homeItem) async {
+    final controller = context.read<HomeItemController>();
     final navigator = Navigator.of(context);
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete ${equipment.name}?'),
+        title: Text('Delete ${homeItem.name}?'),
         content: const Text(
           'This also deletes its maintenance history and reminders.',
         ),
@@ -124,33 +122,33 @@ class EquipmentDetailScreen extends StatelessWidget {
 
     if (confirmed ?? false) {
       navigator.pop();
-      await controller.deleteEquipment(equipment.id);
+      await controller.deleteHomeItem(homeItem.id);
     }
   }
 }
 
 class _DetailsCard extends StatelessWidget {
-  const _DetailsCard({required this.equipment});
+  const _DetailsCard({required this.homeItem});
 
-  final Equipment equipment;
+  final HomeItem homeItem;
 
   @override
   Widget build(BuildContext context) {
-    final purchaseDate = equipment.purchaseDate;
+    final purchaseDate = homeItem.purchaseDate;
     final details = <(String, String)>[
-      ('Category', equipment.category.label),
-      if (equipment.manufacturer.isNotEmpty)
-        ('Manufacturer', equipment.manufacturer),
-      if (equipment.modelNumber.isNotEmpty) ('Model', equipment.modelNumber),
-      if (equipment.serialNumber.isNotEmpty)
-        ('Serial number', equipment.serialNumber),
-      if (equipment.location.isNotEmpty) ('Location', equipment.location),
+      ('Category', homeItem.category.label),
+      if (homeItem.manufacturer.isNotEmpty)
+        ('Manufacturer', homeItem.manufacturer),
+      if (homeItem.modelNumber.isNotEmpty) ('Model', homeItem.modelNumber),
+      if (homeItem.serialNumber.isNotEmpty)
+        ('Serial number', homeItem.serialNumber),
+      if (homeItem.location.isNotEmpty) ('Location', homeItem.location),
       if (purchaseDate != null)
         (
           'Purchased',
           MaterialLocalizations.of(context).formatMediumDate(purchaseDate),
         ),
-      if (equipment.notes.isNotEmpty) ('Notes', equipment.notes),
+      if (homeItem.notes.isNotEmpty) ('Notes', homeItem.notes),
     ];
 
     return Card(
@@ -162,11 +160,11 @@ class _DetailsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(equipment.category.icon),
+                Icon(homeItem.category.icon),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    equipment.name,
+                    homeItem.name,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),

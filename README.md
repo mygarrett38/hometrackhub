@@ -4,7 +4,7 @@ A home maintenance app designed to track maintenance tasks, find local services,
 
 ## Features
 
-- Track appliances, vehicles, smart devices and custom equipment.
+- Track appliances, vehicles, smart devices and custom home items.
 - Maintenance schedules default to typical manufacturer recommendations from a
   built-in catalog, and every interval can be changed or reset.
 - Scheduled notifications when maintenance is due, with the reminder time and
@@ -30,8 +30,8 @@ flutter test           # unit and widget tests
 
 | Folder | Contents |
 | --- | --- |
-| `lib/models/` | Plain data classes: equipment, maintenance tasks, intervals, settings. |
-| `lib/data/` | The built-in equipment catalog and repositories that save data with `shared_preferences`. |
+| `lib/models/` | Plain data classes: home items, maintenance tasks, intervals, settings. |
+| `lib/data/` | The built-in home item catalog and repositories that save data with `shared_preferences`. |
 | `lib/services/` | Notification scheduling, reminder planning and network device discovery. |
 | `lib/state/` | `ChangeNotifier` controllers the UI listens to, plus `ReminderSync`, which reschedules notifications after every change. |
 | `lib/ui/` | Screens and shared widgets. |

@@ -93,7 +93,7 @@ class AppSettings {
   final bool networkDiscoveryEnabled;
 
   /// When true, reminders only say that maintenance is due, without naming
-  /// the equipment or task. Useful because notifications can appear on a
+  /// the home item or task. Useful because notifications can appear on a
   /// locked screen.
   final bool hideDetailsInNotifications;
 

@@ -3,19 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/equipment_catalog.dart';
-import '../../models/equipment_category.dart';
+import '../../data/home_item_catalog.dart';
+import '../../models/home_item_category.dart';
 import '../../services/device_discovery_service.dart';
-import '../../state/equipment_controller.dart';
+import '../../state/home_item_controller.dart';
 import '../../state/settings_controller.dart';
 import '../widgets/category_icon.dart';
-import 'equipment_form_screen.dart';
+import 'home_item_form_screen.dart';
 
 /// The stages the network scan can be in.
 enum _ScanState { checkingNetwork, notConnected, scanning, finished, failed }
 
 /// Scans the home network for smart devices and lets the user add them as
-/// equipment.
+/// home items.
 class DeviceDiscoveryScreen extends StatefulWidget {
   const DeviceDiscoveryScreen({super.key});
 
@@ -114,7 +114,7 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
   }
 
   Widget _buildResults(BuildContext context) {
-    final addedIds = context.watch<EquipmentController>().networkIds;
+    final addedIds = context.watch<HomeItemController>().networkIds;
     final devices = mergeDuplicateDevices(_devices.values)
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
@@ -172,8 +172,8 @@ class _DeviceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final category =
-        findEquipmentType(device.suggestedTypeId)?.category ??
-        EquipmentCategory.smartDevice;
+        findHomeItemType(device.suggestedTypeId)?.category ??
+        HomeItemCategory.smartDevice;
     final details = [
       device.kind,
       if (device.address != null) device.address!,
@@ -188,7 +188,7 @@ class _DeviceTile extends StatelessWidget {
           : FilledButton.tonal(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => EquipmentFormScreen(discoveredDevice: device),
+                  builder: (_) => HomeItemFormScreen(discoveredDevice: device),
                 ),
               ),
               child: const Text('Add'),

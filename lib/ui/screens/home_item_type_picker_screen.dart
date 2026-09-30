@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../data/equipment_catalog.dart';
-import '../../models/equipment_category.dart';
+import '../../data/home_item_catalog.dart';
+import '../../models/home_item_category.dart';
 import '../widgets/category_icon.dart';
-import 'equipment_form_screen.dart';
+import 'home_item_form_screen.dart';
 
-/// Lets the user pick a common kind of equipment from the built-in catalog.
-class EquipmentTypePickerScreen extends StatefulWidget {
-  const EquipmentTypePickerScreen({super.key});
+/// Lets the user pick a common kind of home item from the built-in catalog.
+class HomeItemTypePickerScreen extends StatefulWidget {
+  const HomeItemTypePickerScreen({super.key});
 
   @override
-  State<EquipmentTypePickerScreen> createState() =>
-      _EquipmentTypePickerScreenState();
+  State<HomeItemTypePickerScreen> createState() =>
+      _HomeItemTypePickerScreenState();
 }
 
-class _EquipmentTypePickerScreenState extends State<EquipmentTypePickerScreen> {
+class _HomeItemTypePickerScreenState extends State<HomeItemTypePickerScreen> {
   String _search = '';
 
   void _open(Widget screen) {
@@ -25,12 +25,12 @@ class _EquipmentTypePickerScreenState extends State<EquipmentTypePickerScreen> {
   @override
   Widget build(BuildContext context) {
     final query = _search.trim().toLowerCase();
-    final matches = equipmentCatalog
+    final matches = homeItemCatalog
         .where((type) => type.name.toLowerCase().contains(query))
         .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose equipment type')),
+      appBar: AppBar(title: const Text('Choose home item type')),
       body: ListView(
         children: [
           Padding(
@@ -46,11 +46,11 @@ class _EquipmentTypePickerScreenState extends State<EquipmentTypePickerScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.edit_note),
-            title: const Text('Not listed? Create custom equipment'),
-            onTap: () => _open(const EquipmentFormScreen()),
+            title: const Text('Not listed? Create custom home item'),
+            onTap: () => _open(const HomeItemFormScreen()),
           ),
           const Divider(),
-          for (final category in EquipmentCategory.values)
+          for (final category in HomeItemCategory.values)
             ..._categorySection(category, matches),
         ],
       ),
@@ -58,8 +58,8 @@ class _EquipmentTypePickerScreenState extends State<EquipmentTypePickerScreen> {
   }
 
   List<Widget> _categorySection(
-    EquipmentCategory category,
-    List<EquipmentType> matches,
+    HomeItemCategory category,
+    List<HomeItemType> matches,
   ) {
     final types = matches.where((type) => type.category == category).toList();
     if (types.isEmpty) return [];
@@ -80,7 +80,7 @@ class _EquipmentTypePickerScreenState extends State<EquipmentTypePickerScreen> {
             '${type.tasks.length} recommended '
             '${type.tasks.length == 1 ? 'task' : 'tasks'}',
           ),
-          onTap: () => _open(EquipmentFormScreen(initialType: type)),
+          onTap: () => _open(HomeItemFormScreen(initialType: type)),
         ),
     ];
   }

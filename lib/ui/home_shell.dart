@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/notification_service.dart';
 import '../state/settings_controller.dart';
-import 'screens/equipment_list_screen.dart';
+import 'screens/home_item_list_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/upcoming_screen.dart';
 
@@ -24,13 +24,13 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _destinations = [
     (icon: Icons.event_available, label: 'Upcoming'),
-    (icon: Icons.home_repair_service, label: 'Equipment'),
+    (icon: Icons.home_repair_service, label: 'My Home'),
     (icon: Icons.settings, label: 'Settings'),
   ];
 
   static const _screens = [
     UpcomingScreen(),
-    EquipmentListScreen(),
+    HomeItemListScreen(),
     SettingsScreen(),
   ];
 

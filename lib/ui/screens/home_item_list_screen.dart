@@ -1,38 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/equipment.dart';
-import '../../models/equipment_category.dart';
-import '../../state/equipment_controller.dart';
+import '../../models/home_item.dart';
+import '../../models/home_item_category.dart';
+import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 import '../widgets/category_icon.dart';
 import 'device_discovery_screen.dart';
-import 'equipment_detail_screen.dart';
-import 'equipment_form_screen.dart';
-import 'equipment_type_picker_screen.dart';
+import 'home_item_detail_screen.dart';
+import 'home_item_form_screen.dart';
+import 'home_item_type_picker_screen.dart';
 
-/// Equipment tab: everything the user tracks, grouped by category.
-class EquipmentListScreen extends StatelessWidget {
-  const EquipmentListScreen({super.key});
+/// HomeItem tab: everything the user tracks, grouped by category.
+class HomeItemListScreen extends StatelessWidget {
+  const HomeItemListScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final equipment = context.watch<EquipmentController>().equipment;
+    final homeItems = context.watch<HomeItemController>().homeItems;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My equipment')),
+      appBar: AppBar(title: const Text('My Home')),
       floatingActionButton: FloatingActionButton(
-        heroTag: 'equipment_fab',
+        heroTag: 'home_item_fab',
+        tooltip: 'Add home item',
         onPressed: () => _showAddOptions(context),
-        child: const Icon(Icons.add)
+        child: const Icon(Icons.add),
       ),
-      body: equipment.isEmpty
+      body: homeItems.isEmpty
           ? const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
                 child: Text(
-                  'You are not tracking any equipment yet.\n\n'
-                  'Tap "Add equipment" to pick a common appliance or '
+                  'You are not tracking any home items yet.\n\n'
+                  'Tap "Add home item" to pick a common appliance or '
                   'vehicle, create your own, or find smart devices on '
                   'your Wi-Fi network.',
                   textAlign: TextAlign.center,
@@ -43,8 +44,8 @@ class EquipmentListScreen extends StatelessWidget {
               // Leave room so the last item isn't hidden by the button.
               padding: const EdgeInsets.only(bottom: 88),
               children: [
-                for (final category in EquipmentCategory.values)
-                  ..._categorySection(context, category, equipment),
+                for (final category in HomeItemCategory.values)
+                  ..._categorySection(context, category, homeItems),
               ],
             ),
     );
@@ -52,10 +53,10 @@ class EquipmentListScreen extends StatelessWidget {
 
   List<Widget> _categorySection(
     BuildContext context,
-    EquipmentCategory category,
-    List<Equipment> allEquipment,
+    HomeItemCategory category,
+    List<HomeItem> allHomeItem,
   ) {
-    final items = allEquipment
+    final items = allHomeItem
         .where((item) => item.category == category)
         .toList();
     if (items.isEmpty) return [];
@@ -68,7 +69,7 @@ class EquipmentListScreen extends StatelessWidget {
           style: Theme.of(context).textTheme.titleSmall,
         ),
       ),
-      for (final item in items) _EquipmentTile(equipment: item),
+      for (final item in items) _HomeItemTile(homeItem: item),
     ];
   }
 
@@ -94,15 +95,15 @@ class EquipmentListScreen extends StatelessWidget {
                 'Appliances, vehicles and more, with the manufacturer\'s '
                 'recommended maintenance already filled in.',
               ),
-              onTap: () => openScreen(const EquipmentTypePickerScreen()),
+              onTap: () => openScreen(const HomeItemTypePickerScreen()),
             ),
             ListTile(
               leading: const Icon(Icons.edit_note),
-              title: const Text('Create custom equipment'),
+              title: const Text('Create custom home item'),
               subtitle: const Text(
                 'Describe anything else and set up your own maintenance tasks.',
               ),
-              onTap: () => openScreen(const EquipmentFormScreen()),
+              onTap: () => openScreen(const HomeItemFormScreen()),
             ),
             ListTile(
               leading: const Icon(Icons.wifi_find),
@@ -120,40 +121,40 @@ class EquipmentListScreen extends StatelessWidget {
   }
 }
 
-class _EquipmentTile extends StatelessWidget {
-  const _EquipmentTile({required this.equipment});
+class _HomeItemTile extends StatelessWidget {
+  const _HomeItemTile({required this.homeItem});
 
-  final Equipment equipment;
+  final HomeItem homeItem;
 
   @override
   Widget build(BuildContext context) {
     final today = dateOnly(DateTime.now());
-    final nextDue = equipment.tasks.isEmpty
+    final nextDue = homeItem.tasks.isEmpty
         ? null
-        : equipment.tasks
+        : homeItem.tasks
               .map((task) => task.nextDueDate)
               .reduce((a, b) => a.isBefore(b) ? a : b);
 
     final makeAndModel = [
-      equipment.manufacturer,
-      equipment.modelNumber,
+      homeItem.manufacturer,
+      homeItem.modelNumber,
     ].where((part) => part.isNotEmpty).join(' ');
-    final taskCount = equipment.tasks.length;
+    final taskCount = homeItem.tasks.length;
     final subtitle = [
       if (makeAndModel.isNotEmpty) makeAndModel,
-      if (equipment.location.isNotEmpty) equipment.location,
+      if (homeItem.location.isNotEmpty) homeItem.location,
       '$taskCount ${taskCount == 1 ? 'task' : 'tasks'}',
       if (nextDue != null) 'Next: ${describeDueDate(nextDue, today)}',
     ].join(' · ');
 
     return ListTile(
-      leading: Icon(equipment.category.icon),
-      title: Text(equipment.name),
+      leading: Icon(homeItem.category.icon),
+      title: Text(homeItem.name),
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => EquipmentDetailScreen(equipmentId: equipment.id),
+          builder: (_) => HomeItemDetailScreen(homeItemId: homeItem.id),
         ),
       ),
     );

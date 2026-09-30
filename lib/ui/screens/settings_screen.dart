@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/app_settings.dart';
 import '../../services/notification_service.dart';
-import '../../state/equipment_controller.dart';
+import '../../state/home_item_controller.dart';
 import '../../state/settings_controller.dart';
 import 'home_location_screen.dart';
 
@@ -149,7 +149,7 @@ class SettingsScreen extends StatelessWidget {
             secondary: const Icon(Icons.visibility_off_outlined),
             title: const Text('Hide details in notifications'),
             subtitle: const Text(
-              'Reminders will not name your equipment, for example on a '
+              'Reminders will not name your home items, for example on a '
               'locked screen',
             ),
             value: settings.hideDetailsInNotifications,
@@ -171,7 +171,7 @@ class SettingsScreen extends StatelessWidget {
               'Delete all my data',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
-            subtitle: const Text('Removes all equipment and settings'),
+            subtitle: const Text('Removes all home items and settings'),
             onTap: () => _confirmDeleteAll(context),
           ),
 
@@ -228,8 +228,8 @@ class SettingsScreen extends StatelessWidget {
     final export = {
       'exportedAt': DateTime.now().toIso8601String(),
       'settings': context.read<SettingsController>().settings.toJson(),
-      'equipment': [
-        for (final item in context.read<EquipmentController>().equipment)
+      'homeItems': [
+        for (final item in context.read<HomeItemController>().homeItems)
           item.toJson(),
       ],
     };
@@ -241,7 +241,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _confirmDeleteAll(BuildContext context) async {
-    final equipment = context.read<EquipmentController>();
+    final homeItems = context.read<HomeItemController>();
     final settings = context.read<SettingsController>();
     final messenger = ScaffoldMessenger.of(context);
 
@@ -250,7 +250,7 @@ class SettingsScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Delete all data?'),
         content: const Text(
-          'This permanently deletes all of your equipment, maintenance '
+          'This permanently deletes all of your home items, maintenance '
           'history, reminders and settings from this device.',
         ),
         actions: [
@@ -267,7 +267,7 @@ class SettingsScreen extends StatelessWidget {
     );
 
     if (confirmed ?? false) {
-      await equipment.deleteAll();
+      await homeItems.deleteAll();
       await settings.reset();
       messenger.showSnackBar(
         const SnackBar(content: Text('All data was deleted.')),

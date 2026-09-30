@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/app_settings.dart';
-import '../models/equipment.dart';
-import '../models/equipment_task.dart';
+import '../models/home_item.dart';
+import '../models/home_item_task.dart';
 import '../utils/date_utils.dart';
 
 /// iOS keeps at most 64 pending notifications per app, so the planner never
@@ -34,19 +34,19 @@ class PlannedReminder {
 /// reminded at the next available reminder time. Tasks reminded at the same
 /// moment are combined into one notification.
 List<PlannedReminder> planReminders({
-  required List<Equipment> equipment,
+  required List<HomeItem> homeItems,
   required AppSettings settings,
   required DateTime now,
 }) {
   if (!settings.notificationsEnabled) return [];
 
   // Group tasks by the moment their reminder should appear.
-  final tasksByTime = <DateTime, List<EquipmentTask>>{};
-  for (final item in equipment) {
+  final tasksByTime = <DateTime, List<HomeItemTask>>{};
+  for (final item in homeItems) {
     for (final task in item.tasks) {
       if (!task.remindersEnabled) continue;
       final time = _reminderTimeFor(task.nextDueDate, settings, now);
-      tasksByTime.putIfAbsent(time, () => []).add(EquipmentTask(item, task));
+      tasksByTime.putIfAbsent(time, () => []).add(HomeItemTask(item, task));
     }
   }
 
@@ -97,7 +97,7 @@ DateTime _atReminderTime(DateTime day, AppSettings settings) {
 PlannedReminder _buildReminder({
   required int id,
   required DateTime time,
-  required List<EquipmentTask> tasks,
+  required List<HomeItemTask> tasks,
   required bool hideDetails,
 }) {
   if (hideDetails) {
@@ -117,14 +117,14 @@ PlannedReminder _buildReminder({
     return PlannedReminder(
       id: id,
       time: time,
-      title: '${item.equipment.name}: ${item.task.title}',
+      title: '${item.homeItem.name}: ${item.task.title}',
       body: 'This maintenance task is $due.',
     );
   }
 
   final lines = [
     for (final item in tasks)
-      '${item.task.title} (${item.equipment.name}) - '
+      '${item.task.title} (${item.homeItem.name}) - '
           '${describeDueDate(item.dueDate, time).toLowerCase()}',
   ];
   return PlannedReminder(

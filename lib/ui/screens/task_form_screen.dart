@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/maintenance_interval.dart';
 import '../../models/maintenance_task.dart';
-import '../../state/equipment_controller.dart';
+import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/id_generator.dart';
 import '../widgets/date_field.dart';
@@ -13,9 +13,9 @@ import '../widgets/dropdown_field.dart';
 /// Form for adding a maintenance task or changing an existing one,
 /// including how often it repeats.
 class TaskFormScreen extends StatefulWidget {
-  const TaskFormScreen({super.key, required this.equipmentId, this.existing});
+  const TaskFormScreen({super.key, required this.homeItemId, this.existing});
 
-  final String equipmentId;
+  final String homeItemId;
 
   /// The task being edited, or `null` when adding a new task.
   final MaintenanceTask? existing;
@@ -86,15 +86,12 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     );
 
     final navigator = Navigator.of(context);
-    await context.read<EquipmentController>().saveTask(
-      widget.equipmentId,
-      task,
-    );
+    await context.read<HomeItemController>().saveTask(widget.homeItemId, task);
     navigator.pop();
   }
 
   Future<void> _delete() async {
-    final controller = context.read<EquipmentController>();
+    final controller = context.read<HomeItemController>();
     final navigator = Navigator.of(context);
 
     final confirmed = await showDialog<bool>(
@@ -115,7 +112,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     );
 
     if (confirmed ?? false) {
-      await controller.deleteTask(widget.equipmentId, _existing!.id);
+      await controller.deleteTask(widget.homeItemId, _existing!.id);
       navigator.pop();
     }
   }

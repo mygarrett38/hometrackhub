@@ -1,5 +1,5 @@
-/// Broad groups used to organize the user's equipment.
-enum EquipmentCategory {
+/// Broad groups used to organize the user's home items.
+enum HomeItemCategory {
   appliance('Appliances'),
   hvac('Heating & cooling'),
   plumbing('Plumbing & water'),
@@ -10,7 +10,7 @@ enum EquipmentCategory {
   smartDevice('Smart devices'),
   other('Other');
 
-  const EquipmentCategory(this.label);
+  const HomeItemCategory(this.label);
 
   final String label;
 }

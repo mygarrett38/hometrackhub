@@ -1,22 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/models/app_settings.dart';
-import 'package:hometrackhub/models/equipment.dart';
-import 'package:hometrackhub/models/equipment_category.dart';
+import 'package:hometrackhub/models/home_item.dart';
+import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
 
-/// Creates equipment with one monthly task that is next due on [dueDate].
-Equipment equipmentDueOn(
+/// Creates a home item with one monthly task that is next due on [dueDate].
+HomeItem homeItemDueOn(
   DateTime dueDate, {
   String name = 'Furnace',
   String taskTitle = 'Replace filter',
   bool remindersEnabled = true,
 }) {
-  return Equipment(
+  return HomeItem(
     id: name,
     name: name,
-    category: EquipmentCategory.hvac,
+    category: HomeItemCategory.hvac,
     tasks: [
       MaintenanceTask(
         id: taskTitle,
@@ -36,7 +36,7 @@ void main() {
 
   test('plans nothing when notifications are turned off', () {
     final reminders = planReminders(
-      equipment: [equipmentDueOn(DateTime(2026, 6, 20))],
+      homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
       settings: settings.copyWith(notificationsEnabled: false),
       now: now,
     );
@@ -46,7 +46,7 @@ void main() {
 
   test('reminds on the due date at the chosen time', () {
     final reminders = planReminders(
-      equipment: [equipmentDueOn(DateTime(2026, 6, 20))],
+      homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
       settings: settings,
       now: now,
     );
@@ -58,7 +58,7 @@ void main() {
 
   test('reminds the chosen number of days early', () {
     final reminders = planReminders(
-      equipment: [equipmentDueOn(DateTime(2026, 6, 20))],
+      homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
       settings: settings.copyWith(reminderDaysBefore: 3),
       now: now,
     );
@@ -70,7 +70,7 @@ void main() {
   test('reminds about overdue tasks at the next reminder time', () {
     // It is already past 9:30 today, so the reminder moves to tomorrow.
     final reminders = planReminders(
-      equipment: [equipmentDueOn(DateTime(2026, 6, 1))],
+      homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
       settings: settings,
       now: now,
     );
@@ -81,9 +81,9 @@ void main() {
 
   test('combines tasks reminded at the same time', () {
     final reminders = planReminders(
-      equipment: [
-        equipmentDueOn(DateTime(2026, 6, 20), name: 'Furnace'),
-        equipmentDueOn(DateTime(2026, 6, 20), name: 'Dryer'),
+      homeItems: [
+        homeItemDueOn(DateTime(2026, 6, 20), name: 'Furnace'),
+        homeItemDueOn(DateTime(2026, 6, 20), name: 'Dryer'),
       ],
       settings: settings,
       now: now,
@@ -97,8 +97,8 @@ void main() {
 
   test('skips tasks with reminders turned off', () {
     final reminders = planReminders(
-      equipment: [
-        equipmentDueOn(DateTime(2026, 6, 20), remindersEnabled: false),
+      homeItems: [
+        homeItemDueOn(DateTime(2026, 6, 20), remindersEnabled: false),
       ],
       settings: settings,
       now: now,
@@ -107,9 +107,9 @@ void main() {
     expect(reminders, isEmpty);
   });
 
-  test('hides equipment names when privacy setting is on', () {
+  test('hides home item names when privacy setting is on', () {
     final reminders = planReminders(
-      equipment: [equipmentDueOn(DateTime(2026, 6, 20))],
+      homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
       settings: settings.copyWith(hideDetailsInNotifications: true),
       now: now,
     );
@@ -119,16 +119,16 @@ void main() {
   });
 
   test('never plans more than the platform limit', () {
-    final equipment = [
+    final homeItems = [
       for (var day = 0; day < maxScheduledReminders + 10; day++)
-        equipmentDueOn(
+        homeItemDueOn(
           DateTime(2026, 7, 1).add(Duration(days: day)),
           name: 'Item $day',
         ),
     ];
 
     final reminders = planReminders(
-      equipment: equipment,
+      homeItems: homeItems,
       settings: settings,
       now: now,
     );

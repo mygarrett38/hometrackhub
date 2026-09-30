@@ -1,39 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/equipment_catalog.dart';
-import '../../models/equipment.dart';
-import '../../models/equipment_category.dart';
+import '../../data/home_item_catalog.dart';
+import '../../models/home_item.dart';
+import '../../models/home_item_category.dart';
 import '../../services/device_discovery_service.dart';
-import '../../state/equipment_controller.dart';
+import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/id_generator.dart';
 import '../widgets/date_field.dart';
 import '../widgets/dropdown_field.dart';
-import 'equipment_detail_screen.dart';
+import 'home_item_detail_screen.dart';
 
-/// Form for adding new equipment or editing existing equipment.
+/// Form for adding a new home item or editing an existing one.
 ///
-/// New equipment can start from a catalog type ([initialType]), from a
+/// A new home item can start from a catalog type ([initialType]), from a
 /// device found on the network ([discoveredDevice]), or from scratch.
-class EquipmentFormScreen extends StatefulWidget {
-  const EquipmentFormScreen({
+class HomeItemFormScreen extends StatefulWidget {
+  const HomeItemFormScreen({
     super.key,
     this.existing,
     this.initialType,
     this.discoveredDevice,
   });
 
-  /// The equipment being edited, or `null` when adding new equipment.
-  final Equipment? existing;
-  final EquipmentType? initialType;
+  /// The home item being edited, or `null` when adding a new one.
+  final HomeItem? existing;
+  final HomeItemType? initialType;
   final DiscoveredDevice? discoveredDevice;
 
   @override
-  State<EquipmentFormScreen> createState() => _EquipmentFormScreenState();
+  State<HomeItemFormScreen> createState() => _HomeItemFormScreenState();
 }
 
-class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
+class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _manufacturer = TextEditingController();
@@ -42,12 +42,12 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
   final _location = TextEditingController();
   final _notes = TextEditingController();
 
-  EquipmentCategory _category = EquipmentCategory.other;
+  HomeItemCategory _category = HomeItemCategory.other;
   DateTime? _purchaseDate;
 
   /// The catalog type whose recommended tasks will be added. Only used when
-  /// adding new equipment.
-  EquipmentType? _template;
+  /// adding a new home item.
+  HomeItemType? _template;
 
   bool get _isEditing => widget.existing != null;
 
@@ -67,11 +67,11 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
       _category = existing.category;
       _purchaseDate = existing.purchaseDate;
     } else if (device != null) {
-      _template = findEquipmentType(device.suggestedTypeId);
+      _template = findHomeItemType(device.suggestedTypeId);
       _name.text = device.name;
       _manufacturer.text = device.manufacturer;
       _modelNumber.text = device.model;
-      _category = EquipmentCategory.smartDevice;
+      _category = HomeItemCategory.smartDevice;
       if (device.address != null) {
         _notes.text = 'Network address: ${device.address}';
       }
@@ -97,7 +97,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
     super.dispose();
   }
 
-  void _changeTemplate(EquipmentType? newTemplate) {
+  void _changeTemplate(HomeItemType? newTemplate) {
     setState(() {
       // Replace the name only if the user hasn't typed their own.
       final nameIsDefault =
@@ -113,11 +113,11 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final controller = context.read<EquipmentController>();
+    final controller = context.read<HomeItemController>();
     final navigator = Navigator.of(context);
     final existing = widget.existing;
 
-    final equipment = Equipment(
+    final homeItem = HomeItem(
       id: existing?.id ?? generateId(),
       name: _name.text.trim(),
       category: _category,
@@ -136,14 +136,14 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
     );
 
     if (existing != null) {
-      await controller.updateEquipment(equipment);
+      await controller.updateHomeItem(homeItem);
       navigator.pop();
     } else {
-      await controller.addEquipment(equipment);
-      // Show the new equipment so the user can review or add tasks.
+      await controller.addHomeItem(homeItem);
+      // Show the new home item so the user can review or add tasks.
       navigator.pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => EquipmentDetailScreen(equipmentId: equipment.id),
+          builder: (_) => HomeItemDetailScreen(homeItemId: homeItem.id),
         ),
       );
     }
@@ -155,7 +155,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit equipment' : 'Add equipment'),
+        title: Text(_isEditing ? 'Edit home item' : 'Add home item'),
         actions: [TextButton(onPressed: _save, child: const Text('Save'))],
       ),
       body: Form(
@@ -164,7 +164,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             if (!_isEditing) ...[
-              DropdownField<EquipmentType?>(
+              DropdownField<HomeItemType?>(
                 label: 'Maintenance recommendations',
                 value: _template,
                 onChanged: _changeTemplate,
@@ -173,7 +173,7 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
                     value: null,
                     child: Text('None - I\'ll add my own tasks'),
                   ),
-                  for (final type in equipmentCatalog)
+                  for (final type in homeItemCatalog)
                     DropdownMenuItem(value: type, child: Text(type.name)),
                 ],
               ),
@@ -192,12 +192,12 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
                   : null,
             ),
             gap,
-            DropdownField<EquipmentCategory>(
+            DropdownField<HomeItemCategory>(
               label: 'Category',
               value: _category,
               onChanged: (value) => setState(() => _category = value),
               items: [
-                for (final category in EquipmentCategory.values)
+                for (final category in HomeItemCategory.values)
                   DropdownMenuItem(
                     value: category,
                     child: Text(category.label),
@@ -247,11 +247,11 @@ class _EquipmentFormScreenState extends State<EquipmentFormScreen> {
   }
 }
 
-/// Shows which maintenance tasks will be added with the new equipment.
+/// Shows which maintenance tasks will be added with the new home item.
 class _TaskPreview extends StatelessWidget {
   const _TaskPreview({required this.template});
 
-  final EquipmentType? template;
+  final HomeItemType? template;
 
   @override
   Widget build(BuildContext context) {

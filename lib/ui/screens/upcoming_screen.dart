@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/equipment_task.dart';
-import '../../state/equipment_controller.dart';
+import '../../models/home_item_task.dart';
+import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 import '../widgets/task_tile.dart';
-import 'equipment_detail_screen.dart';
+import 'home_item_detail_screen.dart';
 
 /// Home tab: every maintenance task, grouped into overdue, due soon and
 /// later.
@@ -14,16 +14,15 @@ class UpcomingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Upcoming maintenance')),
+      appBar: AppBar(title: const Text('Upcoming Maintenance')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => {},
-        child: const Icon(Icons.add)
+        child: const Icon(Icons.add),
       ),
-      body: context.watch<EquipmentController>().hasNoTasks
+      body: context.watch<HomeItemController>().hasNoTasks
           ? const _EmptyMessage()
-          : const _TaskMessage()
+          : const _TaskMessage(),
     );
   }
 }
@@ -38,8 +37,8 @@ class _EmptyMessage extends StatelessWidget {
         padding: EdgeInsets.all(32),
         child: Text(
           'No maintenance scheduled yet.\n\n'
-          'Add your appliances, vehicles and other equipment on the '
-          'Equipment tab to start tracking maintenance.',
+          'Add your appliances, vehicles and other home items on the '
+          'Home items tab to start tracking maintenance.',
           textAlign: TextAlign.center,
         ),
       ),
@@ -57,10 +56,10 @@ class _TaskMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final today = dateOnly(DateTime.now());
 
-    final overdue = <EquipmentTask>[];
-    final dueSoon = <EquipmentTask>[];
-    final later = <EquipmentTask>[];
-    for (final item in context.watch<EquipmentController>().allTasks) {
+    final overdue = <HomeItemTask>[];
+    final dueSoon = <HomeItemTask>[];
+    final later = <HomeItemTask>[];
+    for (final item in context.watch<HomeItemController>().allTasks) {
       final days = calendarDaysBetween(today, item.dueDate);
       if (days < 0) {
         overdue.add(item);
@@ -83,7 +82,7 @@ class _TaskMessage extends StatelessWidget {
   List<Widget> _section(
     BuildContext context,
     String title,
-    List<EquipmentTask> items,
+    List<HomeItemTask> items,
   ) {
     if (items.isEmpty) return [];
     return [
@@ -100,7 +99,7 @@ class _TaskMessage extends StatelessWidget {
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) =>
-                  EquipmentDetailScreen(equipmentId: item.equipment.id),
+                  HomeItemDetailScreen(homeItemId: item.homeItem.id),
             ),
           ),
         ),

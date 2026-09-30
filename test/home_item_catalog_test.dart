@@ -1,14 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hometrackhub/data/equipment_catalog.dart';
+import 'package:hometrackhub/data/home_item_catalog.dart';
 
 void main() {
   test('every catalog id is unique', () {
-    final ids = equipmentCatalog.map((type) => type.id).toList();
+    final ids = homeItemCatalog.map((type) => type.id).toList();
     expect(ids.toSet(), hasLength(ids.length));
   });
 
   test('every catalog entry has at least one recommended task', () {
-    for (final type in equipmentCatalog) {
+    for (final type in homeItemCatalog) {
       expect(type.tasks, isNotEmpty, reason: type.id);
     }
   });
@@ -26,12 +26,12 @@ void main() {
       'router',
     ];
     for (final id in suggestedIds) {
-      expect(findEquipmentType(id), isNotNull, reason: id);
+      expect(findHomeItemType(id), isNotNull, reason: id);
     }
   });
 
   test('created tasks start on the manufacturer recommendation', () {
-    final type = findEquipmentType('refrigerator')!;
+    final type = findHomeItemType('refrigerator')!;
     final tasks = type.createTasks(startDate: DateTime(2026, 1, 1));
 
     expect(tasks, hasLength(type.tasks.length));

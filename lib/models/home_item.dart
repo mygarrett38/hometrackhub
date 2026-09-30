@@ -1,13 +1,13 @@
 import 'package:flutter/foundation.dart';
 
-import 'equipment_category.dart';
+import 'home_item_category.dart';
 import 'maintenance_task.dart';
 
 /// Anything in or around the home that needs maintenance: an appliance,
 /// a vehicle, a smart device, or something the user describes themselves.
 @immutable
-class Equipment {
-  const Equipment({
+class HomeItem {
+  const HomeItem({
     required this.id,
     required this.name,
     required this.category,
@@ -24,17 +24,17 @@ class Equipment {
 
   final String id;
   final String name;
-  final EquipmentCategory category;
+  final HomeItemCategory category;
 
   /// The id of the catalog entry this was created from, or `null` if the
-  /// user entered a custom piece of equipment.
+  /// user entered a custom home item.
   final String? catalogTypeId;
 
   final String manufacturer;
   final String modelNumber;
   final String serialNumber;
 
-  /// Where the equipment is, such as "Kitchen" or "Garage".
+  /// Where the home item is, such as "Kitchen" or "Garage".
   final String location;
   final String notes;
   final DateTime? purchaseDate;
@@ -47,9 +47,9 @@ class Equipment {
 
   bool get isCustom => catalogTypeId == null;
 
-  Equipment copyWith({
+  HomeItem copyWith({
     String? name,
-    EquipmentCategory? category,
+    HomeItemCategory? category,
     String? manufacturer,
     String? modelNumber,
     String? serialNumber,
@@ -58,7 +58,7 @@ class Equipment {
     DateTime? purchaseDate,
     List<MaintenanceTask>? tasks,
   }) {
-    return Equipment(
+    return HomeItem(
       id: id,
       name: name ?? this.name,
       category: category ?? this.category,
@@ -89,12 +89,12 @@ class Equipment {
     'tasks': [for (final task in tasks) task.toJson()],
   };
 
-  factory Equipment.fromJson(Map<String, dynamic> json) {
+  factory HomeItem.fromJson(Map<String, dynamic> json) {
     final purchaseDate = json['purchaseDate'] as String?;
-    return Equipment(
+    return HomeItem(
       id: json['id'] as String,
       name: json['name'] as String,
-      category: EquipmentCategory.values.byName(json['category'] as String),
+      category: HomeItemCategory.values.byName(json['category'] as String),
       catalogTypeId: json['catalogTypeId'] as String?,
       manufacturer: json['manufacturer'] as String? ?? '',
       modelNumber: json['modelNumber'] as String? ?? '',

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/app.dart';
-import 'package:hometrackhub/data/equipment_repository.dart';
+import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
-import 'package:hometrackhub/state/equipment_controller.dart';
+import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,7 +52,7 @@ Future<void> pumpApp(WidgetTester tester) async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => EquipmentController(EquipmentRepository(preferences)),
+          create: (_) => HomeItemController(HomeItemRepository(preferences)),
         ),
         ChangeNotifierProvider(
           create: (_) => SettingsController(SettingsRepository(preferences)),
@@ -67,15 +67,15 @@ Future<void> pumpApp(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('adding equipment from the catalog schedules its maintenance', (
+  testWidgets('adding a home item from the catalog schedules its maintenance', (
     tester,
   ) async {
     await pumpApp(tester);
     expect(find.textContaining('No maintenance scheduled yet'), findsOneWidget);
 
-    await tester.tap(find.text('Equipment'));
+    await tester.tap(find.text('Home items'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add equipment'));
+    await tester.tap(find.byTooltip('Add home item'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Choose a common type'));
     await tester.pumpAndSettle();
@@ -98,12 +98,14 @@ void main() {
     expect(find.text('Clean door gaskets'), findsOneWidget);
   });
 
-  testWidgets('network scan results can be added as equipment', (tester) async {
+  testWidgets('network scan results can be added as home items', (
+    tester,
+  ) async {
     await pumpApp(tester);
 
-    await tester.tap(find.text('Equipment'));
+    await tester.tap(find.text('Home items'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add equipment'));
+    await tester.tap(find.byTooltip('Add home item'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Find smart devices on my network'));
     await tester.pumpAndSettle();
