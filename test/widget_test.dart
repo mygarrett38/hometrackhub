@@ -73,13 +73,11 @@ void main() {
     await pumpApp(tester);
     expect(find.textContaining('No maintenance scheduled yet'), findsOneWidget);
 
-    await tester.tap(find.text('Home items'));
+    await tester.tap(find.text('My Home'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Add home item'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose a common type'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'refrig');
+    await tester.tap(find.text('Appliances'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Refrigerator'));
     await tester.pumpAndSettle();
@@ -90,9 +88,13 @@ void main() {
     expect(find.text('Replace water filter'), findsOneWidget);
     expect(find.text('Clean condenser coils'), findsOneWidget);
 
-    // The tasks also appear on the Upcoming tab.
+    // Going back skips the pickers and returns to the list of home items.
     await tester.pageBack();
     await tester.pumpAndSettle();
+    expect(find.text('Refrigerator'), findsOneWidget);
+    expect(find.byTooltip('Add home item'), findsOneWidget);
+
+    // The tasks also appear on the Upcoming tab.
     await tester.tap(find.text('Upcoming'));
     await tester.pumpAndSettle();
     expect(find.text('Clean door gaskets'), findsOneWidget);
@@ -103,11 +105,11 @@ void main() {
   ) async {
     await pumpApp(tester);
 
-    await tester.tap(find.text('Home items'));
+    await tester.tap(find.text('My Home'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Add home item'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Find smart devices on my network'));
+    await tester.tap(find.text('Find nearby devices'));
     await tester.pumpAndSettle();
 
     expect(find.text('Living Room TV'), findsOneWidget);
@@ -117,6 +119,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Install software updates'), findsOneWidget);
+  });
+
+  testWidgets('each category lists only its own types', (tester) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vehicles'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Motorcycle'), findsOneWidget);
+    expect(find.text('Refrigerator'), findsNothing);
+
+    // A custom home item started here is already in the Vehicles category.
+    await tester.tap(find.text('Not listed? Create custom home item'));
+    await tester.pumpAndSettle();
+    expect(find.text('Vehicles'), findsOneWidget);
   });
 
   testWidgets('dark mode can be selected in settings', (tester) async {
