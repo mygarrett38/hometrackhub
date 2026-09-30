@@ -38,7 +38,7 @@ class _EmptyMessage extends StatelessWidget {
         child: Text(
           'No maintenance scheduled yet.\n\n'
           'Add your appliances, vehicles and other home items on the '
-          'Home items tab to start tracking maintenance.',
+          'My Home tab to start tracking maintenance.',
           textAlign: TextAlign.center,
         ),
       ),

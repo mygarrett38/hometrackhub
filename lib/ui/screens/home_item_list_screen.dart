@@ -6,12 +6,10 @@ import '../../models/home_item_category.dart';
 import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 import '../widgets/category_icon.dart';
-import 'device_discovery_screen.dart';
+import 'add_home_item_screen.dart';
 import 'home_item_detail_screen.dart';
-import 'home_item_form_screen.dart';
-import 'home_item_type_picker_screen.dart';
 
-/// HomeItem tab: everything the user tracks, grouped by category.
+/// My Home tab: everything the user tracks, grouped by category.
 class HomeItemListScreen extends StatelessWidget {
   const HomeItemListScreen({super.key});
 
@@ -24,7 +22,9 @@ class HomeItemListScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton(
         heroTag: 'home_item_fab',
         tooltip: 'Add home item',
-        onPressed: () => _showAddOptions(context),
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AddHomeItemScreen()),
+        ),
         child: const Icon(Icons.add),
       ),
       body: homeItems.isEmpty
@@ -33,9 +33,9 @@ class HomeItemListScreen extends StatelessWidget {
                 padding: EdgeInsets.all(32),
                 child: Text(
                   'You are not tracking any home items yet.\n\n'
-                  'Tap "Add home item" to pick a common appliance or '
-                  'vehicle, create your own, or find smart devices on '
-                  'your Wi-Fi network.',
+                  'Tap the + button to choose a category and pick a common '
+                  'appliance or vehicle, create your own, or find smart '
+                  'devices on your Wi-Fi network.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -54,9 +54,9 @@ class HomeItemListScreen extends StatelessWidget {
   List<Widget> _categorySection(
     BuildContext context,
     HomeItemCategory category,
-    List<HomeItem> allHomeItem,
+    List<HomeItem> allHomeItems,
   ) {
-    final items = allHomeItem
+    final items = allHomeItems
         .where((item) => item.category == category)
         .toList();
     if (items.isEmpty) return [];
@@ -71,53 +71,6 @@ class HomeItemListScreen extends StatelessWidget {
       ),
       for (final item in items) _HomeItemTile(homeItem: item),
     ];
-  }
-
-  void _showAddOptions(BuildContext context) {
-    final navigator = Navigator.of(context);
-
-    void openScreen(Widget screen) {
-      navigator.pop(); // Close the bottom sheet first.
-      navigator.push(MaterialPageRoute<void>(builder: (_) => screen));
-    }
-
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.list_alt),
-              title: const Text('Choose a common type'),
-              subtitle: const Text(
-                'Appliances, vehicles and more, with the manufacturer\'s '
-                'recommended maintenance already filled in.',
-              ),
-              onTap: () => openScreen(const HomeItemTypePickerScreen()),
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_note),
-              title: const Text('Create custom home item'),
-              subtitle: const Text(
-                'Describe anything else and set up your own maintenance tasks.',
-              ),
-              onTap: () => openScreen(const HomeItemFormScreen()),
-            ),
-            ListTile(
-              leading: const Icon(Icons.wifi_find),
-              title: const Text('Find smart devices on my network'),
-              subtitle: const Text(
-                'Scan your Wi-Fi network for smart TVs, speakers, hubs and '
-                'more.',
-              ),
-              onTap: () => openScreen(const DeviceDiscoveryScreen()),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

@@ -3,85 +3,59 @@ import 'package:flutter/material.dart';
 import '../../data/home_item_catalog.dart';
 import '../../models/home_item_category.dart';
 import '../widgets/category_icon.dart';
+import 'device_discovery_screen.dart';
 import 'home_item_form_screen.dart';
 
-/// Lets the user pick a common kind of home item from the built-in catalog.
-class HomeItemTypePickerScreen extends StatefulWidget {
-  const HomeItemTypePickerScreen({super.key});
+/// Lets the user pick a common appliance or device within one [category]
+/// from the built-in catalog.
+class HomeItemTypePickerScreen extends StatelessWidget {
+  const HomeItemTypePickerScreen({super.key, required this.category});
 
-  @override
-  State<HomeItemTypePickerScreen> createState() =>
-      _HomeItemTypePickerScreenState();
-}
+  final HomeItemCategory category;
 
-class _HomeItemTypePickerScreenState extends State<HomeItemTypePickerScreen> {
-  String _search = '';
-
-  void _open(Widget screen) {
-    Navigator.of(context)
-        .pushReplacement(MaterialPageRoute<void>(builder: (_) => screen));
+  void _open(BuildContext context, Widget screen) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
   Widget build(BuildContext context) {
-    final query = _search.trim().toLowerCase();
-    final matches = homeItemCatalog
-        .where((type) => type.name.toLowerCase().contains(query))
-        .toList();
+    final types = catalogTypesIn(category);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Choose home item type')),
+      appBar: AppBar(title: Text(category.label)),
       body: ListView(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search, e.g. "water heater"',
-                border: OutlineInputBorder(),
+          for (final type in types)
+            ListTile(
+              leading: Icon(category.icon),
+              title: Text(type.name),
+              subtitle: Text(
+                '${type.tasks.length} recommended '
+                '${type.tasks.length == 1 ? 'task' : 'tasks'}',
               ),
-              onChanged: (value) => setState(() => _search = value),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  _open(context, HomeItemFormScreen(initialType: type)),
             ),
-          ),
+          if (types.isNotEmpty) const Divider(),
           ListTile(
             leading: const Icon(Icons.edit_note),
-            title: const Text('Not listed? Create custom home item'),
-            onTap: () => _open(const HomeItemFormScreen()),
+            title: Text(
+              types.isEmpty
+                  ? 'Create custom home item'
+                  : 'Not listed? Create custom home item',
+            ),
+            onTap: () =>
+                _open(context, HomeItemFormScreen(initialCategory: category)),
           ),
-          const Divider(),
-          for (final category in HomeItemCategory.values)
-            ..._categorySection(category, matches),
+          if (category == HomeItemCategory.smartDevice)
+            ListTile(
+              leading: const Icon(Icons.wifi_find),
+              title: const Text('Find smart devices on my network'),
+              onTap: () => _open(context, const DeviceDiscoveryScreen()),
+            ),
         ],
       ),
     );
-  }
-
-  List<Widget> _categorySection(
-    HomeItemCategory category,
-    List<HomeItemType> matches,
-  ) {
-    final types = matches.where((type) => type.category == category).toList();
-    if (types.isEmpty) return [];
-
-    return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(
-          category.label,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-      ),
-      for (final type in types)
-        ListTile(
-          leading: Icon(type.category.icon),
-          title: Text(type.name),
-          subtitle: Text(
-            '${type.tasks.length} recommended '
-            '${type.tasks.length == 1 ? 'task' : 'tasks'}',
-          ),
-          onTap: () => _open(HomeItemFormScreen(initialType: type)),
-        ),
-    ];
   }
 }

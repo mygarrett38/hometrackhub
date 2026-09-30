@@ -59,6 +59,11 @@ HomeItemType? findHomeItemType(String? id) {
   return null;
 }
 
+/// Every catalog entry in [category], in catalog order.
+List<HomeItemType> catalogTypesIn(HomeItemCategory category) {
+  return homeItemCatalog.where((type) => type.category == category).toList();
+}
+
 /// Built-in list of common home items and their recommended maintenance.
 ///
 /// Intervals reflect the general guidance found in manufacturer owner's

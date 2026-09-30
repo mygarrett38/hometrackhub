@@ -15,18 +15,23 @@ import 'home_item_detail_screen.dart';
 /// Form for adding a new home item or editing an existing one.
 ///
 /// A new home item can start from a catalog type ([initialType]), from a
-/// device found on the network ([discoveredDevice]), or from scratch.
+/// device found on the network ([discoveredDevice]), or from scratch,
+/// optionally within a chosen category ([initialCategory]).
 class HomeItemFormScreen extends StatefulWidget {
   const HomeItemFormScreen({
     super.key,
     this.existing,
     this.initialType,
+    this.initialCategory,
     this.discoveredDevice,
   });
 
   /// The home item being edited, or `null` when adding a new one.
   final HomeItem? existing;
   final HomeItemType? initialType;
+
+  /// The category selected when creating a custom home item.
+  final HomeItemCategory? initialCategory;
   final DiscoveredDevice? discoveredDevice;
 
   @override
@@ -79,6 +84,8 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       _template = widget.initialType;
       _name.text = widget.initialType!.name;
       _category = widget.initialType!.category;
+    } else if (widget.initialCategory != null) {
+      _category = widget.initialCategory!;
     }
   }
 
@@ -141,11 +148,17 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     } else {
       await controller.addHomeItem(homeItem);
       // Show the new home item so the user can review or add tasks.
-      navigator.pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => HomeItemDetailScreen(homeItemId: homeItem.id),
-        ),
+      final detailRoute = MaterialPageRoute<void>(
+        builder: (_) => HomeItemDetailScreen(homeItemId: homeItem.id),
       );
+      if (widget.discoveredDevice != null) {
+        // Going back returns to the scan results to add more devices.
+        navigator.pushReplacement(detailRoute);
+      } else {
+        // Going back skips the category and type pickers and returns to
+        // the list of home items.
+        navigator.pushAndRemoveUntil(detailRoute, (route) => route.isFirst);
+      }
     }
   }
 
