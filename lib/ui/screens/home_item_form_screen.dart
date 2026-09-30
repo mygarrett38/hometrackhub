@@ -47,7 +47,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   final _location = TextEditingController();
   final _notes = TextEditingController();
 
-  HomeItemCategory _category = HomeItemCategory.other;
+  HomeItemCategory _category = HomeItemCategory.custom;
   DateTime? _purchaseDate;
 
   /// The catalog type whose recommended tasks will be added. Only used when
