@@ -196,6 +196,9 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
+    expect(find.text('Overview off'), findsOneWidget);
+    await tester.tap(find.text('Notifications'));
+    await tester.pumpAndSettle();
     expect(find.text('Overview time'), findsNothing);
 
     await tester.tap(find.text('Weekly'));
@@ -206,6 +209,11 @@ void main() {
     await tester.tap(find.text('Monthly'));
     await tester.pumpAndSettle();
     expect(find.text('1st of each month'), findsOneWidget);
+
+    // The settings list summarizes the choice.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Monthly overview on the 1st'), findsOneWidget);
   });
 
   testWidgets('notification settings can open the device settings', (
@@ -216,11 +224,8 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Notification settings'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.tap(find.text('Notifications'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Notification settings'));
     await tester.pumpAndSettle();
 
@@ -231,6 +236,8 @@ void main() {
     await pumpApp(tester);
 
     await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
