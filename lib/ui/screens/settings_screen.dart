@@ -9,6 +9,7 @@ import '../../services/notification_service.dart';
 import '../../state/home_item_controller.dart';
 import '../../state/settings_controller.dart';
 import '../widgets/notification_permission.dart';
+import '../widgets/section_header.dart';
 import 'home_location_screen.dart';
 
 /// Settings tab: notifications, appearance, privacy and home location.
@@ -37,7 +38,7 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
-          const _SectionHeader('Notifications'),
+          const SectionHeader('Notifications'),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
@@ -129,7 +130,7 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _openDeviceSettings(context),
           ),
 
-          const _SectionHeader('Appearance'),
+          const SectionHeader('Appearance'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: SegmentedButton<ThemeMode>(
@@ -156,7 +157,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
 
-          const _SectionHeader('Privacy'),
+          const SectionHeader('Privacy'),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
@@ -204,7 +205,7 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _confirmDeleteAll(context),
           ),
 
-          const _SectionHeader('Home'),
+          const SectionHeader('Home'),
           ListTile(
             leading: const Icon(Icons.home_outlined),
             title: const Text('Home location'),
@@ -306,23 +307,5 @@ class SettingsScreen extends StatelessWidget {
         const SnackBar(content: Text('All data was deleted.')),
       );
     }
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleSmall
-            ?.copyWith(color: Theme.of(context).colorScheme.primary),
-      ),
-    );
   }
 }
