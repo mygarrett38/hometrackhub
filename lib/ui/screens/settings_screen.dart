@@ -122,6 +122,12 @@ class SettingsScreen extends StatelessWidget {
             onTap: () =>
                 context.read<NotificationService>().showTestNotification(),
           ),
+          ListTile(
+            leading: const Icon(Icons.phone_android),
+            title: const Text('Notification settings'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => _openDeviceSettings(context),
+          ),
 
           const _SectionHeader('Appearance'),
           Padding(
@@ -218,6 +224,23 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _openDeviceSettings(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final opened = await context
+        .read<NotificationService>()
+        .openDeviceNotificationSettings();
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Could not open notification settings. Open your device's "
+            'Settings app and find HomeTrackHub instead.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _setOverviewFrequency(

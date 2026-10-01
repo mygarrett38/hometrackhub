@@ -25,6 +25,14 @@ class FakeNotificationService implements NotificationService {
 
   @override
   Future<void> showTestNotification() async {}
+
+  int openSettingsCalls = 0;
+
+  @override
+  Future<bool> openDeviceNotificationSettings() async {
+    openSettingsCalls++;
+    return true;
+  }
 }
 
 class FakeDiscoveryService implements DeviceDiscoveryService {
@@ -44,7 +52,12 @@ class FakeDiscoveryService implements DeviceDiscoveryService {
   }
 }
 
-Future<void> pumpApp(WidgetTester tester) async {
+/// Starts the app with fake services. Pass [notifications] to inspect what
+/// the app asked the notification service to do.
+Future<void> pumpApp(
+  WidgetTester tester, {
+  FakeNotificationService? notifications,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
 
@@ -57,7 +70,9 @@ Future<void> pumpApp(WidgetTester tester) async {
         ChangeNotifierProvider(
           create: (_) => SettingsController(SettingsRepository(preferences)),
         ),
-        Provider<NotificationService>.value(value: FakeNotificationService()),
+        Provider<NotificationService>.value(
+          value: notifications ?? FakeNotificationService(),
+        ),
         Provider<DeviceDiscoveryService>.value(value: FakeDiscoveryService()),
       ],
       child: const HomeTrackHubApp(),
@@ -191,6 +206,25 @@ void main() {
     await tester.tap(find.text('Monthly'));
     await tester.pumpAndSettle();
     expect(find.text('1st of each month'), findsOneWidget);
+  });
+
+  testWidgets('notification settings can open the device settings', (
+    tester,
+  ) async {
+    final notifications = FakeNotificationService();
+    await pumpApp(tester, notifications: notifications);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Notification settings'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Notification settings'));
+    await tester.pumpAndSettle();
+
+    expect(notifications.openSettingsCalls, 1);
   });
 
   testWidgets('dark mode can be selected in settings', (tester) async {

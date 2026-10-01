@@ -22,6 +22,11 @@ abstract interface class NotificationService {
   /// Shows a notification right away so the user can check that
   /// notifications work on their device.
   Future<void> showTestNotification();
+
+  /// Opens this app's page in the device's notification settings, where the
+  /// user can allow, block or customize its notifications. Returns `false`
+  /// if the settings could not be opened.
+  Future<bool> openDeviceNotificationSettings();
 }
 
 /// [NotificationService] that uses the operating system's notification
@@ -141,6 +146,18 @@ class LocalNotificationService implements NotificationService {
         // fine for home maintenance.
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
+    }
+  }
+
+  @override
+  Future<bool> openDeviceNotificationSettings() async {
+    try {
+      // On iOS this falls back to the app's general Settings page when its
+      // notification page can't be opened directly.
+      return await _plugin.openAppNotificationSettings() ?? false;
+    } catch (error) {
+      debugPrint('Could not open notification settings: $error');
+      return false;
     }
   }
 
