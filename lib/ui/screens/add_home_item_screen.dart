@@ -26,9 +26,7 @@ class AddHomeItemScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.wifi_find),
             title: const Text('Find nearby devices'),
-            subtitle: const Text(
-              'Scan for devices via Wi-Fi or Bluetooth',
-            ),
+            subtitle: const Text('Scan for devices via Wi-Fi or Bluetooth'),
             onTap: () => _open(context, const DeviceDiscoveryScreen()),
           ),
           const Divider(),
@@ -39,7 +37,7 @@ class AddHomeItemScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () =>
                   _open(context, HomeItemTypePickerScreen(category: category)),
-            ),          
+            ),
         ],
       ),
     );

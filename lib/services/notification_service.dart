@@ -31,13 +31,32 @@ class LocalNotificationService implements NotificationService {
 
   static const _testNotificationId = 999999;
 
-  static const _details = NotificationDetails(
+  /// Used for reminders about individual tasks.
+  static const _taskDetails = NotificationDetails(
     android: AndroidNotificationDetails(
       'maintenance_reminders',
-      'Maintenance reminders',
+      'Maintenance Reminders',
       channelDescription: 'Reminders when home maintenance is due.',
-      importance: Importance.high,
-      priority: Priority.high,
+      category: AndroidNotificationCategory.reminder,
+      importance: Importance.defaultImportance,
+      priority: Priority.low,
+      styleInformation: BigTextStyleInformation(''),
+    ),
+    iOS: DarwinNotificationDetails(),
+  );
+
+  /// Used for the weekly or monthly overview. A separate Android channel lets
+  /// people control overviews and task reminders independently in the
+  /// system notification settings.
+  static const _overviewDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'maintenance_overviews',
+      'Maintenance Overviews',
+      channelDescription:
+          'Weekly or monthly summaries of upcoming maintenance.',
+      category: AndroidNotificationCategory.reminder,
+      importance: Importance.defaultImportance,
+      priority: Priority.low,
       styleInformation: BigTextStyleInformation(''),
     ),
     iOS: DarwinNotificationDetails(),
@@ -113,7 +132,10 @@ class LocalNotificationService implements NotificationService {
         title: reminder.title,
         body: reminder.body,
         scheduledDate: tz.TZDateTime.from(reminder.time, tz.local),
-        notificationDetails: _details,
+        notificationDetails: switch (reminder.kind) {
+          ReminderKind.task => _taskDetails,
+          ReminderKind.overview => _overviewDetails,
+        },
         // Inexact scheduling avoids needing the "Alarms & reminders"
         // permission. The reminder may arrive a few minutes late, which is
         // fine for home maintenance.
@@ -128,7 +150,7 @@ class LocalNotificationService implements NotificationService {
       id: _testNotificationId,
       title: 'Notifications are working',
       body: 'You will be reminded here when home maintenance is due.',
-      notificationDetails: _details,
+      notificationDetails: _taskDetails,
     );
   }
 }

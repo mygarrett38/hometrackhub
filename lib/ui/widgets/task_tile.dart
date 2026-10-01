@@ -37,7 +37,7 @@ class TaskTile extends StatelessWidget {
     final details = [
       if (showHomeItemName) item.homeItem.name,
       task.interval.label,
-      if (!task.remindersEnabled) 'Reminders off',
+      if (!task.reminder.enabled) 'Reminder off',
     ].join(' · ');
 
     return ListTile(

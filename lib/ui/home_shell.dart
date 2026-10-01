@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/app_settings.dart';
 import '../services/notification_service.dart';
+import '../state/home_item_controller.dart';
 import '../state/settings_controller.dart';
 import 'screens/home_item_list_screen.dart';
 import 'screens/settings_screen.dart';
@@ -37,11 +39,16 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
-    // Ask for notification permission once the first screen is visible.
+    // Ask for notification permission once the first screen is visible, if
+    // any task reminder or the overview notification is turned on.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final settings = context.read<SettingsController>().settings;
-      if (settings.notificationsEnabled) {
+      final anyTaskReminders = context.read<HomeItemController>().allTasks.any(
+        (item) => item.task.reminder.enabled,
+      );
+      if (anyTaskReminders ||
+          settings.overviewFrequency != OverviewFrequency.off) {
         context.read<NotificationService>().requestPermission();
       }
     });

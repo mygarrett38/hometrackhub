@@ -8,20 +8,22 @@ import '../../models/app_settings.dart';
 import '../../services/notification_service.dart';
 import '../../state/home_item_controller.dart';
 import '../../state/settings_controller.dart';
+import '../widgets/notification_permission.dart';
 import 'home_location_screen.dart';
 
 /// Settings tab: notifications, appearance, privacy and home location.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  /// Choices for how far ahead of the due date reminders are sent.
-  static const _reminderLeadOptions = {
-    0: 'On the due date',
-    1: '1 day before',
-    2: '2 days before',
-    3: '3 days before',
-    7: '1 week before',
-    14: '2 weeks before',
+  /// Weekday names for the weekly overview, keyed by [DateTime.weekday].
+  static const _weekdays = {
+    DateTime.monday: 'Monday',
+    DateTime.tuesday: 'Tuesday',
+    DateTime.wednesday: 'Wednesday',
+    DateTime.thursday: 'Thursday',
+    DateTime.friday: 'Friday',
+    DateTime.saturday: 'Saturday',
+    DateTime.sunday: 'Sunday',
   };
 
   @override
@@ -36,66 +38,87 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           const _SectionHeader('Notifications'),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('Maintenance reminders'),
-            subtitle: const Text('Get notified when maintenance is due'),
-            value: settings.notificationsEnabled,
-            onChanged: (enabled) =>
-                _setNotificationsEnabled(context, controller, enabled),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Reminders for each task are set on that task. You can also get '
+              'an overview of the maintenance coming up each week or month.',
+            ),
           ),
           ListTile(
-            leading: const Icon(Icons.schedule),
-            title: const Text('Reminder time'),
-            subtitle: Text(
-              TimeOfDay(
-                hour: settings.reminderHour,
-                minute: settings.reminderMinute,
-              ).format(context),
-            ),
-            enabled: settings.notificationsEnabled,
-            onTap: () async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: TimeOfDay(
-                  hour: settings.reminderHour,
-                  minute: settings.reminderMinute,
+            leading: const Icon(Icons.summarize_outlined),
+            title: const Text('Maintenance overview'),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: SegmentedButton<OverviewFrequency>(
+                segments: [
+                  for (final frequency in OverviewFrequency.values)
+                    ButtonSegment(
+                      value: frequency,
+                      label: Text(frequency.label),
+                    ),
+                ],
+                selected: {settings.overviewFrequency},
+                onSelectionChanged: (selection) => _setOverviewFrequency(
+                  context,
+                  controller,
+                  selection.single,
                 ),
-              );
-              if (picked != null) {
-                update(
-                  settings.copyWith(
-                    reminderHour: picked.hour,
-                    reminderMinute: picked.minute,
+              ),
+            ),
+          ),
+          if (settings.overviewFrequency == OverviewFrequency.weekly)
+            ListTile(
+              leading: const Icon(Icons.calendar_view_week),
+              title: const Text('Overview day'),
+              trailing: DropdownButton<int>(
+                value: settings.overviewWeekday,
+                onChanged: (weekday) =>
+                    update(settings.copyWith(overviewWeekday: weekday)),
+                items: [
+                  for (final MapEntry(key: weekday, value: name)
+                      in _weekdays.entries)
+                    DropdownMenuItem(value: weekday, child: Text(name)),
+                ],
+              ),
+            ),
+          if (settings.overviewFrequency == OverviewFrequency.monthly)
+            const ListTile(
+              leading: Icon(Icons.calendar_month),
+              title: Text('Overview day'),
+              trailing: Text('1st of each month'),
+            ),
+          if (settings.overviewFrequency != OverviewFrequency.off)
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: const Text('Overview time'),
+              trailing: Text(
+                TimeOfDay(
+                  hour: settings.overviewHour,
+                  minute: settings.overviewMinute,
+                ).format(context),
+              ),
+              onTap: () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay(
+                    hour: settings.overviewHour,
+                    minute: settings.overviewMinute,
                   ),
                 );
-              }
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.event_note),
-            title: const Text('When to remind me'),
-            enabled: settings.notificationsEnabled,
-            trailing: DropdownButton<int>(
-              value:
-                  _reminderLeadOptions.containsKey(settings.reminderDaysBefore)
-                  ? settings.reminderDaysBefore
-                  : 0,
-              onChanged: settings.notificationsEnabled
-                  ? (days) =>
-                        update(settings.copyWith(reminderDaysBefore: days))
-                  : null,
-              items: [
-                for (final MapEntry(key: days, value: label)
-                    in _reminderLeadOptions.entries)
-                  DropdownMenuItem(value: days, child: Text(label)),
-              ],
+                if (picked != null) {
+                  update(
+                    settings.copyWith(
+                      overviewHour: picked.hour,
+                      overviewMinute: picked.minute,
+                    ),
+                  );
+                }
+              },
             ),
-          ),
           ListTile(
             leading: const Icon(Icons.notification_add_outlined),
             title: const Text('Send a test notification'),
-            enabled: settings.notificationsEnabled,
             onTap: () =>
                 context.read<NotificationService>().showTestNotification(),
           ),
@@ -197,29 +220,16 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _setNotificationsEnabled(
+  Future<void> _setOverviewFrequency(
     BuildContext context,
     SettingsController controller,
-    bool enabled,
+    OverviewFrequency frequency,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final notifications = context.read<NotificationService>();
-
     await controller.update(
-      controller.settings.copyWith(notificationsEnabled: enabled),
+      controller.settings.copyWith(overviewFrequency: frequency),
     );
-    if (!enabled) return;
-
-    final granted = await notifications.requestPermission();
-    if (!granted) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Notifications are blocked. Allow them for HomeTrackHub in your '
-            'device settings to receive reminders.',
-          ),
-        ),
-      );
+    if (frequency != OverviewFrequency.off && context.mounted) {
+      await requestNotificationPermission(context);
     }
   }
 

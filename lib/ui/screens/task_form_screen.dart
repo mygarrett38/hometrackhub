@@ -4,14 +4,17 @@ import 'package:provider/provider.dart';
 
 import '../../models/maintenance_interval.dart';
 import '../../models/maintenance_task.dart';
+import '../../models/task_reminder.dart';
+import '../../services/reminder_planner.dart';
 import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 import '../../utils/id_generator.dart';
 import '../widgets/date_field.dart';
 import '../widgets/dropdown_field.dart';
+import '../widgets/notification_permission.dart';
 
 /// Form for adding a maintenance task or changing an existing one,
-/// including how often it repeats.
+/// including how often it repeats and when the user is reminded about it.
 class TaskFormScreen extends StatefulWidget {
   const TaskFormScreen({super.key, required this.homeItemId, this.existing});
 
@@ -25,6 +28,17 @@ class TaskFormScreen extends StatefulWidget {
 }
 
 class _TaskFormScreenState extends State<TaskFormScreen> {
+  /// Choices for how far ahead of the due date the reminder is sent.
+  static const _reminderLeadOptions = {
+    0: 'On the due date',
+    1: '1 day before',
+    2: '2 days before',
+    3: '3 days before',
+    7: '1 week before',
+    14: '2 weeks before',
+    30: '1 month before',
+  };
+
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _description = TextEditingController();
@@ -32,7 +46,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   IntervalUnit _unit = IntervalUnit.months;
   DateTime? _lastCompleted;
-  bool _remindersEnabled = true;
+  TaskReminder _reminder = const TaskReminder();
 
   MaintenanceTask? get _existing => widget.existing;
 
@@ -45,7 +59,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       _description.text = existing.description;
       _setInterval(existing.interval);
       _lastCompleted = existing.lastCompleted;
-      _remindersEnabled = existing.remindersEnabled;
+      _reminder = existing.reminder;
     }
   }
 
@@ -71,20 +85,46 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   DateTime get _startDate => _existing?.startDate ?? dateOnly(DateTime.now());
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final task = MaintenanceTask(
+  /// The task as currently entered, or `null` if the interval is invalid.
+  MaintenanceTask? _buildTask() {
+    final interval = _interval;
+    if (interval == null) return null;
+    return MaintenanceTask(
       id: _existing?.id ?? generateId(),
       title: _title.text.trim(),
       description: _description.text.trim(),
-      interval: _interval!,
+      interval: interval,
       recommendedInterval: _existing?.recommendedInterval,
       startDate: _startDate,
       lastCompleted: _lastCompleted,
-      remindersEnabled: _remindersEnabled,
+      reminder: _reminder,
     );
+  }
 
+  Future<void> _setReminderEnabled(bool enabled) async {
+    setState(() => _reminder = _reminder.copyWith(enabled: enabled));
+    if (enabled) await requestNotificationPermission(context);
+  }
+
+  Future<void> _pickReminderTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _reminder.hour, minute: _reminder.minute),
+    );
+    if (picked != null) {
+      setState(
+        () => _reminder = _reminder.copyWith(
+          hour: picked.hour,
+          minute: picked.minute,
+        ),
+      );
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final task = _buildTask()!;
     final navigator = Navigator.of(context);
     await context.read<HomeItemController>().saveTask(widget.homeItemId, task);
     navigator.pop();
@@ -220,17 +260,64 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               ),
             ],
             gap,
+            Text('Reminder', style: Theme.of(context).textTheme.titleSmall),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Remind me when this is due'),
-              value: _remindersEnabled,
-              onChanged: (value) => setState(() => _remindersEnabled = value),
+              title: const Text('Remind me about this task'),
+              value: _reminder.enabled,
+              onChanged: _setReminderEnabled,
             ),
+            if (_reminder.enabled) ...[
+              DropdownField<int>(
+                label: 'When',
+                value: _reminderLeadOptions.containsKey(_reminder.daysBefore)
+                    ? _reminder.daysBefore
+                    : 0,
+                onChanged: (days) => setState(
+                  () => _reminder = _reminder.copyWith(daysBefore: days),
+                ),
+                items: [
+                  for (final MapEntry(key: days, value: label)
+                      in _reminderLeadOptions.entries)
+                    DropdownMenuItem(value: days, child: Text(label)),
+                ],
+              ),
+              gap,
+              InkWell(
+                onTap: _pickReminderTime,
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Time',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.schedule),
+                  ),
+                  child: Text(
+                    TimeOfDay(
+                      hour: _reminder.hour,
+                      minute: _reminder.minute,
+                    ).format(context),
+                  ),
+                ),
+              ),
+              if (_buildTask() case final task?) ...[
+                const SizedBox(height: 8),
+                Text(_describeNextReminder(context, task)),
+              ],
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+/// For example "Next reminder: Monday, October 5, 2026 at 9:00 AM".
+String _describeNextReminder(BuildContext context, MaintenanceTask task) {
+  final time = nextReminderTime(task, DateTime.now());
+  final localizations = MaterialLocalizations.of(context);
+  final date = localizations.formatFullDate(time);
+  final timeOfDay = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(time));
+  return 'Next reminder: $date at $timeOfDay';
 }
 
 /// Shows the manufacturer's recommended interval with a button to go back

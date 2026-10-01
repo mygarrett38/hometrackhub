@@ -140,6 +140,59 @@ void main() {
     expect(find.text('Vehicles'), findsOneWidget);
   });
 
+  testWidgets('each task has its own reminder that can be turned off', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appliances'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refrigerator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Replace water filter'));
+    await tester.pumpAndSettle();
+    // The form's list is the outermost scrollable; text fields have their own.
+    await tester.scrollUntilVisible(
+      find.textContaining('Next reminder'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('On the due date'), findsOneWidget);
+
+    await tester.tap(find.text('Remind me about this task'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Next reminder'), findsNothing);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Only the task that was changed has its reminder off.
+    expect(find.textContaining('Reminder off'), findsOneWidget);
+  });
+
+  testWidgets('a weekly or monthly overview can be turned on', (tester) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Overview time'), findsNothing);
+
+    await tester.tap(find.text('Weekly'));
+    await tester.pumpAndSettle();
+    expect(find.text('Monday'), findsOneWidget);
+    expect(find.text('Overview time'), findsOneWidget);
+
+    await tester.tap(find.text('Monthly'));
+    await tester.pumpAndSettle();
+    expect(find.text('1st of each month'), findsOneWidget);
+  });
+
   testWidgets('dark mode can be selected in settings', (tester) async {
     await pumpApp(tester);
 

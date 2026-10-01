@@ -5,6 +5,7 @@ import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
+import 'package:hometrackhub/models/task_reminder.dart';
 
 void main() {
   group('MaintenanceInterval.addTo', () {
@@ -88,7 +89,7 @@ void main() {
           recommendedInterval: const MaintenanceInterval.months(6),
           startDate: DateTime(2026, 1, 1),
           lastCompleted: DateTime(2026, 2, 1),
-          remindersEnabled: false,
+          reminder: const TaskReminder(daysBefore: 7, hour: 18),
         ),
       ],
     );
@@ -102,8 +103,30 @@ void main() {
     final settings = AppSettings.fromJson({'themeMode': 'dark'});
 
     expect(settings.themeMode, ThemeMode.dark);
-    expect(settings.notificationsEnabled, isTrue);
-    expect(settings.reminderHour, 9);
+    expect(settings.overviewFrequency, OverviewFrequency.off);
+    expect(settings.overviewWeekday, DateTime.monday);
     expect(settings.homeLocation.isEmpty, isTrue);
+  });
+
+  test('tasks saved before per-task reminders keep their on or off choice', () {
+    final task = MaintenanceTask.fromJson({
+      'id': 'filter',
+      'title': 'Replace filter',
+      'interval': {'amount': 3, 'unit': 'months'},
+      'startDate': '2026-01-01T00:00:00.000',
+      'remindersEnabled': false,
+    });
+
+    expect(task.reminder.enabled, isFalse);
+    expect(task.reminder.daysBefore, 0);
+  });
+
+  test('a task reminder fires the chosen number of days early', () {
+    const reminder = TaskReminder(daysBefore: 3, hour: 18, minute: 45);
+
+    expect(
+      reminder.timeFor(DateTime(2026, 3, 2)),
+      DateTime(2026, 2, 27, 18, 45),
+    );
   });
 }

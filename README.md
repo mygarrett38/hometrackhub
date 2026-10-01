@@ -7,8 +7,10 @@ A home maintenance app designed to track maintenance tasks, find local services,
 - Track appliances, vehicles, smart devices and custom home items.
 - Maintenance schedules default to typical manufacturer recommendations from a
   built-in catalog, and every interval can be changed or reset.
-- Scheduled notifications when maintenance is due, with the reminder time and
-  lead time set by the user.
+- Each task has its own reminder: on or off, how many days before the due
+  date, and at what time.
+- An optional weekly or monthly overview notification summarizes upcoming and
+  overdue maintenance.
 - Finds smart devices on the current Wi-Fi network using Bonjour/mDNS and
   UPnP/SSDP.
 - Settings for notifications, light/dark mode, privacy and home location.

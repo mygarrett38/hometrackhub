@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart' show ThemeMode, immutable;
 
+import 'task_reminder.dart';
+
 /// The user's home address. Every field is optional.
 @immutable
 class HomeLocation {
@@ -60,14 +62,29 @@ class HomeLocation {
   }
 }
 
+/// How often the overview notification summarizing upcoming maintenance is
+/// sent.
+enum OverviewFrequency {
+  off('Off'),
+  weekly('Weekly'),
+  monthly('Monthly');
+
+  const OverviewFrequency(this.label);
+
+  final String label;
+}
+
 /// Every preference the user can change on the settings screen.
+///
+/// Reminders for individual tasks are set on each task (see
+/// [TaskReminder]). The only app-wide notification is the optional overview.
 @immutable
 class AppSettings {
   const AppSettings({
-    this.notificationsEnabled = true,
-    this.reminderHour = 9,
-    this.reminderMinute = 0,
-    this.reminderDaysBefore = 0,
+    this.overviewFrequency = OverviewFrequency.off,
+    this.overviewWeekday = DateTime.monday,
+    this.overviewHour = 8,
+    this.overviewMinute = 0,
     this.themeMode = ThemeMode.system,
     this.networkDiscoveryEnabled = true,
     this.hideDetailsInNotifications = false,
@@ -75,15 +92,16 @@ class AppSettings {
   });
 
   // Notifications
-  final bool notificationsEnabled;
+  /// Whether to send a weekly or monthly overview of upcoming maintenance.
+  final OverviewFrequency overviewFrequency;
 
-  /// The time of day (24 hour clock) reminders are delivered.
-  final int reminderHour;
-  final int reminderMinute;
+  /// The day weekly overviews are sent, from [DateTime.monday] (1) to
+  /// [DateTime.sunday] (7). Monthly overviews are sent on the 1st.
+  final int overviewWeekday;
 
-  /// How many days before a task is due the reminder is sent.
-  /// 0 means on the due date itself.
-  final int reminderDaysBefore;
+  /// The time of day (24 hour clock) overviews are sent.
+  final int overviewHour;
+  final int overviewMinute;
 
   // Appearance
   final ThemeMode themeMode;
@@ -92,29 +110,29 @@ class AppSettings {
   /// Whether the app may scan the local network for smart devices.
   final bool networkDiscoveryEnabled;
 
-  /// When true, reminders only say that maintenance is due, without naming
-  /// the home item or task. Useful because notifications can appear on a
-  /// locked screen.
+  /// When true, notifications only say that maintenance is due, without
+  /// naming the home item or task. Useful because notifications can appear
+  /// on a locked screen.
   final bool hideDetailsInNotifications;
 
   // Home
   final HomeLocation homeLocation;
 
   AppSettings copyWith({
-    bool? notificationsEnabled,
-    int? reminderHour,
-    int? reminderMinute,
-    int? reminderDaysBefore,
+    OverviewFrequency? overviewFrequency,
+    int? overviewWeekday,
+    int? overviewHour,
+    int? overviewMinute,
     ThemeMode? themeMode,
     bool? networkDiscoveryEnabled,
     bool? hideDetailsInNotifications,
     HomeLocation? homeLocation,
   }) {
     return AppSettings(
-      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
-      reminderHour: reminderHour ?? this.reminderHour,
-      reminderMinute: reminderMinute ?? this.reminderMinute,
-      reminderDaysBefore: reminderDaysBefore ?? this.reminderDaysBefore,
+      overviewFrequency: overviewFrequency ?? this.overviewFrequency,
+      overviewWeekday: overviewWeekday ?? this.overviewWeekday,
+      overviewHour: overviewHour ?? this.overviewHour,
+      overviewMinute: overviewMinute ?? this.overviewMinute,
       themeMode: themeMode ?? this.themeMode,
       networkDiscoveryEnabled:
           networkDiscoveryEnabled ?? this.networkDiscoveryEnabled,
@@ -125,10 +143,10 @@ class AppSettings {
   }
 
   Map<String, dynamic> toJson() => {
-    'notificationsEnabled': notificationsEnabled,
-    'reminderHour': reminderHour,
-    'reminderMinute': reminderMinute,
-    'reminderDaysBefore': reminderDaysBefore,
+    'overviewFrequency': overviewFrequency.name,
+    'overviewWeekday': overviewWeekday,
+    'overviewHour': overviewHour,
+    'overviewMinute': overviewMinute,
     'themeMode': themeMode.name,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
     'hideDetailsInNotifications': hideDetailsInNotifications,
@@ -136,19 +154,20 @@ class AppSettings {
   };
 
   /// Reads settings saved by [toJson]. Missing values fall back to the
-  /// defaults so older saved data keeps working after new settings are added.
+  /// defaults so older saved data keeps working after settings change.
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     const defaults = AppSettings();
     final homeLocation = json['homeLocation'] as Map<String, dynamic>?;
     final themeName = json['themeMode'] as String?;
+    final overviewName = json['overviewFrequency'] as String?;
     return AppSettings(
-      notificationsEnabled:
-          json['notificationsEnabled'] as bool? ??
-          defaults.notificationsEnabled,
-      reminderHour: json['reminderHour'] as int? ?? defaults.reminderHour,
-      reminderMinute: json['reminderMinute'] as int? ?? defaults.reminderMinute,
-      reminderDaysBefore:
-          json['reminderDaysBefore'] as int? ?? defaults.reminderDaysBefore,
+      overviewFrequency: overviewName == null
+          ? defaults.overviewFrequency
+          : OverviewFrequency.values.byName(overviewName),
+      overviewWeekday:
+          json['overviewWeekday'] as int? ?? defaults.overviewWeekday,
+      overviewHour: json['overviewHour'] as int? ?? defaults.overviewHour,
+      overviewMinute: json['overviewMinute'] as int? ?? defaults.overviewMinute,
       themeMode: themeName == null
           ? defaults.themeMode
           : ThemeMode.values.byName(themeName),

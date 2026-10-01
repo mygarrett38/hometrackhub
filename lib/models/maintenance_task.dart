@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'maintenance_interval.dart';
+import 'task_reminder.dart';
 
 /// A recurring maintenance job for one home item, such as
 /// "Replace air filter every 3 months".
@@ -14,7 +15,7 @@ class MaintenanceTask {
     this.description = '',
     this.recommendedInterval,
     this.lastCompleted,
-    this.remindersEnabled = true,
+    this.reminder = const TaskReminder(),
   });
 
   final String id;
@@ -35,8 +36,8 @@ class MaintenanceTask {
   /// The last time the user marked this task as done.
   final DateTime? lastCompleted;
 
-  /// Whether the user wants to be notified when this task is due.
-  final bool remindersEnabled;
+  /// When, and whether, the user is notified that this task is due.
+  final TaskReminder reminder;
 
   /// The date this task is next due.
   DateTime get nextDueDate => interval.addTo(lastCompleted ?? startDate);
@@ -54,7 +55,7 @@ class MaintenanceTask {
     MaintenanceInterval? interval,
     DateTime? startDate,
     DateTime? lastCompleted,
-    bool? remindersEnabled,
+    TaskReminder? reminder,
   }) {
     return MaintenanceTask(
       id: id,
@@ -64,7 +65,7 @@ class MaintenanceTask {
       recommendedInterval: recommendedInterval,
       startDate: startDate ?? this.startDate,
       lastCompleted: lastCompleted ?? this.lastCompleted,
-      remindersEnabled: remindersEnabled ?? this.remindersEnabled,
+      reminder: reminder ?? this.reminder,
     );
   }
 
@@ -76,12 +77,13 @@ class MaintenanceTask {
     'recommendedInterval': recommendedInterval?.toJson(),
     'startDate': startDate.toIso8601String(),
     'lastCompleted': lastCompleted?.toIso8601String(),
-    'remindersEnabled': remindersEnabled,
+    'reminder': reminder.toJson(),
   };
 
   factory MaintenanceTask.fromJson(Map<String, dynamic> json) {
     final recommended = json['recommendedInterval'] as Map<String, dynamic>?;
     final lastCompleted = json['lastCompleted'] as String?;
+    final reminder = json['reminder'] as Map<String, dynamic>?;
     return MaintenanceTask(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -96,7 +98,10 @@ class MaintenanceTask {
       lastCompleted: lastCompleted == null
           ? null
           : DateTime.parse(lastCompleted),
-      remindersEnabled: json['remindersEnabled'] as bool? ?? true,
+      reminder: reminder != null
+          ? TaskReminder.fromJson(reminder)
+          // Tasks saved before per-task schedules only stored on or off.
+          : TaskReminder(enabled: json['remindersEnabled'] as bool? ?? true),
     );
   }
 }
