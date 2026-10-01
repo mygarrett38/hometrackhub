@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../state/home_item_controller.dart';
-import '../../state/settings_controller.dart';
+import '../../../state/home_item_controller.dart';
+import '../../../state/settings_controller.dart';
 
 /// Privacy settings: network scanning, notification details, and exporting
 /// or deleting the user's data.

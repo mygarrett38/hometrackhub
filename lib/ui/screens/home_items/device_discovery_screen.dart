@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/home_item_catalog.dart';
-import '../../models/home_item_category.dart';
-import '../../services/device_discovery_service.dart';
-import '../../state/home_item_controller.dart';
-import '../../state/settings_controller.dart';
-import '../widgets/category_icon.dart';
+import '../../../data/home_item_catalog.dart';
+import '../../../models/home_item_category.dart';
+import '../../../services/device_discovery_service.dart';
+import '../../../state/home_item_controller.dart';
+import '../../../state/settings_controller.dart';
+import '../../widgets/category_icon.dart';
 import 'home_item_form_screen.dart';
 
 /// The stages the network scan can be in.

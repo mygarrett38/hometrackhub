@@ -5,9 +5,9 @@ import '../models/app_settings.dart';
 import '../services/notification_service.dart';
 import '../state/home_item_controller.dart';
 import '../state/settings_controller.dart';
-import 'screens/home_item_list_screen.dart';
-import 'screens/settings_screen.dart';
-import 'screens/upcoming_screen.dart';
+import 'screens/home_items/home_item_list_screen.dart';
+import 'screens/settings/settings_screen.dart';
+import 'screens/upcoming/upcoming_screen.dart';
 
 /// The app's main layout with three tabs. Uses a bottom navigation bar on
 /// phones and a side navigation rail on wider screens such as tablets.

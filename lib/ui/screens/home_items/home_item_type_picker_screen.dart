@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../data/home_item_catalog.dart';
-import '../../models/home_item_category.dart';
-import '../widgets/category_icon.dart';
+import '../../../data/home_item_catalog.dart';
+import '../../../models/home_item_category.dart';
+import '../../widgets/category_icon.dart';
 import 'device_discovery_screen.dart';
 import 'home_item_form_screen.dart';
 

@@ -36,7 +36,8 @@ flutter test           # unit and widget tests
 | `lib/data/` | The built-in home item catalog and repositories that save data with `shared_preferences`. |
 | `lib/services/` | Notification scheduling, reminder planning and network device discovery. |
 | `lib/state/` | `ChangeNotifier` controllers the UI listens to, plus `ReminderSync`, which reschedules notifications after every change. |
-| `lib/ui/` | Screens and shared widgets. |
+| `lib/ui/screens/` | Screens, grouped by the tab they belong to: `upcoming/`, `home_items/` and `settings/`. |
+| `lib/ui/widgets/` | Small widgets shared by several screens. |
 | `test/` | Unit tests for the models, planner and catalog, plus widget tests. |
 
 State is shared with the [provider](https://pub.dev/packages/provider)

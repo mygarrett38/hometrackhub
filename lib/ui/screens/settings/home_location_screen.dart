@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/app_settings.dart';
-import '../../state/settings_controller.dart';
+import '../../../models/app_settings.dart';
+import '../../../state/settings_controller.dart';
 
 /// Form for entering or clearing the home's address.
 class HomeLocationScreen extends StatefulWidget {

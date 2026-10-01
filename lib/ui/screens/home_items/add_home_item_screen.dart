@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../models/home_item_category.dart';
-import '../widgets/category_icon.dart';
+import '../../../models/home_item_category.dart';
+import '../../widgets/category_icon.dart';
 import 'device_discovery_screen.dart';
 import 'home_item_type_picker_screen.dart';
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/home_item_task.dart';
-import '../../state/home_item_controller.dart';
-import '../../utils/date_utils.dart';
-import '../widgets/task_tile.dart';
-import 'home_item_detail_screen.dart';
+import '../../../models/home_item_task.dart';
+import '../../../state/home_item_controller.dart';
+import '../../../utils/date_utils.dart';
+import '../../widgets/task_tile.dart';
+import '../home_items/home_item_detail_screen.dart';
 
 /// Home tab: every maintenance task, grouped into overdue, due soon and
 /// later.

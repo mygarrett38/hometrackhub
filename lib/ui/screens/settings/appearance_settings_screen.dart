@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../state/settings_controller.dart';
+import '../../../state/settings_controller.dart';
 
 /// Labels for each [ThemeMode], shared with the settings category list.
 const themeModeLabels = {

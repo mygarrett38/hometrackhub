@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/home_item_catalog.dart';
-import '../../models/home_item.dart';
-import '../../models/home_item_category.dart';
-import '../../services/device_discovery_service.dart';
-import '../../state/home_item_controller.dart';
-import '../../utils/date_utils.dart';
-import '../../utils/id_generator.dart';
-import '../widgets/date_field.dart';
-import '../widgets/dropdown_field.dart';
+import '../../../data/home_item_catalog.dart';
+import '../../../models/home_item.dart';
+import '../../../models/home_item_category.dart';
+import '../../../services/device_discovery_service.dart';
+import '../../../state/home_item_controller.dart';
+import '../../../utils/date_utils.dart';
+import '../../../utils/id_generator.dart';
+import '../../widgets/date_field.dart';
+import '../../widgets/dropdown_field.dart';
 import 'home_item_detail_screen.dart';
 
 /// Form for adding a new home item or editing an existing one.

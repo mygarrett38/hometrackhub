@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/app_settings.dart';
-import '../../state/settings_controller.dart';
+import '../../../models/app_settings.dart';
+import '../../../state/settings_controller.dart';
 import 'appearance_settings_screen.dart';
 import 'home_location_screen.dart';
 import 'notification_settings_screen.dart';
