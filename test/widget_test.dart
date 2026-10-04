@@ -8,6 +8,7 @@ import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
+import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -52,9 +53,20 @@ class FakeDiscoveryService implements DeviceDiscoveryService {
   }
 }
 
-/// Starts the app with fake services. Pass [notifications] to inspect what
-/// the app asked the notification service to do.
+/// Starts the app with fake services and waits until the launch animation
+/// has finished. Pass [notifications] to inspect what the app asked the
+/// notification service to do.
 Future<void> pumpApp(
+  WidgetTester tester, {
+  FakeNotificationService? notifications,
+}) async {
+  await startApp(tester, notifications: notifications);
+  await tester.pumpAndSettle();
+}
+
+/// Starts the app with fake services, leaving the launch animation at its
+/// first frame.
+Future<void> startApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
 }) async {
@@ -78,7 +90,16 @@ Future<void> pumpApp(
       child: const HomeTrackHubApp(),
     ),
   );
-  await tester.pumpAndSettle();
+
+  // The launch screen waits for its logo to load. Loading an image takes
+  // real time, which widget tests only allow inside runAsync.
+  await tester.runAsync(
+    () => precacheImage(
+      LaunchScreen.logo,
+      tester.element(find.byType(LaunchScreen)),
+    ),
+  );
+  await tester.pump();
 }
 
 void main() {
@@ -244,5 +265,43 @@ void main() {
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.themeMode, ThemeMode.dark);
+  });
+
+  group('launch screen', () {
+    final logo = find.image(LaunchScreen.logo);
+    final mainScreen = find.text('Upcoming Maintenance');
+
+    testWidgets('shows the logo, then reveals the main screen', (tester) async {
+      await startApp(tester);
+      expect(logo, findsOneWidget);
+      expect(mainScreen, findsNothing);
+
+      // Partway through, the main screen is being revealed under the logo.
+      await tester.pump(const Duration(milliseconds: 1000));
+      expect(logo, findsOneWidget);
+      expect(mainScreen, findsOneWidget);
+
+      // Once finished, only the main screen is left.
+      await tester.pumpAndSettle();
+      expect(logo, findsNothing);
+      expect(mainScreen, findsOneWidget);
+    });
+
+    testWidgets('is short when the device asks for reduced motion', (
+      tester,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+
+      await startApp(tester);
+      expect(logo, findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 450));
+      expect(logo, findsNothing);
+      expect(mainScreen, findsOneWidget);
+    });
   });
 }

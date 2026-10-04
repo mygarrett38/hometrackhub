@@ -46,6 +46,17 @@ them to the widget tree.
 
 ## Platform notes
 
+- **Launch screen:** the phone shows the logo while the app starts, then
+  `lib/ui/screens/launch/launch_screen.dart` animates it into the app. The
+  logo is stored once per platform, and all use the background `#F3F1EC`:
+  - `assets/images/logo.png`: used by the animation, 1192px.
+  - `android/app/src/main/res/drawable-xxxhdpi/splash.png`: Android 11 and
+    older, the same 1192px image.
+  - `android/app/src/main/res/drawable-xxxhdpi/android12splash.png`:
+    Android 12 and newer, which show the logo inside a circle. 1152px,
+    with the logo fitting inside a centered 768px circle.
+  - `ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png`:
+    iOS, 894px.
 - **Android:** scheduled notifications need core library desugaring and the
   receivers declared in `AndroidManifest.xml`. Both are already configured.
 - **iOS:** the Bonjour service types the app searches for must be listed

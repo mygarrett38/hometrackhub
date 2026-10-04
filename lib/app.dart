@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'state/settings_controller.dart';
 import 'ui/home_shell.dart';
+import 'ui/screens/launch/launch_screen.dart';
 
 /// The root widget. Applies the light or dark theme the user chose.
 class HomeTrackHubApp extends StatelessWidget {
@@ -30,7 +31,7 @@ class HomeTrackHubApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: const HomeShell(),
+      home: const LaunchScreen(child: HomeShell()),
     );
   }
 }
