@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Background of the adaptive app icon, matching the icon's cream. -->
-    <color name="ic_launcher_background">#FCF9F3</color>
+    <!-- Background of the adaptive app icon. The foreground layer is opaque
+         and carries the icon's own shaded background, so this only matches
+         its color in case a launcher ever shows the layer behind it. -->
+    <color name="ic_launcher_background">#FBF8F1</color>
 </resources>
