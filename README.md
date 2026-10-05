@@ -57,6 +57,16 @@ them to the widget tree.
     with the logo fitting inside a centered 768px circle.
   - `ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png`:
     iOS, 894px.
+- **App icon:** each platform has one icon image, on the cream `#FCF9F3`:
+  - `android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png`:
+    Android 8 and newer. Launchers crop this 432px layer to their own shape,
+    so the logo must fit in the middle 264px circle. The background color
+    is in `values/colors.xml`.
+  - `android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png`: Android 7,
+    a 192px rounded square with transparent corners.
+  - `ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png`:
+    iOS, a 1024px square with no transparency. iOS rounds the corners and
+    Xcode makes the smaller sizes.
 - **Android:** scheduled notifications need core library desugaring and the
   receivers declared in `AndroidManifest.xml`. Both are already configured.
 - **iOS:** the Bonjour service types the app searches for must be listed
