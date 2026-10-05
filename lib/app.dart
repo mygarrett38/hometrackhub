@@ -4,13 +4,11 @@ import 'package:provider/provider.dart';
 import 'state/settings_controller.dart';
 import 'ui/home_shell.dart';
 import 'ui/screens/launch/launch_screen.dart';
+import 'ui/theme/app_theme.dart';
 
 /// The root widget. Applies the light or dark theme the user chose.
 class HomeTrackHubApp extends StatelessWidget {
   const HomeTrackHubApp({super.key});
-
-  // Placeholder colors until the app's visual design is decided.
-  static const _seedColor = Colors.teal;
 
   @override
   Widget build(BuildContext context) {
@@ -22,15 +20,8 @@ class HomeTrackHubApp extends StatelessWidget {
       title: 'HomeTrackHub',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: _seedColor),
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: _seedColor,
-          brightness: Brightness.dark,
-        ),
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       home: const LaunchScreen(child: HomeShell()),
     );
   }
