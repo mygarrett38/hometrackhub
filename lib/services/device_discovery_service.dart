@@ -5,8 +5,14 @@ import 'dart:io';
 import 'package:bonsoir/bonsoir.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-/// A smart device found on the home network.
+/// Bluetooth signal strengths, in dBm, at or above which a device is
+/// considered very close or nearby.
+const _veryCloseSignalStrength = -60;
+const _nearbySignalStrength = -75;
+
+/// A smart device found on the home network or over Bluetooth.
 @immutable
 class DiscoveredDevice {
   const DiscoveredDevice({
@@ -18,6 +24,8 @@ class DiscoveredDevice {
     this.model = '',
     this.address,
     this.detailsUrl,
+    this.signalStrength,
+    this.foundOverBluetooth = false,
   });
 
   /// Stable identifier used to recognize the same device in later scans.
@@ -42,6 +50,14 @@ class DiscoveredDevice {
 
   /// Whether only the device's address is known so far.
   bool get needsDetails => detailsUrl != null;
+
+  /// How strongly a Bluetooth device's signal was received, in dBm. Values
+  /// closer to zero usually mean the device is closer.
+  final int? signalStrength;
+
+  /// Whether the device was found over Bluetooth rather than on the local
+  /// network.
+  final bool foundOverBluetooth;
 }
 
 /// Combines scan results that describe the same physical device.
@@ -50,11 +66,23 @@ class DiscoveredDevice {
 /// example, shows up as an AirPlay device, a Spotify Connect speaker and a
 /// Roku player, all at the same IP address. For each address, only the
 /// entry with the most useful details is kept.
+///
+/// Bluetooth doesn't share IP addresses, so a Bluetooth device is matched
+/// by name instead. If the network has a device with the same name, only
+/// the network entry is kept.
 List<DiscoveredDevice> mergeDuplicateDevices(
   Iterable<DiscoveredDevice> devices,
 ) {
+  final networkNames = {
+    for (final device in devices)
+      if (!device.foundOverBluetooth) device.name.toLowerCase(),
+  };
   final bestByAddress = <String, DiscoveredDevice>{};
   for (final device in devices) {
+    if (device.foundOverBluetooth &&
+        networkNames.contains(device.name.toLowerCase())) {
+      continue;
+    }
     final key = device.address ?? device.id;
     final existing = bestByAddress[key];
     if (existing == null || _detailScore(device) > _detailScore(existing)) {
@@ -104,17 +132,30 @@ List<DiscoveredDevice> rankDevicesByRelevance(
 
 int _relevanceScore(DiscoveredDevice device) {
   var score = _detailScore(device);
-  if (device.kind != _genericDeviceKind) score += 3;
+  if (device.kind != _genericDeviceKind &&
+      device.kind != _genericBluetoothKind) {
+    score += 3;
+  }
+  // Bluetooth devices close to the phone are more likely to be the user's.
+  final signal = device.signalStrength;
+  if (signal != null && signal >= _veryCloseSignalStrength) {
+    score += 2;
+  } else if (signal != null && signal >= _nearbySignalStrength) {
+    score += 1;
+  }
   return score;
 }
 
 /// The kind given to UPnP devices that couldn't be identified.
 const _genericDeviceKind = 'Network device';
 
+/// The kind given to Bluetooth devices that couldn't be identified.
+const _genericBluetoothKind = 'Bluetooth device';
+
 /// Collapses runs of spaces in device names, e.g. "Roku    Premiere".
 String _cleanName(String name) => name.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-/// Finds smart devices on the local network.
+/// Finds smart devices on the local network and over Bluetooth.
 ///
 /// This is an interface so tests can supply a fake implementation.
 abstract interface class DeviceDiscoveryService {
@@ -122,7 +163,10 @@ abstract interface class DeviceDiscoveryService {
   /// that can be scanned.
   Future<bool> isConnectedToLocalNetwork();
 
-  /// Scans the network for [duration] and emits devices as they are found.
+  /// Scans for [duration] and emits devices as they are found.
+  ///
+  /// Bluetooth devices nearby are always searched for. Devices on the local
+  /// network are only searched for when [includeNetwork] is true.
   ///
   /// The same device may be emitted more than once as more details about it
   /// arrive. Use [DiscoveredDevice.id] to replace the earlier copy.
@@ -130,7 +174,7 @@ abstract interface class DeviceDiscoveryService {
   /// Some devices are emitted with only their address known, so that busy
   /// networks aren't flooded with requests for details nobody will see. Pass
   /// those to [loadDetails] once they're about to be shown.
-  Stream<DiscoveredDevice> scan({Duration duration});
+  Stream<DiscoveredDevice> scan({Duration duration, bool includeNetwork});
 
   /// Downloads the details of a device whose [DiscoveredDevice.needsDetails]
   /// is true. Returns `null` if they can't be read, in which case the device
@@ -175,14 +219,16 @@ const Map<String, _KnownService> _knownMdnsServices = {
   '_miio._udp': _KnownService('Xiaomi smart device', 'smart_device'),
 };
 
-/// [DeviceDiscoveryService] that searches the network using two common
-/// discovery protocols:
+/// [DeviceDiscoveryService] that searches using three common discovery
+/// methods:
 ///
 /// * Bonjour / mDNS, used by HomeKit, Matter, Google Cast, AirPlay, printers
 ///   and many other devices.
 /// * UPnP / SSDP, used by many smart TVs, routers, Roku players and smart
 ///   plugs.
-class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
+/// * Bluetooth Low Energy, used by smart locks, lights, sensors and devices
+///   that are waiting to be set up.
+class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
   @override
   Future<bool> isConnectedToLocalNetwork() async {
     final connections = await Connectivity().checkConnectivity();
@@ -193,6 +239,7 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
   @override
   Stream<DiscoveredDevice> scan({
     Duration duration = const Duration(seconds: 10),
+    bool includeNetwork = true,
   }) {
     final controller = StreamController<DiscoveredDevice>();
 
@@ -202,12 +249,15 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
 
     Future<void> runScan() async {
       final results = await Future.wait([
-        _runSafely('mDNS', () => _scanMdns(duration, report)),
-        _runSafely('SSDP', () => _scanSsdp(duration, report)),
+        if (includeNetwork) ...[
+          _runSafely('mDNS', () => _scanMdns(duration, report)),
+          _runSafely('SSDP', () => _scanSsdp(duration, report)),
+        ],
+        _runSafely('Bluetooth', () => _scanBluetooth(duration, report)),
       ]);
       if (results.every((succeeded) => !succeeded)) {
         controller.addError(
-          const SocketException('The local network could not be scanned.'),
+          const SocketException('No nearby devices could be scanned for.'),
         );
       }
       await controller.close();
@@ -447,4 +497,126 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
     }
     return (_genericDeviceKind, 'smart_device');
   }
+
+  Future<void> _scanBluetooth(
+    Duration duration,
+    void Function(DiscoveredDevice) report,
+  ) async {
+    if (!await FlutterBluePlus.isSupported) {
+      throw UnsupportedError('This device does not support Bluetooth.');
+    }
+
+    // The state is unknown until the system reports it. On iOS, this is
+    // also when people are first asked to allow Bluetooth, so they're given
+    // as long as the scan takes to answer.
+    final state = await FlutterBluePlus.adapterState
+        .firstWhere((state) => state != BluetoothAdapterState.unknown)
+        .timeout(duration);
+    if (state != BluetoothAdapterState.on) {
+      throw StateError('Bluetooth is not available: ${state.name}');
+    }
+
+    final subscription = FlutterBluePlus.onScanResults.listen((results) {
+      for (final result in results) {
+        final device = _deviceFromBluetooth(result);
+        if (device != null) report(device);
+      }
+    });
+    try {
+      // On Android, this asks for permission to find nearby devices.
+      await FlutterBluePlus.startScan(timeout: duration, oneByOne: true);
+      await FlutterBluePlus.isScanning
+          .firstWhere((scanning) => !scanning)
+          .timeout(duration + const Duration(seconds: 5));
+    } finally {
+      await subscription.cancel();
+      await FlutterBluePlus.stopScan();
+    }
+  }
+
+  DiscoveredDevice? _deviceFromBluetooth(ScanResult result) {
+    final advertisement = result.advertisementData;
+    final name = _cleanName(
+      advertisement.advName.isNotEmpty
+          ? advertisement.advName
+          : result.device.platformName,
+    );
+    // Devices that don't share a name, like most phones and trackers, can't
+    // be told apart, so they aren't listed.
+    if (name.isEmpty) return null;
+
+    final (kind, typeId) = classifyBluetoothDevice(
+      name: name,
+      serviceUuids: [
+        for (final uuid in advertisement.serviceUuids) uuid.str,
+        for (final uuid in advertisement.serviceData.keys) uuid.str,
+      ],
+      manufacturerData: advertisement.manufacturerData,
+    );
+    return DiscoveredDevice(
+      id: 'ble:${result.device.remoteId.str}',
+      name: name,
+      kind: kind,
+      suggestedTypeId: typeId,
+      signalStrength: result.rssi,
+      foundOverBluetooth: true,
+    );
+  }
+}
+
+/// Bluetooth service ids (16-bit, lower case) that identify a kind of device.
+const Map<String, (String, String)> _knownBluetoothServices = {
+  'fff6': ('Matter device (setup mode)', 'smart_device'),
+  'fe0f': ('Philips Hue light', 'smart_lighting'),
+  'fe24': ('August smart lock', 'smart_lock'),
+  'fe95': ('Xiaomi smart device', 'smart_device'),
+  '181a': ('Environmental sensor', 'smart_device'),
+};
+
+/// Words in a Bluetooth device's name that suggest what it is. Checked in
+/// order, so more specific words come first.
+const List<(String, String, String)> _bluetoothNameHints = [
+  ('lock|august|yale|schlage', 'Smart lock', 'smart_lock'),
+  ('thermostat|ecobee|nest', 'Smart thermostat', 'smart_thermostat'),
+  ('vacuum|roomba|roborock', 'Robot vacuum', 'robot_vacuum'),
+  (
+    'doorbell|camera|cam|ring|arlo|wyze',
+    'Camera or doorbell',
+    'security_camera',
+  ),
+  ('hue|bulb|light|lamp|govee|nanoleaf|lifx', 'Smart light', 'smart_lighting'),
+  (
+    'speaker|soundbar|sonos|echo|bose|jbl',
+    'Bluetooth speaker',
+    'smart_speaker',
+  ),
+  ('tv|roku|chromecast', 'TV or streaming device', 'smart_tv'),
+  ('printer', 'Printer', 'printer'),
+];
+
+/// Guesses what kind of device a Bluetooth advertisement is for. Returns a
+/// description and the id of the closest home item catalog entry.
+@visibleForTesting
+(String, String) classifyBluetoothDevice({
+  required String name,
+  required List<String> serviceUuids,
+  required Map<int, List<int>> manufacturerData,
+}) {
+  for (final uuid in serviceUuids) {
+    final known = _knownBluetoothServices[uuid.toLowerCase()];
+    if (known != null) return known;
+  }
+
+  // HomeKit accessories advertise Apple's company id (0x004C) followed by
+  // the HomeKit advertisement type, 0x06.
+  final apple = manufacturerData[0x004C];
+  if (apple != null && apple.isNotEmpty && apple.first == 0x06) {
+    return ('Apple HomeKit accessory', 'smart_device');
+  }
+
+  final lowerName = name.toLowerCase();
+  for (final (words, kind, typeId) in _bluetoothNameHints) {
+    if (RegExp('\\b($words)\\b').hasMatch(lowerName)) return (kind, typeId);
+  }
+  return (_genericBluetoothKind, 'smart_device');
 }

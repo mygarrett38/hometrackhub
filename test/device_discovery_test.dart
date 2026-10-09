@@ -146,27 +146,165 @@ void main() {
     },
   );
 
+  test('closer Bluetooth devices rank higher', () {
+    const devices = [
+      DiscoveredDevice(
+        id: 'ble:far',
+        name: 'Neighbor\'s speaker',
+        kind: 'Bluetooth speaker',
+        suggestedTypeId: 'smart_speaker',
+        signalStrength: -90,
+      ),
+      DiscoveredDevice(
+        id: 'ble:unknown',
+        name: 'XK-204',
+        kind: 'Bluetooth device',
+        suggestedTypeId: 'smart_device',
+        signalStrength: -45,
+      ),
+      DiscoveredDevice(
+        id: 'ble:near',
+        name: 'Living room speaker',
+        kind: 'Bluetooth speaker',
+        suggestedTypeId: 'smart_speaker',
+        signalStrength: -55,
+      ),
+    ];
+
+    expect(rankDevicesByRelevance(devices).map((device) => device.name), [
+      'Living room speaker',
+      'Neighbor\'s speaker',
+      'XK-204',
+    ]);
+  });
+
+  group('Bluetooth devices are recognized', () {
+    (String, String) classify(
+      String name, {
+      List<String> serviceUuids = const [],
+      Map<int, List<int>> manufacturerData = const {},
+    }) => classifyBluetoothDevice(
+      name: name,
+      serviceUuids: serviceUuids,
+      manufacturerData: manufacturerData,
+    );
+
+    test('by the services they advertise', () {
+      expect(classify('MATTER-3840', serviceUuids: ['FFF6']), (
+        'Matter device (setup mode)',
+        'smart_device',
+      ));
+      expect(
+        classify('Hue color lamp', serviceUuids: ['fe0f']).$2,
+        'smart_lighting',
+      );
+    });
+
+    test('as HomeKit accessories', () {
+      expect(
+        classify(
+          'Eve Energy',
+          manufacturerData: {
+            0x004C: [0x06, 0x31],
+          },
+        ),
+        ('Apple HomeKit accessory', 'smart_device'),
+      );
+    });
+
+    test('by whole words in their names', () {
+      expect(classify('Front Door Lock').$2, 'smart_lock');
+      expect(classify('Bedroom TV').$2, 'smart_tv');
+      expect(classify('Ring Doorbell').$2, 'security_camera');
+      expect(classify('Cambridge Audio').$2, 'smart_device');
+      expect(classify('Spring sensor'), ('Bluetooth device', 'smart_device'));
+    });
+  });
+
+  test('Bluetooth devices also found on the network are merged by name', () {
+    const devices = [
+      DiscoveredDevice(
+        id: 'ble:AA:BB',
+        name: 'living room tv',
+        kind: 'TV or streaming device',
+        suggestedTypeId: 'smart_tv',
+        foundOverBluetooth: true,
+      ),
+      DiscoveredDevice(
+        id: 'mdns:living room tv',
+        name: 'Living Room TV',
+        kind: 'Google Cast device',
+        suggestedTypeId: 'smart_tv',
+        address: '192.168.0.20',
+      ),
+      DiscoveredDevice(
+        id: 'ble:CC:DD',
+        name: 'Front Door Lock',
+        kind: 'Smart lock',
+        suggestedTypeId: 'smart_lock',
+        foundOverBluetooth: true,
+      ),
+    ];
+
+    expect(mergeDuplicateDevices(devices).map((device) => device.id), [
+      'mdns:living room tv',
+      'ble:CC:DD',
+    ]);
+  });
+
+  testWidgets('only devices found just over Bluetooth show its icon', (
+    tester,
+  ) async {
+    await _pumpDiscoveryScreen(
+      tester,
+      _FixedDevicesDiscoveryService(const [
+        DiscoveredDevice(
+          id: 'ble:AA:BB',
+          name: 'Living Room TV',
+          kind: 'TV or streaming device',
+          suggestedTypeId: 'smart_tv',
+          foundOverBluetooth: true,
+        ),
+        DiscoveredDevice(
+          id: 'mdns:living room tv',
+          name: 'Living Room TV',
+          kind: 'Google Cast device',
+          suggestedTypeId: 'smart_tv',
+          address: '192.168.0.20',
+        ),
+        DiscoveredDevice(
+          id: 'ble:CC:DD',
+          name: 'Front Door Lock',
+          kind: 'Smart lock',
+          suggestedTypeId: 'smart_lock',
+          foundOverBluetooth: true,
+        ),
+      ]),
+    );
+
+    expect(find.text('Living Room TV'), findsOneWidget);
+    expect(find.byIcon(Icons.bluetooth), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.byIcon(Icons.bluetooth),
+        matching: find.widgetWithText(ListTile, 'Front Door Lock'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('only Bluetooth is scanned without Wi-Fi', (tester) async {
+    final discovery = _ManyDevicesDiscoveryService(0, connected: false);
+    await _pumpDiscoveryScreen(tester, discovery);
+
+    expect(discovery.includedNetwork, isFalse);
+    expect(find.textContaining('Only Bluetooth was searched'), findsOneWidget);
+  });
+
   testWidgets('busy networks show a few devices at a time, and only their '
       'details are loaded', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
     final discovery = _ManyDevicesDiscoveryService(2000, unreadable: {3});
-
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(
-            create: (_) => HomeItemController(HomeItemRepository(preferences)),
-          ),
-          ChangeNotifierProvider(
-            create: (_) => SettingsController(SettingsRepository(preferences)),
-          ),
-          Provider<DeviceDiscoveryService>.value(value: discovery),
-        ],
-        child: const MaterialApp(home: DeviceDiscoveryScreen()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpDiscoveryScreen(tester, discovery);
 
     // Device 3's details can't be read, so device 8 takes its place.
     expect(discovery.detailsLoaded, hasLength(9));
@@ -190,12 +328,46 @@ void main() {
   });
 }
 
+Future<void> _pumpDiscoveryScreen(
+  WidgetTester tester,
+  DeviceDiscoveryService discovery,
+) async {
+  SharedPreferences.setMockInitialValues({});
+  final preferences = await SharedPreferences.getInstance();
+
+  await tester.pumpWidget(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => HomeItemController(HomeItemRepository(preferences)),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => SettingsController(SettingsRepository(preferences)),
+        ),
+        Provider<DeviceDiscoveryService>.value(value: discovery),
+      ],
+      child: const MaterialApp(home: DeviceDiscoveryScreen()),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 /// Pretends to find [count] devices, like a busy public network would. Only
 /// their addresses are known until their details are loaded.
 class _ManyDevicesDiscoveryService implements DeviceDiscoveryService {
-  _ManyDevicesDiscoveryService(this.count, {this.unreadable = const {}});
+  _ManyDevicesDiscoveryService(
+    this.count, {
+    this.unreadable = const {},
+    this.connected = true,
+  });
 
   final int count;
+
+  /// Whether the phone pretends to be on Wi-Fi.
+  final bool connected;
+
+  /// Whether the last scan included the local network.
+  bool? includedNetwork;
 
   /// Numbers of the devices whose details can't be read.
   final Set<int> unreadable;
@@ -204,10 +376,14 @@ class _ManyDevicesDiscoveryService implements DeviceDiscoveryService {
   final List<int> detailsLoaded = [];
 
   @override
-  Future<bool> isConnectedToLocalNetwork() async => true;
+  Future<bool> isConnectedToLocalNetwork() async => connected;
 
   @override
-  Stream<DiscoveredDevice> scan({Duration duration = Duration.zero}) {
+  Stream<DiscoveredDevice> scan({
+    Duration duration = Duration.zero,
+    bool includeNetwork = true,
+  }) {
+    includedNetwork = includeNetwork;
     return Stream.fromIterable([
       for (var i = 0; i < count; i++)
         DiscoveredDevice(
@@ -234,4 +410,24 @@ class _ManyDevicesDiscoveryService implements DeviceDiscoveryService {
       address: device.address,
     );
   }
+}
+
+/// Finds the same fixed list of devices every scan.
+class _FixedDevicesDiscoveryService implements DeviceDiscoveryService {
+  _FixedDevicesDiscoveryService(this.devices);
+
+  final List<DiscoveredDevice> devices;
+
+  @override
+  Future<bool> isConnectedToLocalNetwork() async => true;
+
+  @override
+  Stream<DiscoveredDevice> scan({
+    Duration duration = Duration.zero,
+    bool includeNetwork = true,
+  }) => Stream.fromIterable(devices);
+
+  @override
+  Future<DiscoveredDevice?> loadDetails(DiscoveredDevice device) async =>
+      device;
 }

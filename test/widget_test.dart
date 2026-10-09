@@ -41,7 +41,10 @@ class FakeDiscoveryService implements DeviceDiscoveryService {
   Future<bool> isConnectedToLocalNetwork() async => true;
 
   @override
-  Stream<DiscoveredDevice> scan({Duration duration = Duration.zero}) {
+  Stream<DiscoveredDevice> scan({
+    Duration duration = Duration.zero,
+    bool includeNetwork = true,
+  }) {
     return Stream.value(
       const DiscoveredDevice(
         id: 'mdns:living room tv',

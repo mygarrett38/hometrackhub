@@ -43,7 +43,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: settingsController),
         Provider<NotificationService>.value(value: notificationService),
         Provider<DeviceDiscoveryService>.value(
-          value: NetworkDeviceDiscoveryService(),
+          value: NearbyDeviceDiscoveryService(),
         ),
       ],
       child: const HomeTrackHubApp(),

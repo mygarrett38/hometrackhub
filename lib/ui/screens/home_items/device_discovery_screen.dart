@@ -11,11 +11,11 @@ import '../../../state/settings_controller.dart';
 import '../../widgets/category_icon.dart';
 import 'home_item_form_screen.dart';
 
-/// The stages the network scan can be in.
-enum _ScanState { checkingNetwork, notConnected, scanning, finished, failed }
+/// The stages the scan can be in.
+enum _ScanState { checkingNetwork, scanning, finished, failed }
 
-/// Scans the home network for smart devices and lets the user add them as
-/// home items.
+/// Scans the home network and Bluetooth for smart devices and lets the user
+/// add them as home items.
 class DeviceDiscoveryScreen extends StatefulWidget {
   const DeviceDiscoveryScreen({super.key});
 
@@ -36,6 +36,9 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
   StreamSubscription<DiscoveredDevice>? _subscription;
   _ScanState _state = _ScanState.checkingNetwork;
   int _visibleCount = _pageSize;
+
+  /// Whether the phone is on Wi-Fi. Without it, only Bluetooth is scanned.
+  bool _connectedToNetwork = true;
 
   /// Ids of devices whose details have been requested during this scan.
   final Set<String> _detailsRequested = {};
@@ -66,31 +69,33 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
 
     final connected = await discovery.isConnectedToLocalNetwork();
     if (!mounted) return;
-    if (!connected) {
-      setState(() => _state = _ScanState.notConnected);
-      return;
-    }
 
-    setState(() => _state = _ScanState.scanning);
-    _subscription = discovery.scan().listen(
-      (device) {
-        setState(() {
-          final previous = _devices[device.id];
-          // Keep a previously found address if the update doesn't have one.
-          _devices[device.id] = device.address == null && previous != null
-              ? previous
-              : device;
-        });
-      },
-      onError: (Object error) {
-        setState(() => _state = _ScanState.failed);
-      },
-      onDone: () {
-        if (_state == _ScanState.scanning) {
-          setState(() => _state = _ScanState.finished);
-        }
-      },
-    );
+    setState(() {
+      _connectedToNetwork = connected;
+      _state = _ScanState.scanning;
+    });
+    _subscription = discovery
+        .scan(includeNetwork: connected)
+        .listen(
+          (device) {
+            setState(() {
+              final previous = _devices[device.id];
+              // Keep a previously found address if the update doesn't have one.
+              _devices[device.id] =
+                  device.address == null && previous?.address != null
+                  ? previous!
+                  : device;
+            });
+          },
+          onError: (Object error) {
+            setState(() => _state = _ScanState.failed);
+          },
+          onDone: () {
+            if (_state == _ScanState.scanning) {
+              setState(() => _state = _ScanState.finished);
+            }
+          },
+        );
   }
 
   /// Loads the details of shown devices that only have an address so far.
@@ -165,11 +170,11 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
 
     final status = switch (_state) {
       _ScanState.checkingNetwork => 'Checking your network connection...',
-      _ScanState.notConnected =>
-        'You are not connected to Wi-Fi. Connect to your home network and '
-            'scan again.',
+      _ScanState.scanning when !_connectedToNetwork =>
+        'You are not connected to Wi-Fi, so only Bluetooth devices nearby '
+            'are being searched for. This takes about 10 seconds...',
       _ScanState.scanning =>
-        'Searching your network. This takes about 10 '
+        'Searching your network and Bluetooth. This takes about 10 '
             'seconds...',
       _ScanState.finished when devices.isEmpty =>
         'No smart devices were found.',
@@ -179,10 +184,14 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
       _ScanState.finished =>
         'Found ${devices.length} '
             '${devices.length == 1 ? 'device' : 'devices'}.',
+      _ScanState.failed when !_connectedToNetwork =>
+        'You are not connected to Wi-Fi, and Bluetooth is off or the app is '
+            'not allowed to use it. Connect to your home network or turn on '
+            'Bluetooth, then scan again.',
       _ScanState.failed =>
-        'Your network could not be scanned. Check that the app is allowed '
-            'to access your local network in your device settings, then '
-            'scan again.',
+        'Nearby devices could not be searched for. Check that the app is '
+            'allowed to access your local network and Bluetooth in your '
+            'device settings, then scan again.',
     };
 
     return ListView(
@@ -191,6 +200,15 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
             _state == _ScanState.checkingNetwork)
           const LinearProgressIndicator(),
         Padding(padding: const EdgeInsets.all(16), child: Text(status)),
+        if (_state == _ScanState.finished && !_connectedToNetwork)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Text(
+              'Only Bluetooth was searched because you are not connected to '
+              'Wi-Fi. Connect to your home network and scan again to find '
+              'more devices.',
+            ),
+          ),
         for (final device in visibleDevices)
           _DeviceTile(
             device: device,
@@ -208,9 +226,10 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
         const Padding(
           padding: EdgeInsets.all(16),
           child: Text(
-            'Only devices that announce themselves on your local network can '
-            'be found. Devices that only use Bluetooth or a manufacturer\'s '
-            'cloud service may not appear, but you can add them yourself. '
+            'Only devices that announce themselves on your local network or '
+            'over Bluetooth can be found. Devices that only use a '
+            'manufacturer\'s cloud service, or that are already connected to '
+            'another phone, may not appear, but you can add them yourself. '
             'Scanning stays on your local network and nothing is sent to '
             'the internet.',
           ),
@@ -249,7 +268,9 @@ class _DeviceTile extends StatelessWidget {
     }
 
     return ListTile(
-      leading: Icon(category.icon),
+      leading: device.foundOverBluetooth
+          ? const Icon(Icons.bluetooth, semanticLabel: 'Bluetooth')
+          : Icon(category.icon),
       title: Text(device.name),
       subtitle: Text(details),
       trailing: alreadyAdded
@@ -280,15 +301,16 @@ class _DiscoveryDisabledMessage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Network scanning is turned off in your privacy settings.\n\n'
+              'Device scanning is turned off in your privacy settings.\n\n'
               'When allowed, the app looks for smart devices on your local '
-              'Wi-Fi network. Nothing is sent to the internet.',
+              'Wi-Fi network and over Bluetooth. Nothing is sent to the '
+              'internet.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: onEnable,
-              child: const Text('Allow network scanning'),
+              child: const Text('Allow device scanning'),
             ),
           ],
         ),

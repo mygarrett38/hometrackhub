@@ -51,7 +51,7 @@ class HomeItemTypePickerScreen extends StatelessWidget {
           if (category == HomeItemCategory.smartDevice)
             ListTile(
               leading: const Icon(Icons.wifi_find),
-              title: const Text('Find smart devices on my network'),
+              title: const Text('Find smart devices nearby'),
               onTap: () => _open(context, const DeviceDiscoveryScreen()),
             ),
         ],

@@ -66,6 +66,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>HomeTrackHub looks for smart devices nearby over Bluetooth so you can track their maintenance.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HomeTrackHub scans your home network to find smart devices you may want to track maintenance for.</string>
 	<key>NSBonjourServices</key>

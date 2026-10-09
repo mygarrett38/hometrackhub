@@ -31,9 +31,9 @@ class PrivacySettingsScreen extends StatelessWidget {
           ),
           SwitchListTile(
             secondary: const Icon(Icons.wifi_find),
-            title: const Text('Find smart devices on my network'),
+            title: const Text('Find smart devices nearby'),
             subtitle: const Text(
-              'Allows scanning your local Wi-Fi network for smart devices',
+              'Enables scanning for smart devices using Wi-Fi or Bluetooth',
             ),
             value: settings.networkDiscoveryEnabled,
             onChanged: (enabled) => controller.update(

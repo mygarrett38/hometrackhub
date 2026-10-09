@@ -34,7 +34,7 @@ flutter test           # unit and widget tests
 | --- | --- |
 | `lib/models/` | Plain data classes: home items, maintenance tasks, intervals, settings. |
 | `lib/data/` | The built-in home item catalog and repositories that save data with `shared_preferences`. |
-| `lib/services/` | Notification scheduling, reminder planning and network device discovery. |
+| `lib/services/` | Notification scheduling, reminder planning and nearby device discovery over Wi-Fi and Bluetooth. |
 | `lib/state/` | `ChangeNotifier` controllers the UI listens to, plus `ReminderSync`, which reschedules notifications after every change. |
 | `lib/ui/screens/` | Screens, grouped by the tab they belong to: `upcoming/`, `home_items/` and `settings/`. |
 | `lib/ui/widgets/` | Small widgets shared by several screens. |
@@ -75,5 +75,10 @@ them to the widget tree.
   under `NSBonjourServices` in `ios/Runner/Info.plist`. Keep that list in sync
   with `lib/services/device_discovery_service.dart`. iOS skips the UPnP search
   because sending multicast packets needs a special entitlement from Apple.
+- **Bluetooth:** scanning uses `flutter_blue_plus`. Android asks for the
+  "Nearby devices" permission the first time a scan starts (Android 11 and
+  older ask for location instead), and iOS shows the message in
+  `NSBluetoothAlwaysUsageDescription`. Devices that don't advertise a name
+  are skipped, since they can't be told apart.
 - **iOS:** a maximum of 64 notifications can be pending, so the app schedules
   the next 60 reminders and refreshes them whenever it opens or data changes.
