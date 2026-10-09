@@ -17,6 +17,7 @@ class DiscoveredDevice {
     this.manufacturer = '',
     this.model = '',
     this.address,
+    this.detailsUrl,
   });
 
   /// Stable identifier used to recognize the same device in later scans.
@@ -34,6 +35,13 @@ class DiscoveredDevice {
 
   /// The device's IP address, if known.
   final String? address;
+
+  /// Where the device's name and other details can be downloaded, if they
+  /// haven't been yet. See [DeviceDiscoveryService.loadDetails].
+  final Uri? detailsUrl;
+
+  /// Whether only the device's address is known so far.
+  bool get needsDetails => detailsUrl != null;
 }
 
 /// Combines scan results that describe the same physical device.
@@ -58,6 +66,12 @@ List<DiscoveredDevice> mergeDuplicateDevices(
 
 /// Higher scores mean the device entry is more useful to show to people.
 int _detailScore(DiscoveredDevice device) {
+  // Devices waiting for details almost always turn out to have a readable
+  // name. Scoring them just below that means they replace entries named with
+  // a random id, so their details get loaded, but not entries that are
+  // already readable, so no time is spent loading details that aren't needed.
+  if (device.needsDetails) return 3;
+
   // Some services, like Spotify Connect, use a random id as their name.
   final nameIsRandomId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-')
       .hasMatch(device.name.toLowerCase());
@@ -68,6 +82,34 @@ int _detailScore(DiscoveredDevice device) {
   if (device.model.isNotEmpty) score += 1;
   return score;
 }
+
+/// Sorts [devices] so the ones people are most likely to want to add come
+/// first.
+///
+/// Devices with a recognizable kind, a readable name and known manufacturer
+/// and model rank above generic entries. Ties keep the order the devices were
+/// found in, which puts devices that answered the scan sooner (usually the
+/// closest ones on the network) first.
+List<DiscoveredDevice> rankDevicesByRelevance(
+  Iterable<DiscoveredDevice> devices,
+) {
+  // List.sort isn't stable, so the discovery order is kept explicitly.
+  final indexed = devices.indexed.toList()
+    ..sort((a, b) {
+      final byScore = _relevanceScore(b.$2).compareTo(_relevanceScore(a.$2));
+      return byScore != 0 ? byScore : a.$1.compareTo(b.$1);
+    });
+  return [for (final (_, device) in indexed) device];
+}
+
+int _relevanceScore(DiscoveredDevice device) {
+  var score = _detailScore(device);
+  if (device.kind != _genericDeviceKind) score += 3;
+  return score;
+}
+
+/// The kind given to UPnP devices that couldn't be identified.
+const _genericDeviceKind = 'Network device';
 
 /// Collapses runs of spaces in device names, e.g. "Roku    Premiere".
 String _cleanName(String name) => name.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -84,7 +126,16 @@ abstract interface class DeviceDiscoveryService {
   ///
   /// The same device may be emitted more than once as more details about it
   /// arrive. Use [DiscoveredDevice.id] to replace the earlier copy.
+  ///
+  /// Some devices are emitted with only their address known, so that busy
+  /// networks aren't flooded with requests for details nobody will see. Pass
+  /// those to [loadDetails] once they're about to be shown.
   Stream<DiscoveredDevice> scan({Duration duration});
+
+  /// Downloads the details of a device whose [DiscoveredDevice.needsDetails]
+  /// is true. Returns `null` if they can't be read, in which case the device
+  /// should not be shown.
+  Future<DiscoveredDevice?> loadDetails(DiscoveredDevice device);
 }
 
 /// Describes a Bonjour / mDNS service type that smart home devices announce.
@@ -257,7 +308,6 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
 
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     final seenLocations = <String>{};
-    final pendingLookups = <Future<void>>[];
 
     socket.listen((event) {
       if (event != RawSocketEvent.read) return;
@@ -269,11 +319,22 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
       );
       final location = headers['location'];
       if (location == null || !seenLocations.add(location)) return;
+      final detailsUrl = Uri.tryParse(location);
+      if (detailsUrl == null) return;
 
-      pendingLookups.add(
-        _describeUpnpDevice(location, datagram.address.address).then((device) {
-          if (device != null) report(device);
-        }),
+      // The description isn't downloaded yet. On busy networks there can be
+      // thousands of devices, so it's only fetched for the ones that are
+      // shown, through loadDetails.
+      final address = datagram.address.address;
+      report(
+        DiscoveredDevice(
+          id: 'upnp:$location',
+          name: address,
+          kind: _genericDeviceKind,
+          suggestedTypeId: 'smart_device',
+          address: address,
+          detailsUrl: detailsUrl,
+        ),
       );
     });
 
@@ -296,7 +357,6 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
     if (remaining > Duration.zero) await Future<void>.delayed(remaining);
 
     socket.close();
-    await Future.wait(pendingLookups);
   }
 
   /// Parses the headers of an SSDP response. Header names are lower-cased.
@@ -313,13 +373,14 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
 
   /// Downloads a UPnP device description and turns it into a
   /// [DiscoveredDevice]. Returns `null` if the description can't be read.
-  Future<DiscoveredDevice?> _describeUpnpDevice(
-    String location,
-    String address,
-  ) async {
+  @override
+  Future<DiscoveredDevice?> loadDetails(DiscoveredDevice device) async {
+    final location = device.detailsUrl;
+    if (location == null) return device;
+
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
     try {
-      final request = await client.getUrl(Uri.parse(location));
+      final request = await client.getUrl(location);
       final response = await request.close().timeout(
         const Duration(seconds: 3),
       );
@@ -347,7 +408,7 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
         suggestedTypeId: typeId,
         manufacturer: manufacturer,
         model: model,
-        address: address,
+        address: device.address,
       );
     } catch (error) {
       debugPrint('Could not read UPnP description at $location: $error');
@@ -384,6 +445,6 @@ class NetworkDeviceDiscoveryService implements DeviceDiscoveryService {
     if (text.contains('mediarenderer')) {
       return ('Smart TV or media player', 'smart_tv');
     }
-    return ('Network device', 'smart_device');
+    return (_genericDeviceKind, 'smart_device');
   }
 }

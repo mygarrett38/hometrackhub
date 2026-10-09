@@ -51,6 +51,10 @@ class FakeDiscoveryService implements DeviceDiscoveryService {
       ),
     );
   }
+
+  @override
+  Future<DiscoveredDevice?> loadDetails(DiscoveredDevice device) async =>
+      device;
 }
 
 /// Starts the app with fake services and waits until the launch animation
