@@ -134,6 +134,14 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
               tooltip: 'Scan again',
               onPressed: _startScan,
             ),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Help',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => const _DiscoveryHelpDialog(),
+            ),
+          ),
         ],
       ),
       body: allowed
@@ -170,20 +178,13 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
 
     final status = switch (_state) {
       _ScanState.checkingNetwork => 'Checking your network connection...',
-      _ScanState.scanning when !_connectedToNetwork =>
-        'You are not connected to Wi-Fi, so only Bluetooth devices nearby '
-            'are being searched for. This takes about 10 seconds...',
-      _ScanState.scanning =>
-        'Searching your network and Bluetooth. This takes about 10 '
-            'seconds...',
+      _ScanState.scanning => 'Scanning for nearby devices...',
       _ScanState.finished when devices.isEmpty =>
         'No smart devices were found.',
       _ScanState.finished when hiddenCount > 0 =>
-        'Found ${devices.length} devices. Showing the '
-            '${visibleDevices.length} most relevant.',
+        'Showing ${visibleDevices.length} of ${devices.length} devices found.',
       _ScanState.finished =>
-        'Found ${devices.length} '
-            '${devices.length == 1 ? 'device' : 'devices'}.',
+        '${devices.length} ${devices.length == 1 ? 'device' : 'devices'} found.',
       _ScanState.failed when !_connectedToNetwork =>
         'You are not connected to Wi-Fi, and Bluetooth is off or the app is '
             'not allowed to use it. Connect to your home network or turn on '
@@ -204,9 +205,9 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
-              'Only Bluetooth was searched because you are not connected to '
-              'Wi-Fi. Connect to your home network and scan again to find '
-              'more devices.',
+              'You are not connected to a Wi-Fi network, so scanning only '
+              'detected nearby Bluetooth devices. Connect to your home network '
+              'and scan again to find more devices.',
             ),
           ),
         for (final device in visibleDevices)
@@ -223,16 +224,29 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
               onPressed: () => setState(() => _visibleCount += _pageSize),
             ),
           ),
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'Only devices that announce themselves on your local network or '
-            'over Bluetooth can be found. Devices that only use a '
-            'manufacturer\'s cloud service, or that are already connected to '
-            'another phone, may not appear, but you can add them yourself. '
-            'Scanning stays on your local network and nothing is sent to '
-            'the internet.',
-          ),
+      ],
+    );
+  }
+}
+
+/// Explains which devices can be found and that scanning stays local.
+class _DiscoveryHelpDialog extends StatelessWidget {
+  const _DiscoveryHelpDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Finding devices'),
+      content: const Text(
+        'Only devices that announce themselves on your local network or '
+        'over Bluetooth can be found. Devices that only use a '
+        'manufacturer\'s cloud service, or that are already connected to '
+        'another phone, may not appear, but you can add them yourself.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Got it'),
         ),
       ],
     );
@@ -250,11 +264,6 @@ class _DeviceTile extends StatelessWidget {
     final category =
         findHomeItemType(device.suggestedTypeId)?.category ??
         HomeItemCategory.smartDevice;
-    final details = [
-      device.kind,
-      if (device.address != null) device.address!,
-    ].join(' · ');
-
     if (device.needsDetails) {
       return ListTile(
         leading: Icon(category.icon),
@@ -272,16 +281,17 @@ class _DeviceTile extends StatelessWidget {
           ? const Icon(Icons.bluetooth, semanticLabel: 'Bluetooth')
           : Icon(category.icon),
       title: Text(device.name),
-      subtitle: Text(details),
+      subtitle: Text(device.kind),
       trailing: alreadyAdded
           ? const Chip(label: Text('Added'))
-          : FilledButton.tonal(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => HomeItemFormScreen(discoveredDevice: device),
-                ),
+          : const Icon(Icons.chevron_right),
+      // Devices that were already added can't be added a second time.
+      onTap: alreadyAdded
+          ? null
+          : () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => HomeItemFormScreen(discoveredDevice: device),
               ),
-              child: const Text('Add'),
             ),
     );
   }

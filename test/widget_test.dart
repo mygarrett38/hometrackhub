@@ -156,7 +156,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Living Room TV'), findsOneWidget);
-    await tester.tap(find.text('Add'));
+    await tester.tap(find.text('Living Room TV'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();

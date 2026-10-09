@@ -293,12 +293,26 @@ void main() {
     );
   });
 
+  testWidgets('the help button explains which devices can be found', (
+    tester,
+  ) async {
+    await _pumpDiscoveryScreen(tester, _FixedDevicesDiscoveryService(const []));
+
+    await tester.tap(find.byTooltip('Help'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('you can add them yourself'), findsOneWidget);
+
+    await tester.tap(find.text('Got it'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('you can add them yourself'), findsNothing);
+  });
+
   testWidgets('only Bluetooth is scanned without Wi-Fi', (tester) async {
     final discovery = _ManyDevicesDiscoveryService(0, connected: false);
     await _pumpDiscoveryScreen(tester, discovery);
 
     expect(discovery.includedNetwork, isFalse);
-    expect(find.textContaining('Only Bluetooth was searched'), findsOneWidget);
+    expect(find.textContaining('so scanning only detected'), findsOneWidget);
   });
 
   testWidgets('busy networks show a few devices at a time, and only their '
@@ -308,7 +322,7 @@ void main() {
 
     // Device 3's details can't be read, so device 8 takes its place.
     expect(discovery.detailsLoaded, hasLength(9));
-    expect(find.textContaining('Found 1999 devices'), findsOneWidget);
+    expect(find.text('Showing 8 of 1999 devices found.'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.textContaining('Load more'), 100);
     expect(find.text('Device 3'), findsNothing);
