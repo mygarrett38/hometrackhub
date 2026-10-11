@@ -177,10 +177,68 @@ void main() {
     expect(find.text('Motorcycle'), findsOneWidget);
     expect(find.text('Refrigerator'), findsNothing);
 
-    // A custom home item started here is already in the Vehicles category.
-    await tester.tap(find.text('Not listed? Create custom home item'));
+    // Custom has no catalog types, so it opens the home item form directly.
+    await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Vehicles'), findsOneWidget);
+    await tester.ensureVisible(find.text('Custom'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add home item'), findsOneWidget);
+  });
+
+  testWidgets('recommended tasks can be unticked or changed before saving', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appliances'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refrigerator'));
+    await tester.pumpAndSettle();
+
+    // The form's list is the outermost scrollable; text fields have their own.
+    final formList = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('Clean condenser coils'),
+      200,
+      scrollable: formList,
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Replace water filter'),
+        matching: find.byType(Checkbox),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Clean condenser coils'));
+    await tester.pumpAndSettle();
+    // The fields are the task, its instructions, then how often it repeats.
+    await tester.enterText(find.byType(TextFormField).at(2), '3');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Every 3 months (recommended: every 6 months)'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Only the ticked tasks are created, with the user's changes.
+    expect(find.text('Replace water filter'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Clean condenser coils'),
+        matching: find.textContaining('Every 3 months'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('each task has its own reminder that can be turned off', (

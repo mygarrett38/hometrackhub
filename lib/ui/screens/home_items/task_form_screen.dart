@@ -18,7 +18,13 @@ import '../../widgets/notification_permission.dart';
 class TaskFormScreen extends StatefulWidget {
   const TaskFormScreen({super.key, required this.homeItemId, this.existing});
 
-  final String homeItemId;
+  /// Edits a task for a home item that hasn't been saved yet. Saving pops
+  /// this screen with the task instead of storing it.
+  const TaskFormScreen.unsaved({super.key, this.existing}) : homeItemId = null;
+
+  /// The home item the task belongs to, or `null` for a home item that
+  /// hasn't been saved yet.
+  final String? homeItemId;
 
   /// The task being edited, or `null` when adding a new task.
   final MaintenanceTask? existing;
@@ -126,7 +132,12 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
     final task = _buildTask()!;
     final navigator = Navigator.of(context);
-    await context.read<HomeItemController>().saveTask(widget.homeItemId, task);
+    final homeItemId = widget.homeItemId;
+    if (homeItemId == null) {
+      navigator.pop(task);
+      return;
+    }
+    await context.read<HomeItemController>().saveTask(homeItemId, task);
     navigator.pop();
   }
 
@@ -152,7 +163,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     );
 
     if (confirmed ?? false) {
-      await controller.deleteTask(widget.homeItemId, _existing!.id);
+      await controller.deleteTask(widget.homeItemId!, _existing!.id);
       navigator.pop();
     }
   }
@@ -167,7 +178,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       appBar: AppBar(
         title: Text(_existing == null ? 'Add task' : 'Edit task'),
         actions: [
-          if (_existing != null)
+          // Unsaved tasks are left out by unticking them on the home item
+          // form instead.
+          if (_existing != null && widget.homeItemId != null)
             IconButton(
               icon: const Icon(Icons.delete_outline),
               tooltip: 'Delete task',

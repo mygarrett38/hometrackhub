@@ -5,12 +5,14 @@ import '../../../data/home_item_catalog.dart';
 import '../../../data/home_locations.dart';
 import '../../../models/home_item.dart';
 import '../../../models/home_item_category.dart';
+import '../../../models/maintenance_task.dart';
 import '../../../services/device_discovery_service.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/date_field.dart';
 import 'home_item_detail_screen.dart';
+import 'task_form_screen.dart';
 
 /// Form for adding a new home item or editing an existing one.
 ///
@@ -55,6 +57,13 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   /// adding a new home item.
   HomeItemType? _template;
 
+  /// Tasks to create with a new home item, including any changes the user
+  /// made to them before saving.
+  List<MaintenanceTask> _newTasks = [];
+
+  /// Ids of tasks in [_newTasks] that the user unticked.
+  final Set<String> _skippedTaskIds = {};
+
   bool get _isEditing => widget.existing != null;
 
   @override
@@ -87,6 +96,11 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       _category = widget.initialType!.category;
     } else if (widget.initialCategory != null) {
       _category = widget.initialCategory!;
+    }
+
+    if (existing == null) {
+      _newTasks =
+          _template?.createTasks(startDate: dateOnly(DateTime.now())) ?? [];
     }
   }
 
@@ -126,8 +140,10 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       networkId: existing?.networkId ?? widget.discoveredDevice?.id,
       tasks:
           existing?.tasks ??
-          _template?.createTasks(startDate: dateOnly(DateTime.now())) ??
-          [],
+          [
+            for (final task in _newTasks)
+              if (!_skippedTaskIds.contains(task.id)) task,
+          ],
     );
 
     if (existing != null) {
@@ -148,6 +164,25 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
         navigator.pushAndRemoveUntil(detailRoute, (route) => route.isFirst);
       }
     }
+  }
+
+  /// Opens the task form for one of the new tasks, or for a new custom task
+  /// when [task] is `null`, and keeps the result if the user saves it.
+  Future<void> _editNewTask([MaintenanceTask? task]) async {
+    final edited = await Navigator.of(context).push<MaintenanceTask>(
+      MaterialPageRoute(builder: (_) => TaskFormScreen.unsaved(existing: task)),
+    );
+    if (edited == null) return;
+    setState(() {
+      final index = _newTasks.indexWhere((t) => t.id == edited.id);
+      if (index == -1) {
+        _newTasks = [..._newTasks, edited];
+      } else {
+        _newTasks = [..._newTasks]..[index] = edited;
+      }
+      // Changing or adding a task means the user wants it.
+      _skippedTaskIds.remove(edited.id);
+    });
   }
 
   /// The default home locations followed by any other locations the user
@@ -246,7 +281,18 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (!_isEditing) _TaskPreview(template: _template),
+            if (!_isEditing)
+              _NewTaskList(
+                tasks: _newTasks,
+                skippedTaskIds: _skippedTaskIds,
+                onSelected: (task, selected) => setState(
+                  () => selected
+                      ? _skippedTaskIds.remove(task.id)
+                      : _skippedTaskIds.add(task.id),
+                ),
+                onEdit: _editNewTask,
+                onAdd: _editNewTask,
+              ),
           ],
         ),
       ),
@@ -399,43 +445,68 @@ class _NotesRow extends StatelessWidget {
   }
 }
 
-/// Shows which maintenance tasks will be added with the new home item.
-class _TaskPreview extends StatelessWidget {
-  const _TaskPreview({required this.template});
+/// The maintenance tasks that will be created with a new home item. Each
+/// can be ticked or unticked, and tapped to change it before saving.
+class _NewTaskList extends StatelessWidget {
+  const _NewTaskList({
+    required this.tasks,
+    required this.skippedTaskIds,
+    required this.onSelected,
+    required this.onEdit,
+    required this.onAdd,
+  });
 
-  final HomeItemType? template;
+  final List<MaintenanceTask> tasks;
+  final Set<String> skippedTaskIds;
+  final void Function(MaintenanceTask task, bool selected) onSelected;
+  final ValueChanged<MaintenanceTask> onEdit;
+  final VoidCallback onAdd;
+
+  /// For example "Every 3 months", noting when the user has changed the
+  /// manufacturer's recommended interval.
+  String _describeInterval(MaintenanceTask task) {
+    final interval = task.interval.label;
+    return task.isCustom || task.followsRecommendation
+        ? interval
+        : '$interval (recommended: ${task.recommendedInterval!.label.toLowerCase()})';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final template = this.template;
-    if (template == null) {
-      return const Text('You can add your own maintenance tasks after saving.');
-    }
+    final theme = Theme.of(context);
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Recommended maintenance',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'These tasks will be added using the manufacturer\'s '
-              'recommended schedule. You can change or remove them after '
-              'saving.',
-            ),
-            const SizedBox(height: 8),
-            for (final task in template.tasks)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text('• ${task.title} - ${task.interval.label}'),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text('Maintenance tasks', style: theme.textTheme.titleMedium),
+          ),
+          for (final task in tasks)
+            ListTile(
+              // Keeps the checkbox lined up with the heading's left edge.
+              contentPadding: const EdgeInsets.only(left: 8, right: 16),
+              horizontalTitleGap: 8,
+              leading: Checkbox(
+                visualDensity: VisualDensity.standard,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                value: !skippedTaskIds.contains(task.id),
+                onChanged: (selected) => onSelected(task, selected ?? false),
               ),
-          ],
-        ),
+              title: Text(task.title),
+              subtitle: Text(_describeInterval(task)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => onEdit(task),
+            ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.add),
+            title: const Text('Add task'),
+            onTap: onAdd,
+          ),
+        ],
       ),
     );
   }
