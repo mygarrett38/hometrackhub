@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+/// Shows a date picker limited to past dates and today. Returns `null` if
+/// the user cancels.
+Future<DateTime?> pickPastDate(BuildContext context, {DateTime? initialDate}) {
+  final now = DateTime.now();
+  return showDatePicker(
+    context: context,
+    initialDate: initialDate ?? now,
+    firstDate: DateTime(1950),
+    lastDate: now,
+  );
+}
+
 /// A form row that shows a date and opens a date picker when tapped.
 ///
 /// Only past dates and today can be picked, because the app uses this for
@@ -25,13 +37,7 @@ class DateField extends StatelessWidget {
   final bool allowClear;
 
   Future<void> _pickDate(BuildContext context) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: value ?? now,
-      firstDate: DateTime(1950),
-      lastDate: now,
-    );
+    final picked = await pickPastDate(context, initialDate: value);
     if (picked != null) onChanged(picked);
   }
 

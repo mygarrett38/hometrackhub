@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/home_item_catalog.dart';
+import '../../../data/home_locations.dart';
 import '../../../models/home_item.dart';
 import '../../../models/home_item_category.dart';
 import '../../../services/device_discovery_service.dart';
@@ -9,14 +10,14 @@ import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/date_field.dart';
-import '../../widgets/dropdown_field.dart';
 import 'home_item_detail_screen.dart';
 
 /// Form for adding a new home item or editing an existing one.
 ///
 /// A new home item can start from a catalog type ([initialType]), from a
-/// device found on the network ([discoveredDevice]), or from scratch,
-/// optionally within a chosen category ([initialCategory]).
+/// device found on the network ([discoveredDevice]), or from scratch within
+/// a chosen category ([initialCategory]). The category and recommended
+/// maintenance come from where the user started and can't be changed here.
 class HomeItemFormScreen extends StatefulWidget {
   const HomeItemFormScreen({
     super.key,
@@ -104,19 +105,6 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     super.dispose();
   }
 
-  void _changeTemplate(HomeItemType? newTemplate) {
-    setState(() {
-      // Replace the name only if the user hasn't typed their own.
-      final nameIsDefault =
-          _name.text.trim().isEmpty || _name.text == _template?.name;
-      if (newTemplate != null && nameIsDefault) {
-        _name.text = newTemplate.name;
-      }
-      if (newTemplate != null) _category = newTemplate.category;
-      _template = newTemplate;
-    });
-  }
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -162,9 +150,29 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     }
   }
 
+  /// The default home locations followed by any other locations the user
+  /// has typed for their home items.
+  List<String> _locationChoices() {
+    final choices = [...defaultHomeLocations];
+    for (final homeItem in context.read<HomeItemController>().homeItems) {
+      final location = homeItem.location.trim();
+      final alreadyListed = choices.any(
+        (choice) => choice.toLowerCase() == location.toLowerCase(),
+      );
+      if (location.isNotEmpty && !alreadyListed) choices.add(location);
+    }
+    return choices;
+  }
+
   @override
   Widget build(BuildContext context) {
-    const gap = SizedBox(height: 16);
+    const divider = Divider(height: 1, indent: 16);
+    final isVehicle = _category == HomeItemCategory.vehicle;
+    final hasDetails = [
+      _manufacturer,
+      _modelNumber,
+      _serialNumber,
+    ].any((controller) => controller.text.isNotEmpty);
 
     return Scaffold(
       appBar: AppBar(
@@ -176,85 +184,216 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (!_isEditing) ...[
-              DropdownField<HomeItemType?>(
-                label: 'Maintenance recommendations',
-                value: _template,
-                onChanged: _changeTemplate,
-                items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('None - I\'ll add my own tasks'),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  _InlineTextRow(
+                    label: 'Name',
+                    controller: _name,
+                    validator: (value) =>
+                        (value == null || value.trim().isEmpty)
+                        ? 'Please enter a name'
+                        : null,
                   ),
-                  for (final type in homeItemCatalog)
-                    DropdownMenuItem(value: type, child: Text(type.name)),
+                  divider,
+                  _InlineTextRow(
+                    label: 'Location',
+                    controller: _location,
+                    choices: _locationChoices(),
+                  ),
+                  divider,
+                  _InlineDateRow(
+                    label: 'Purchase date',
+                    value: _purchaseDate,
+                    onChanged: (date) => setState(() => _purchaseDate = date),
+                  ),
                 ],
               ),
-              gap,
-            ],
-            TextFormField(
-              controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                hintText: 'e.g. Kitchen refrigerator',
-                border: OutlineInputBorder(),
-              ),
-              textCapitalization: TextCapitalization.sentences,
-              validator: (value) => (value == null || value.trim().isEmpty)
-                  ? 'Please enter a name'
-                  : null,
             ),
-            gap,
-            DropdownField<HomeItemCategory>(
-              label: 'Category',
-              value: _category,
-              onChanged: (value) => setState(() => _category = value),
-              items: [
-                for (final category in HomeItemCategory.values)
-                  DropdownMenuItem(
-                    value: category,
-                    child: Text(category.label),
+            const SizedBox(height: 8),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  ExpansionTile(
+                    title: const Text('Details'),
+                    // Start open when there is something to show, such as
+                    // when editing or adding a device found by scanning.
+                    initiallyExpanded: hasDetails,
+                    // The card already draws the outline, so the tile
+                    // shouldn't add its own borders when expanded.
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    children: [
+                      divider,
+                      _InlineTextRow(
+                        label: isVehicle ? 'Make' : 'Manufacturer',
+                        controller: _manufacturer,
+                      ),
+                      divider,
+                      _InlineTextRow(label: 'Model', controller: _modelNumber),
+                      divider,
+                      _InlineTextRow(
+                        label: isVehicle ? 'VIN' : 'Serial #',
+                        controller: _serialNumber,
+                      ),
+                    ],
                   ),
-              ],
+                  divider,
+                  _NotesRow(controller: _notes),
+                ],
+              ),
             ),
-            gap,
-            _textField(_manufacturer, 'Manufacturer / make'),
-            gap,
-            _textField(_modelNumber, 'Model'),
-            gap,
-            _textField(_serialNumber, 'Serial number or VIN'),
-            gap,
-            _textField(_location, 'Location', hint: 'e.g. Kitchen, Garage'),
-            gap,
-            DateField(
-              label: 'Purchase date',
-              value: _purchaseDate,
-              onChanged: (date) => setState(() => _purchaseDate = date),
-            ),
-            gap,
-            _textField(_notes, 'Notes', maxLines: 3),
-            gap,
+            const SizedBox(height: 16),
             if (!_isEditing) _TaskPreview(template: _template),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _textField(
-    TextEditingController controller,
-    String label, {
-    String? hint,
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      textCapitalization: TextCapitalization.sentences,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        border: const OutlineInputBorder(),
+/// Form rows are at least as tall as a [ListTile].
+const _rowHeight = 56.0;
+
+/// A form row with the label on the left and a borderless text field on
+/// the right that is edited in place.
+///
+/// If [choices] are given, a menu button at the end of the row fills the
+/// field with one of them. The user can still type their own value.
+class _InlineTextRow extends StatelessWidget {
+  const _InlineTextRow({
+    required this.label,
+    required this.controller,
+    this.validator,
+    this.choices = const [],
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final FormFieldValidator<String>? validator;
+  final List<String> choices;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 16, right: choices.isEmpty ? 16 : 4),
+      child: Row(
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodyLarge),
+          const SizedBox(width: 16),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              validator: validator,
+              textAlign: TextAlign.end,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: InputDecoration(
+                hintText: 'Unknown',
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+          if (choices.isNotEmpty)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.arrow_drop_down),
+              tooltip: 'Choose ${label.toLowerCase()}',
+              onSelected: (choice) => controller.text = choice,
+              itemBuilder: (context) => [
+                for (final choice in choices)
+                  PopupMenuItem(value: choice, child: Text(choice)),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A form row that shows a date on the right and opens a date picker
+/// when tapped.
+class _InlineDateRow extends StatelessWidget {
+  const _InlineDateRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final DateTime? value;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final date = value;
+
+    return InkWell(
+      onTap: () async {
+        final picked = await pickPastDate(context, initialDate: date);
+        if (picked != null) onChanged(picked);
+      },
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _rowHeight),
+        child: Padding(
+          padding: EdgeInsets.only(left: 16, right: date == null ? 16 : 4),
+          child: Row(
+            children: [
+              Text(label, style: theme.textTheme.bodyLarge),
+              const Spacer(),
+              Text(
+                date == null
+                    ? 'Unknown'
+                    : MaterialLocalizations.of(context).formatMediumDate(date),
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: date == null
+                      ? theme.colorScheme.onSurfaceVariant
+                      : null,
+                ),
+              ),
+              if (date != null)
+                IconButton(
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'Clear date',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => onChanged(null),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A form row with a label and a multi-line notes field below it.
+class _NotesRow extends StatelessWidget {
+  const _NotesRow({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Notes', style: Theme.of(context).textTheme.bodyLarge),
+          TextFormField(
+            controller: controller,
+            minLines: 3,
+            maxLines: null,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              hintText: 'Add notes',
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+            ),
+          ),
+        ],
       ),
     );
   }
