@@ -20,6 +20,11 @@ class HomeItemTypePickerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final types = catalogTypesIn(category);
+    // Matches the style ListTile uses for subtitles.
+    final theme = Theme.of(context);
+    final countStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
 
     return Scaffold(
       appBar: AppBar(title: Text(category.label)),
@@ -29,11 +34,14 @@ class HomeItemTypePickerScreen extends StatelessWidget {
             ListTile(
               leading: Icon(category.icon),
               title: Text(type.name),
-              subtitle: Text(
-                '${type.tasks.length} recommended '
-                '${type.tasks.length == 1 ? 'task' : 'tasks'}',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('${type.tasks.length}', style: countStyle),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right),
+                ],
               ),
-              trailing: const Icon(Icons.chevron_right),
               onTap: () =>
                   _open(context, HomeItemFormScreen(initialType: type)),
             ),
