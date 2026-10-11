@@ -45,23 +45,14 @@ class HomeItemTypePickerScreen extends StatelessWidget {
               onTap: () =>
                   _open(context, HomeItemFormScreen(initialType: type)),
             ),
-          if (types.isNotEmpty) const Divider(),
-          ListTile(
-            leading: const Icon(Icons.edit_note),
-            title: Text(
-              types.isEmpty
-                  ? 'Create custom home item'
-                  : 'Not listed? Create custom home item',
-            ),
-            onTap: () =>
-                _open(context, HomeItemFormScreen(initialCategory: category)),
-          ),
-          if (category == HomeItemCategory.smartDevice)
+          if (category == HomeItemCategory.smartDevice) ...[
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.wifi_find),
               title: const Text('Find smart devices nearby'),
               onTap: () => _open(context, const DeviceDiscoveryScreen()),
             ),
+          ],
         ],
       ),
     );

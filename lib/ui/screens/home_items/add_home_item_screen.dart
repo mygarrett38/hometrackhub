@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../../../data/home_item_catalog.dart';
 import '../../../models/home_item_category.dart';
 import '../../widgets/category_icon.dart';
 import 'device_discovery_screen.dart';
+import 'home_item_form_screen.dart';
 import 'home_item_type_picker_screen.dart';
 
 /// First step of adding a home item: the user picks a category, then a
 /// common type within it on [HomeItemTypePickerScreen].
 ///
-/// Also offers creating a custom home item and scanning the network for
-/// smart devices.
+/// Categories with no catalog types (such as Custom) go straight to the
+/// home item form. Also offers scanning for nearby devices.
 class AddHomeItemScreen extends StatelessWidget {
   const AddHomeItemScreen({super.key});
 
@@ -35,8 +37,12 @@ class AddHomeItemScreen extends StatelessWidget {
               leading: Icon(category.icon),
               title: Text(category.label),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  _open(context, HomeItemTypePickerScreen(category: category)),
+              onTap: () => _open(
+                context,
+                catalogTypesIn(category).isEmpty
+                    ? HomeItemFormScreen(initialCategory: category)
+                    : HomeItemTypePickerScreen(category: category),
+              ),
             ),
         ],
       ),
