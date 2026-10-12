@@ -65,10 +65,10 @@ class _TaskMessage extends StatelessWidget {
     final overdue = <HomeItemTask>[];
     final dueSoon = <HomeItemTask>[];
     final later = <HomeItemTask>[];
-    final doneToday = <HomeItemTask>[];
+    final completedTasks = <HomeItemTask>[];
     for (final item in controller.orderForList(controller.allTasks)) {
       if (controller.isListedAsDone(item)) {
-        doneToday.add(item);
+        completedTasks.add(item);
         continue;
       }
       final days = calendarDaysBetween(today, controller.listDueDate(item));
@@ -86,7 +86,7 @@ class _TaskMessage extends StatelessWidget {
         ..._section(context, 'Overdue', overdue),
         ..._section(context, 'Due in the next $dueSoonDays days', dueSoon),
         ..._section(context, 'Later', later),
-        ..._section(context, 'Done today', doneToday),
+        ..._section(context, 'Completed', completedTasks),
       ],
     );
   }
