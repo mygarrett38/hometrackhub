@@ -11,7 +11,7 @@ import '../../../services/device_discovery_service.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
-import '../../widgets/date_field.dart';
+import '../../widgets/form_rows.dart';
 import '../../widgets/task_tile.dart';
 import '../../widgets/screen_padding.dart';
 import 'task_form_screen.dart';
@@ -201,11 +201,22 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     }
   }
 
+  /// The name to show on this home item's task screens: whatever the user
+  /// has typed so far, even if it isn't saved yet.
+  String get _currentName {
+    final name = _name.text.trim();
+    if (name.isNotEmpty) return name;
+    return widget.existing?.name ?? 'New ${_category.itemName}';
+  }
+
   /// Opens the task form for one of the new tasks, or for a new custom task
   /// when [task] is `null`, and keeps the result if the user saves it.
   Future<void> _editNewTask([MaintenanceTask? task]) async {
     final edited = await Navigator.of(context).push<MaintenanceTask>(
-      MaterialPageRoute(builder: (_) => TaskFormScreen.unsaved(existing: task)),
+      MaterialPageRoute(
+        builder: (_) =>
+            TaskFormScreen.unsaved(homeItemName: _currentName, existing: task),
+      ),
     );
     if (edited == null) return;
     setState(() {
@@ -236,7 +247,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const divider = Divider(height: 1, indent: 16);
+    const divider = formRowDivider;
     final isVehicle = _category == HomeItemCategory.vehicle;
     final hasDetails = [
       _manufacturer,
@@ -266,7 +277,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
               clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
-                  _InlineTextRow(
+                  InlineTextRow(
                     label: 'Name',
                     controller: _name,
                     validator: (value) =>
@@ -275,13 +286,13 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
                         : null,
                   ),
                   divider,
-                  _InlineTextRow(
+                  InlineTextRow(
                     label: 'Location',
                     controller: _location,
                     choices: _locationChoices(),
                   ),
                   divider,
-                  _InlineDateRow(
+                  InlineDateRow(
                     label: 'Purchase date',
                     value: _purchaseDate,
                     onChanged: (date) => setState(() => _purchaseDate = date),
@@ -305,27 +316,30 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
                     collapsedShape: const Border(),
                     children: [
                       divider,
-                      _InlineTextRow(
+                      InlineTextRow(
                         label: isVehicle ? 'Make' : 'Manufacturer',
                         controller: _manufacturer,
                       ),
                       divider,
-                      _InlineTextRow(label: 'Model', controller: _modelNumber),
+                      InlineTextRow(label: 'Model', controller: _modelNumber),
                       divider,
-                      _InlineTextRow(
+                      InlineTextRow(
                         label: isVehicle ? 'VIN' : 'Serial #',
                         controller: _serialNumber,
                       ),
                     ],
                   ),
                   divider,
-                  _NotesRow(controller: _notes),
+                  InlineNotesRow(controller: _notes),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             if (widget.existing case final existing?)
-              _SavedTaskList(homeItemId: existing.id)
+              _SavedTaskList(
+                homeItemId: existing.id,
+                homeItemName: () => _currentName,
+              )
             else
               _NewTaskList(
                 tasks: _newTasks,
@@ -345,162 +359,24 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   }
 }
 
-/// Form rows are at least as tall as a [ListTile].
-const _rowHeight = 56.0;
-
-/// A form row with the label on the left and a borderless text field on
-/// the right that is edited in place.
-///
-/// If [choices] are given, a menu button at the end of the row fills the
-/// field with one of them. The user can still type their own value.
-class _InlineTextRow extends StatelessWidget {
-  const _InlineTextRow({
-    required this.label,
-    required this.controller,
-    this.validator,
-    this.choices = const [],
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final FormFieldValidator<String>? validator;
-  final List<String> choices;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(left: 16, right: choices.isEmpty ? 16 : 4),
-      child: Row(
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodyLarge),
-          const SizedBox(width: 16),
-          Expanded(
-            child: TextFormField(
-              controller: controller,
-              validator: validator,
-              textAlign: TextAlign.end,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: InputDecoration(
-                hintText: 'Unknown',
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
-          ),
-          if (choices.isNotEmpty)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.arrow_drop_down),
-              tooltip: 'Choose ${label.toLowerCase()}',
-              onSelected: (choice) => controller.text = choice,
-              itemBuilder: (context) => [
-                for (final choice in choices)
-                  PopupMenuItem(value: choice, child: Text(choice)),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A form row that shows a date on the right and opens a date picker
-/// when tapped.
-class _InlineDateRow extends StatelessWidget {
-  const _InlineDateRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final DateTime? value;
-  final ValueChanged<DateTime?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final date = value;
-
-    return InkWell(
-      onTap: () async {
-        final picked = await pickPastDate(context, initialDate: date);
-        if (picked != null) onChanged(picked);
-      },
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _rowHeight),
-        child: Padding(
-          padding: EdgeInsets.only(left: 16, right: date == null ? 16 : 4),
-          child: Row(
-            children: [
-              Text(label, style: theme.textTheme.bodyLarge),
-              const Spacer(),
-              Text(
-                date == null
-                    ? 'Unknown'
-                    : MaterialLocalizations.of(context).formatMediumDate(date),
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: date == null
-                      ? theme.colorScheme.onSurfaceVariant
-                      : null,
-                ),
-              ),
-              if (date != null)
-                IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'Clear date',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => onChanged(null),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A form row with a label and a multi-line notes field below it.
-class _NotesRow extends StatelessWidget {
-  const _NotesRow({required this.controller});
-
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Notes', style: Theme.of(context).textTheme.bodyLarge),
-          TextFormField(
-            controller: controller,
-            minLines: 3,
-            maxLines: null,
-            textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              hintText: 'Add notes',
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// The maintenance schedule of a home item being edited. Tasks are saved as
 /// soon as they're changed, added or marked done.
 class _SavedTaskList extends StatelessWidget {
-  const _SavedTaskList({required this.homeItemId});
+  const _SavedTaskList({required this.homeItemId, required this.homeItemName});
 
   final String homeItemId;
+
+  /// The home item's name as currently typed on the form.
+  final ValueGetter<String> homeItemName;
 
   void _openTask(BuildContext context, [MaintenanceTask? task]) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => TaskFormScreen(homeItemId: homeItemId, existing: task),
+        builder: (_) => TaskFormScreen(
+          homeItemId: homeItemId,
+          homeItemName: homeItemName(),
+          existing: task,
+        ),
       ),
     );
   }

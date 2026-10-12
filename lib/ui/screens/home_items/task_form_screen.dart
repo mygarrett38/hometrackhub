@@ -9,23 +9,34 @@ import '../../../services/reminder_planner.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
-import '../../widgets/date_field.dart';
-import '../../widgets/dropdown_field.dart';
+import '../../widgets/form_rows.dart';
 import '../../widgets/notification_permission.dart';
 import '../../widgets/screen_padding.dart';
 
 /// Form for adding a maintenance task or changing an existing one,
 /// including how often it repeats and when the user is reminded about it.
 class TaskFormScreen extends StatefulWidget {
-  const TaskFormScreen({super.key, required this.homeItemId, this.existing});
+  const TaskFormScreen({
+    super.key,
+    required this.homeItemId,
+    required this.homeItemName,
+    this.existing,
+  });
 
   /// Edits a task for a home item that hasn't been saved yet. Saving pops
   /// this screen with the task instead of storing it.
-  const TaskFormScreen.unsaved({super.key, this.existing}) : homeItemId = null;
+  const TaskFormScreen.unsaved({
+    super.key,
+    required this.homeItemName,
+    this.existing,
+  }) : homeItemId = null;
 
   /// The home item the task belongs to, or `null` for a home item that
   /// hasn't been saved yet.
   final String? homeItemId;
+
+  /// Shown so the user knows which home item the task is for.
+  final String homeItemName;
 
   /// The task being edited, or `null` when adding a new task.
   final MaintenanceTask? existing;
@@ -35,8 +46,13 @@ class TaskFormScreen extends StatefulWidget {
 }
 
 class _TaskFormScreenState extends State<TaskFormScreen> {
-  /// Choices for how far ahead of the due date the reminder is sent.
-  static const _reminderLeadOptions = {
+  /// The reminder choice for not being reminded at all.
+  static const _never = -1;
+
+  /// Choices for whether, and how far ahead of the due date, the reminder
+  /// is sent.
+  static const _reminderOptions = {
+    _never: 'Never',
     0: 'On the due date',
     1: '1 day before',
     2: '2 days before',
@@ -108,9 +124,25 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     );
   }
 
-  Future<void> _setReminderEnabled(bool enabled) async {
-    setState(() => _reminder = _reminder.copyWith(enabled: enabled));
-    if (enabled) await requestNotificationPermission(context);
+  /// The selected entry of [_reminderOptions].
+  int get _reminderChoice {
+    if (!_reminder.enabled) return _never;
+    // Fall back for a lead time that isn't one of the choices.
+    return _reminderOptions.containsKey(_reminder.daysBefore)
+        ? _reminder.daysBefore
+        : 0;
+  }
+
+  Future<void> _setReminderChoice(int choice) async {
+    final wasEnabled = _reminder.enabled;
+    setState(
+      () => _reminder = choice == _never
+          ? _reminder.copyWith(enabled: false)
+          : _reminder.copyWith(enabled: true, daysBefore: choice),
+    );
+    if (!wasEnabled && _reminder.enabled) {
+      await requestNotificationPermission(context);
+    }
   }
 
   Future<void> _pickReminderTime() async {
@@ -171,7 +203,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const gap = SizedBox(height: 16);
     final recommended = _existing?.recommendedInterval;
     final interval = _interval;
 
@@ -195,129 +226,104 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         child: ListView(
           padding: screenPadding(context),
           children: [
-            TextFormField(
-              controller: _title,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Task',
-                hintText: 'e.g. Replace air filter',
-                border: OutlineInputBorder(),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  InlineTextRow(
+                    label: 'Task',
+                    controller: _title,
+                    hint: 'Required',
+                    validator: (value) =>
+                        (value == null || value.trim().isEmpty)
+                        ? 'Please describe the task'
+                        : null,
+                  ),
+                  formRowDivider,
+                  InlineValueRow(label: 'For', value: widget.homeItemName),
+                  formRowDivider,
+                  InlineNotesRow(
+                    controller: _description,
+                    label: 'Instructions',
+                    hint: 'Add instructions or notes',
+                  ),
+                ],
               ),
-              validator: (value) => (value == null || value.trim().isEmpty)
-                  ? 'Please describe the task'
-                  : null,
             ),
-            gap,
-            TextFormField(
-              controller: _description,
-              maxLines: 3,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Instructions or notes (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            gap,
-            Text('Repeat every', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 100,
-                  child: TextFormField(
-                    controller: _amount,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    // Rebuild so the next due date preview updates.
-                    onChanged: (_) => setState(() {}),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _RepeatRow(
+                    amount: _amount,
+                    unit: _unit,
+                    // Rebuild so the next due date updates.
+                    onAmountChanged: () => setState(() {}),
+                    onUnitChanged: (unit) => setState(() => _unit = unit),
                     validator: (_) =>
                         _interval == null ? 'Enter 1 or more' : null,
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownField<IntervalUnit>(
-                    label: 'Unit',
-                    value: _unit,
-                    onChanged: (unit) => setState(() => _unit = unit),
-                    items: [
-                      for (final unit in IntervalUnit.values)
-                        DropdownMenuItem(value: unit, child: Text(unit.plural)),
-                    ],
+                  if (recommended != null)
+                    _RecommendationRow(
+                      recommended: recommended,
+                      isFollowing: interval == recommended,
+                      onReset: () => setState(() => _setInterval(recommended)),
+                    ),
+                  formRowDivider,
+                  InlineDateRow(
+                    label: 'Last done',
+                    value: _lastCompleted,
+                    emptyText: 'Never / not sure',
+                    onChanged: (date) => setState(() => _lastCompleted = date),
                   ),
-                ),
-              ],
-            ),
-            if (recommended != null) ...[
-              const SizedBox(height: 8),
-              _RecommendationRow(
-                recommended: recommended,
-                isFollowing: interval == recommended,
-                onReset: () => setState(() => _setInterval(recommended)),
-              ),
-            ],
-            gap,
-            DateField(
-              label: 'Last done',
-              value: _lastCompleted,
-              emptyText: 'Never / not sure',
-              onChanged: (date) => setState(() => _lastCompleted = date),
-            ),
-            if (interval != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Next due: ${MaterialLocalizations.of(context).formatFullDate(interval.addTo(_lastCompleted ?? _startDate))}',
-              ),
-            ],
-            gap,
-            Text('Reminder', style: Theme.of(context).textTheme.titleSmall),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Remind me about this task'),
-              value: _reminder.enabled,
-              onChanged: _setReminderEnabled,
-            ),
-            if (_reminder.enabled) ...[
-              DropdownField<int>(
-                label: 'When',
-                value: _reminderLeadOptions.containsKey(_reminder.daysBefore)
-                    ? _reminder.daysBefore
-                    : 0,
-                onChanged: (days) => setState(
-                  () => _reminder = _reminder.copyWith(daysBefore: days),
-                ),
-                items: [
-                  for (final MapEntry(key: days, value: label)
-                      in _reminderLeadOptions.entries)
-                    DropdownMenuItem(value: days, child: Text(label)),
+                  if (interval != null) ...[
+                    formRowDivider,
+                    InlineValueRow(
+                      label: 'Next due',
+                      value: MaterialLocalizations.of(context).formatMediumDate(
+                        interval.addTo(_lastCompleted ?? _startDate),
+                      ),
+                    ),
+                  ],
                 ],
               ),
-              gap,
-              InkWell(
-                onTap: _pickReminderTime,
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Time',
-                    border: OutlineInputBorder(),
-                    suffixIcon: Icon(Icons.schedule),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InlineChoiceRow<int>(
+                    label: 'Remind me',
+                    value: _reminderChoice,
+                    choices: _reminderOptions,
+                    onChanged: _setReminderChoice,
                   ),
-                  child: Text(
-                    TimeOfDay(
-                      hour: _reminder.hour,
-                      minute: _reminder.minute,
-                    ).format(context),
-                  ),
-                ),
+                  if (_reminder.enabled) ...[
+                    formRowDivider,
+                    InlineValueRow(
+                      label: 'Time',
+                      value: TimeOfDay(
+                        hour: _reminder.hour,
+                        minute: _reminder.minute,
+                      ).format(context),
+                      onTap: _pickReminderTime,
+                    ),
+                    if (_buildTask() case final task?)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Text(
+                          _describeNextReminder(context, task),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                  ],
+                ],
               ),
-              if (_buildTask() case final task?) ...[
-                const SizedBox(height: 8),
-                Text(_describeNextReminder(context, task)),
-              ],
-            ],
+            ),
           ],
         ),
       ),
@@ -349,17 +355,75 @@ class _RecommendationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Manufacturer recommendation: ${recommended.label.toLowerCase()}',
-            style: Theme.of(context).textTheme.bodySmall,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 8, isFollowing ? 16 : 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Manufacturer recommendation: ${recommended.label.toLowerCase()}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
-        ),
-        if (!isFollowing)
-          TextButton(onPressed: onReset, child: const Text('Use this')),
-      ],
+          if (!isFollowing)
+            TextButton(onPressed: onReset, child: const Text('Use this')),
+        ],
+      ),
+    );
+  }
+}
+
+/// The "Repeat every" row: a number typed in place, followed by a menu to
+/// choose days, weeks, months or years.
+class _RepeatRow extends StatelessWidget {
+  const _RepeatRow({
+    required this.amount,
+    required this.unit,
+    required this.onAmountChanged,
+    required this.onUnitChanged,
+    required this.validator,
+  });
+
+  final TextEditingController amount;
+  final IntervalUnit unit;
+  final VoidCallback onAmountChanged;
+  final ValueChanged<IntervalUnit> onUnitChanged;
+  final FormFieldValidator<String> validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 4),
+      child: Row(
+        children: [
+          Text('Repeat every', style: Theme.of(context).textTheme.bodyLarge),
+          const SizedBox(width: 16),
+          Expanded(
+            child: TextFormField(
+              controller: amount,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              textAlign: TextAlign.end,
+              decoration: const InputDecoration(
+                hintText: '1',
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 16),
+              ),
+              onChanged: (_) => onAmountChanged(),
+              validator: validator,
+            ),
+          ),
+          const SizedBox(width: 8),
+          ChoiceMenuButton<IntervalUnit>(
+            tooltip: 'Choose unit',
+            value: unit,
+            choices: {
+              for (final unit in IntervalUnit.values) unit: unit.plural,
+            },
+            onChanged: onUnitChanged,
+          ),
+        ],
+      ),
     );
   }
 }

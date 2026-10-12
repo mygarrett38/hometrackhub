@@ -9,6 +9,7 @@ import 'package:hometrackhub/services/reminder_planner.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
+import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -307,6 +308,14 @@ void main() {
 
     await tester.tap(find.text('Clean condenser coils'));
     await tester.pumpAndSettle();
+    // The task screen shows which home item the task is for.
+    expect(
+      find.descendant(
+        of: find.widgetWithText(InlineValueRow, 'For'),
+        matching: find.text('Refrigerator'),
+      ),
+      findsOneWidget,
+    );
     // The fields are the task, its instructions, then how often it repeats.
     await tester.enterText(find.byType(TextFormField).at(2), '3');
     await tester.tap(find.text('Save'));
@@ -360,8 +369,11 @@ void main() {
     );
     expect(find.text('On the due date'), findsOneWidget);
 
-    await tester.tap(find.text('Remind me about this task'));
+    await tester.tap(find.text('On the due date'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Never'));
+    await tester.pumpAndSettle();
+    expect(find.text('Never'), findsOneWidget);
     expect(find.textContaining('Next reminder'), findsNothing);
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
