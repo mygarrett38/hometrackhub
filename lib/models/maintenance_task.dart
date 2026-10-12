@@ -15,6 +15,7 @@ class MaintenanceTask {
     this.description = '',
     this.recommendedInterval,
     this.lastCompleted,
+    this.previousLastCompleted,
     this.reminder = const TaskReminder(),
   });
 
@@ -36,6 +37,9 @@ class MaintenanceTask {
   /// The last time the user marked this task as done.
   final DateTime? lastCompleted;
 
+  /// The completion date to restore when the latest completion is undone.
+  final DateTime? previousLastCompleted;
+
   /// When, and whether, the user is notified that this task is due.
   final TaskReminder reminder;
 
@@ -55,6 +59,9 @@ class MaintenanceTask {
     MaintenanceInterval? interval,
     DateTime? startDate,
     DateTime? lastCompleted,
+    DateTime? previousLastCompleted,
+    bool clearLastCompleted = false,
+    bool clearPreviousLastCompleted = false,
     TaskReminder? reminder,
   }) {
     return MaintenanceTask(
@@ -64,7 +71,12 @@ class MaintenanceTask {
       interval: interval ?? this.interval,
       recommendedInterval: recommendedInterval,
       startDate: startDate ?? this.startDate,
-      lastCompleted: lastCompleted ?? this.lastCompleted,
+      lastCompleted: clearLastCompleted
+          ? null
+          : lastCompleted ?? this.lastCompleted,
+      previousLastCompleted: clearPreviousLastCompleted
+          ? null
+          : previousLastCompleted ?? this.previousLastCompleted,
       reminder: reminder ?? this.reminder,
     );
   }
@@ -77,12 +89,14 @@ class MaintenanceTask {
     'recommendedInterval': recommendedInterval?.toJson(),
     'startDate': startDate.toIso8601String(),
     'lastCompleted': lastCompleted?.toIso8601String(),
+    'previousLastCompleted': previousLastCompleted?.toIso8601String(),
     'reminder': reminder.toJson(),
   };
 
   factory MaintenanceTask.fromJson(Map<String, dynamic> json) {
     final recommended = json['recommendedInterval'] as Map<String, dynamic>?;
     final lastCompleted = json['lastCompleted'] as String?;
+    final previousLastCompleted = json['previousLastCompleted'] as String?;
     final reminder = json['reminder'] as Map<String, dynamic>?;
     return MaintenanceTask(
       id: json['id'] as String,
@@ -98,6 +112,9 @@ class MaintenanceTask {
       lastCompleted: lastCompleted == null
           ? null
           : DateTime.parse(lastCompleted),
+      previousLastCompleted: previousLastCompleted == null
+          ? null
+          : DateTime.parse(previousLastCompleted),
       reminder: reminder != null
           ? TaskReminder.fromJson(reminder)
           // Tasks saved before per-task schedules only stored on or off.

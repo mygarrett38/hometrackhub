@@ -26,6 +26,8 @@ class TaskTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final task = item.task;
     final today = dateOnly(DateTime.now());
+    final completedToday =
+        task.lastCompleted != null && dateOnly(task.lastCompleted!) == today;
     final daysUntilDue = calendarDaysBetween(today, item.dueDate);
     final colors = Theme.of(context).colorScheme;
     final dueColor = daysUntilDue < 0
@@ -55,16 +57,21 @@ class TaskTile extends StatelessWidget {
         ],
       ),
       isThreeLine: true,
-      trailing: IconButton(
-        icon: const Icon(Icons.check_circle_outline),
-        tooltip: 'Mark done today',
-        onPressed: () => markTaskDoneWithUndo(context, item),
+      trailing: Semantics(
+        checked: completedToday,
+        child: IconButton(
+          icon: Icon(
+            completedToday ? Icons.check_circle : Icons.radio_button_unchecked,
+          ),
+          tooltip: completedToday ? 'Unmark done today' : 'Mark done today',
+          onPressed: () => markTaskDoneWithUndo(context, item),
+        ),
       ),
     );
   }
 }
 
-/// Marks [item] as done today and shows a message with an Undo button.
+/// Toggles today's completion and shows a message with an Undo button.
 Future<void> markTaskDoneWithUndo(
   BuildContext context,
   HomeItemTask item,
@@ -72,18 +79,31 @@ Future<void> markTaskDoneWithUndo(
   final controller = context.read<HomeItemController>();
   final messenger = ScaffoldMessenger.of(context);
   final previousTask = item.task;
+  final today = dateOnly(DateTime.now());
+  final completedToday =
+      previousTask.lastCompleted != null &&
+      dateOnly(previousTask.lastCompleted!) == today;
 
-  await controller.markTaskDone(
-    item.homeItem.id,
-    item.task,
-    completedOn: dateOnly(DateTime.now()),
-  );
+  if (completedToday) {
+    await controller.undoTaskDone(item.homeItem.id, previousTask);
+  } else {
+    await controller.markTaskDone(
+      item.homeItem.id,
+      previousTask,
+      completedOn: today,
+    );
+  }
 
+  if (!context.mounted) return;
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text('Marked "${previousTask.title}" as done'),
+        content: Text(
+          completedToday
+              ? 'Unmarked "${previousTask.title}" as done'
+              : 'Marked "${previousTask.title}" as done',
+        ),
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () => controller.saveTask(item.homeItem.id, previousTask),

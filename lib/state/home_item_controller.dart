@@ -102,7 +102,26 @@ class HomeItemController extends ChangeNotifier {
     MaintenanceTask task, {
     required DateTime completedOn,
   }) {
-    return saveTask(homeItemId, task.copyWith(lastCompleted: completedOn));
+    return saveTask(
+      homeItemId,
+      task.copyWith(
+        lastCompleted: completedOn,
+        previousLastCompleted: task.lastCompleted,
+        clearPreviousLastCompleted: task.lastCompleted == null,
+      ),
+    );
+  }
+
+  /// Undoes the latest completion and restores the previous maintenance date.
+  Future<void> undoTaskDone(String homeItemId, MaintenanceTask task) {
+    return saveTask(
+      homeItemId,
+      task.copyWith(
+        lastCompleted: task.previousLastCompleted,
+        clearLastCompleted: task.previousLastCompleted == null,
+        clearPreviousLastCompleted: true,
+      ),
+    );
   }
 
   /// Deletes all home items from the device.
