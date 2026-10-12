@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 const formRowHeight = 56.0;
 
 /// The divider placed between rows in a form card.
-const formRowDivider = Divider(height: 1, indent: 16);
+const formRowDivider = Divider(height: 1);
 
 /// Shows a date picker limited to past dates and today. Returns `null` if
 /// the user cancels.
