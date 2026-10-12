@@ -44,6 +44,20 @@ class TaskTile extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
+      // Lines the done button's icon up with the left edge of the headings
+      // above the list.
+      contentPadding: const EdgeInsets.only(left: 4, right: 16),
+      horizontalTitleGap: 4,
+      leading: Semantics(
+        checked: completedToday,
+        child: IconButton(
+          icon: Icon(
+            completedToday ? Icons.check_circle : Icons.radio_button_unchecked,
+          ),
+          tooltip: completedToday ? 'Unmark done today' : 'Mark done today',
+          onPressed: () => markTaskDoneWithUndo(context, item),
+        ),
+      ),
       title: Text(task.title),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,16 +71,6 @@ class TaskTile extends StatelessWidget {
         ],
       ),
       isThreeLine: true,
-      trailing: Semantics(
-        checked: completedToday,
-        child: IconButton(
-          icon: Icon(
-            completedToday ? Icons.check_circle : Icons.radio_button_unchecked,
-          ),
-          tooltip: completedToday ? 'Unmark done today' : 'Mark done today',
-          onPressed: () => markTaskDoneWithUndo(context, item),
-        ),
-      ),
     );
   }
 }
@@ -95,19 +99,31 @@ Future<void> markTaskDoneWithUndo(
   }
 
   if (!context.mounted) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(
-          completedToday
-              ? 'Unmarked "${previousTask.title}" as done'
-              : 'Marked "${previousTask.title}" as done',
-        ),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => controller.saveTask(item.homeItem.id, previousTask),
-        ),
+  // Screen reader users need time to reach the Undo button, so their
+  // message stays until they close it.
+  final keepUndo = MediaQuery.accessibleNavigationOf(context);
+  messenger.hideCurrentSnackBar();
+  final snackBar = messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        completedToday
+            ? 'Unmarked "${previousTask.title}" as done'
+            : 'Marked "${previousTask.title}" as done',
       ),
-    );
+      action: SnackBarAction(
+        label: 'Undo',
+        onPressed: () => controller.saveTask(item.homeItem.id, previousTask),
+      ),
+    ),
+  );
+
+  if (!completedToday && !keepUndo) {
+    // Remove Undo when the task moves down the list, unless the message was
+    // already replaced or dismissed.
+    var closed = false;
+    snackBar.closed.then((_) => closed = true);
+    Future.delayed(HomeItemController.doneTaskMoveDelay, () {
+      if (!closed) snackBar.close();
+    });
+  }
 }

@@ -228,6 +228,52 @@ void main() {
     );
   });
 
+  testWidgets('tasks marked done move to the bottom after a few seconds', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appliances'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refrigerator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Upcoming'));
+    await tester.pumpAndSettle();
+
+    final task = find.text('Replace water filter');
+    final topBefore = tester.getTopLeft(task).dy;
+    await tester.tap(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Replace water filter'),
+        matching: find.byTooltip('Mark done today'),
+      ),
+    );
+    await tester.pump();
+
+    // At first the task stays where it was, showing that it's done.
+    expect(tester.getTopLeft(task).dy, topBefore);
+    expect(find.textContaining('Done today'), findsNothing);
+
+    expect(find.text('Undo'), findsOneWidget);
+
+    await tester.pump(HomeItemController.doneTaskMoveDelay);
+    expect(find.text('Done today (1)'), findsOneWidget);
+    expect(
+      tester.getTopLeft(task).dy,
+      greaterThan(tester.getTopLeft(find.text('Done today (1)')).dy),
+    );
+
+    // The message with Undo goes away once the task has moved.
+    await tester.pumpAndSettle();
+    expect(find.text('Undo'), findsNothing);
+  });
+
   testWidgets('a home item can be deleted from its edit screen', (
     tester,
   ) async {

@@ -383,13 +383,14 @@ class _SavedTaskList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final homeItem = context.watch<HomeItemController>().findById(homeItemId);
+    final controller = context.watch<HomeItemController>();
+    final homeItem = controller.findById(homeItemId);
     // The home item may have just been deleted.
     if (homeItem == null) return const SizedBox.shrink();
 
-    final tasks = [
+    final tasks = controller.orderForList([
       for (final task in homeItem.tasks) HomeItemTask(homeItem, task),
-    ]..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    ]);
 
     return Card(
       clipBehavior: Clip.antiAlias,

@@ -46,6 +46,19 @@ class MaintenanceTask {
   /// The date this task is next due.
   DateTime get nextDueDate => interval.addTo(lastCompleted ?? startDate);
 
+  /// When this task was due before it was last marked done.
+  DateTime get previousDueDate =>
+      interval.addTo(previousLastCompleted ?? startDate);
+
+  /// Whether this task was marked done on the same calendar day as [day].
+  bool wasCompletedOn(DateTime day) {
+    final completed = lastCompleted;
+    return completed != null &&
+        completed.year == day.year &&
+        completed.month == day.month &&
+        completed.day == day.day;
+  }
+
   /// Whether the user created this task instead of it coming from the
   /// manufacturer recommendations.
   bool get isCustom => recommendedInterval == null;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/home_item_repository.dart';
@@ -10,8 +12,16 @@ import '../models/maintenance_task.dart';
 class HomeItemController extends ChangeNotifier {
   HomeItemController(this._repository) : _homeItems = _repository.load();
 
+  /// How long a task that was just marked done stays in place in task lists
+  /// before it moves down with the other tasks done today.
+  static const doneTaskMoveDelay = Duration(seconds: 3);
+
   final HomeItemRepository _repository;
   List<HomeItem> _homeItems;
+
+  /// Timers for tasks marked done less than [doneTaskMoveDelay] ago, by
+  /// task id.
+  final Map<String, Timer> _justDoneTimers = {};
 
   /// All home items, sorted by name.
   List<HomeItem> get homeItems {
@@ -27,6 +37,35 @@ class HomeItemController extends ChangeNotifier {
         for (final task in item.tasks) HomeItemTask(item, task),
     ]..sort((a, b) => a.dueDate.compareTo(b.dueDate));
     return List.unmodifiable(tasks);
+  }
+
+  /// Orders [tasks] for a task list: tasks still to do, soonest due first,
+  /// followed by the tasks done today.
+  ///
+  /// A task marked done in the last [doneTaskMoveDelay] stays where it was
+  /// until then, so it doesn't jump away as soon as the user taps it.
+  List<HomeItemTask> orderForList(Iterable<HomeItemTask> tasks) {
+    return [...tasks]..sort((a, b) {
+      final aDone = isListedAsDone(a);
+      if (aDone != isListedAsDone(b)) return aDone ? 1 : -1;
+      return listDueDate(a).compareTo(listDueDate(b));
+    });
+  }
+
+  /// Whether [item] belongs with the tasks done today at the bottom of a
+  /// task list.
+  bool isListedAsDone(HomeItemTask item) {
+    return item.task.wasCompletedOn(DateTime.now()) &&
+        !_justDoneTimers.containsKey(item.task.id);
+  }
+
+  /// The due date that places [item] in a task list. A task that was just
+  /// marked done keeps the date it was due before, until it moves down.
+  DateTime listDueDate(HomeItemTask item) {
+    final justDone =
+        _justDoneTimers.containsKey(item.task.id) &&
+        item.task.wasCompletedOn(DateTime.now());
+    return justDone ? item.task.previousDueDate : item.dueDate;
   }
 
   // Whether there are no tasks running
@@ -102,6 +141,11 @@ class HomeItemController extends ChangeNotifier {
     MaintenanceTask task, {
     required DateTime completedOn,
   }) {
+    _justDoneTimers.remove(task.id)?.cancel();
+    _justDoneTimers[task.id] = Timer(doneTaskMoveDelay, () {
+      _justDoneTimers.remove(task.id);
+      notifyListeners();
+    });
     return saveTask(
       homeItemId,
       task.copyWith(
@@ -114,6 +158,7 @@ class HomeItemController extends ChangeNotifier {
 
   /// Undoes the latest completion and restores the previous maintenance date.
   Future<void> undoTaskDone(String homeItemId, MaintenanceTask task) {
+    _justDoneTimers.remove(task.id)?.cancel();
     return saveTask(
       homeItemId,
       task.copyWith(
@@ -129,6 +174,14 @@ class HomeItemController extends ChangeNotifier {
     _homeItems = [];
     await _repository.deleteAll();
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    for (final timer in _justDoneTimers.values) {
+      timer.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> _saveAndNotify() async {
