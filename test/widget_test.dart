@@ -109,6 +109,21 @@ Future<void> startApp(
   await tester.pump();
 }
 
+/// Taps [name] on the My Home tab to open it for editing, then scrolls down
+/// to its maintenance tasks.
+Future<void> openHomeItem(WidgetTester tester, String name) async {
+  await tester.tap(find.text(name));
+  await tester.pumpAndSettle();
+  // The form's list is the outermost scrollable; text fields have their own.
+  await tester.scrollUntilVisible(
+    find.byTooltip('Add task'),
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.ensureVisible(find.byTooltip('Add task'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('adding a home item from the catalog schedules its maintenance', (
     tester,
@@ -124,18 +139,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Refrigerator'));
     await tester.pumpAndSettle();
+    // Only saved home items can be deleted.
+    expect(find.byTooltip('Delete home item'), findsNothing);
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    // The detail screen lists the manufacturer-recommended tasks.
-    expect(find.text('Replace water filter'), findsOneWidget);
-    expect(find.text('Clean condenser coils'), findsOneWidget);
-
-    // Going back skips the pickers and returns to the list of home items.
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    // Saving skips the pickers and returns to the list of home items.
     expect(find.text('Refrigerator'), findsOneWidget);
     expect(find.byTooltip('Add home item'), findsOneWidget);
+
+    // Tapping the home item opens it for editing, with its recommended tasks.
+    await openHomeItem(tester, 'Refrigerator');
+    expect(find.text('Edit appliance'), findsOneWidget);
+    expect(find.text('Replace water filter'), findsOneWidget);
+    expect(find.text('Clean condenser coils'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     // The tasks also appear on the Upcoming tab.
     await tester.tap(find.text('Upcoming'));
@@ -161,7 +180,77 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
+    // Saving returns to the scan results so more devices can be added.
+    expect(find.text('Living Room TV'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await openHomeItem(tester, 'Living Room TV');
     expect(find.text('Install software updates'), findsOneWidget);
+  });
+
+  testWidgets('the add task button can be scrolled above the navigation bar', (
+    tester,
+  ) async {
+    // On-screen navigation buttons are drawn over the bottom of the app.
+    const navigationBarHeight = 48.0;
+    final physicalHeight = navigationBarHeight * tester.view.devicePixelRatio;
+    tester.view.padding = FakeViewPadding(bottom: physicalHeight);
+    tester.view.viewPadding = FakeViewPadding(bottom: physicalHeight);
+    addTearDown(tester.view.reset);
+
+    await pumpApp(tester);
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appliances'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refrigerator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    await openHomeItem(tester, 'Refrigerator');
+
+    // Scroll as far down as the form goes.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(
+      tester.getRect(find.byTooltip('Add task')).bottom,
+      lessThanOrEqualTo(screenHeight - navigationBarHeight),
+    );
+  });
+
+  testWidgets('a home item can be deleted from its edit screen', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appliances'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refrigerator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    await openHomeItem(tester, 'Refrigerator');
+    await tester.tap(find.byTooltip('Delete home item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Refrigerator'), findsNothing);
+    expect(find.textContaining('not tracking any home items'), findsOneWidget);
   });
 
   testWidgets('each category lists only its own types', (tester) async {
@@ -184,7 +273,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Custom'));
     await tester.pumpAndSettle();
-    expect(find.text('Add home item'), findsOneWidget);
+    expect(find.text('Add custom item'), findsOneWidget);
   });
 
   testWidgets('recommended tasks can be unticked or changed before saving', (
@@ -229,6 +318,7 @@ void main() {
 
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
+    await openHomeItem(tester, 'Refrigerator');
 
     // Only the ticked tasks are created, with the user's changes.
     expect(find.text('Replace water filter'), findsNothing);
@@ -256,7 +346,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
+    await openHomeItem(tester, 'Refrigerator');
 
+    await tester.ensureVisible(find.text('Replace water filter'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Replace water filter'));
     await tester.pumpAndSettle();
     // The form's list is the outermost scrollable; text fields have their own.

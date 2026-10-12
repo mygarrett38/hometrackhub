@@ -7,7 +7,7 @@ import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../widgets/category_icon.dart';
 import 'add_home_item_screen.dart';
-import 'home_item_detail_screen.dart';
+import 'home_item_form_screen.dart';
 
 /// My Home tab: everything the user tracks, grouped by category.
 class HomeItemListScreen extends StatelessWidget {
@@ -107,7 +107,7 @@ class _HomeItemTile extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => HomeItemDetailScreen(homeItemId: homeItem.id),
+          builder: (_) => HomeItemFormScreen(existing: homeItem),
         ),
       ),
     );

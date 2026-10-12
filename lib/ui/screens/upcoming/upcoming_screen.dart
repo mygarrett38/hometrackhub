@@ -6,7 +6,7 @@ import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../widgets/task_tile.dart';
 import '../home_items/add_home_item_screen.dart';
-import '../home_items/home_item_detail_screen.dart';
+import '../home_items/home_item_form_screen.dart';
 
 /// Home tab: every maintenance task, grouped into overdue, due soon and
 /// later.
@@ -103,8 +103,7 @@ class _TaskMessage extends StatelessWidget {
           item: item,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) =>
-                  HomeItemDetailScreen(homeItemId: item.homeItem.id),
+              builder: (_) => HomeItemFormScreen(existing: item.homeItem),
             ),
           ),
         ),

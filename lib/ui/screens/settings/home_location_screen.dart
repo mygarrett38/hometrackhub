@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../../models/app_settings.dart';
 import '../../../state/settings_controller.dart';
 
+import '../../widgets/screen_padding.dart';
+
 /// Form for entering or clearing the home's address.
 class HomeLocationScreen extends StatefulWidget {
   const HomeLocationScreen({super.key});
@@ -76,7 +78,7 @@ class _HomeLocationScreenState extends State<HomeLocationScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: screenPadding(context),
         children: [
           const Text(
             'Your address is optional and is stored only on this device.',

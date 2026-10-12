@@ -12,6 +12,7 @@ import '../../../utils/id_generator.dart';
 import '../../widgets/date_field.dart';
 import '../../widgets/dropdown_field.dart';
 import '../../widgets/notification_permission.dart';
+import '../../widgets/screen_padding.dart';
 
 /// Form for adding a maintenance task or changing an existing one,
 /// including how often it repeats and when the user is reminded about it.
@@ -192,7 +193,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: screenPadding(context),
           children: [
             TextFormField(
               controller: _title,

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../state/settings_controller.dart';
 
+import '../../widgets/screen_padding.dart';
+
 /// Labels for each [ThemeMode], shared with the settings category list.
 const themeModeLabels = {
   ThemeMode.system: 'System default',
@@ -22,7 +24,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Appearance')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: screenPadding(context),
         children: [
           SegmentedButton<ThemeMode>(
             segments: const [

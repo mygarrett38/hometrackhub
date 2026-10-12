@@ -5,16 +5,19 @@ import '../../../data/home_item_catalog.dart';
 import '../../../data/home_locations.dart';
 import '../../../models/home_item.dart';
 import '../../../models/home_item_category.dart';
+import '../../../models/home_item_task.dart';
 import '../../../models/maintenance_task.dart';
 import '../../../services/device_discovery_service.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/date_field.dart';
-import 'home_item_detail_screen.dart';
+import '../../widgets/task_tile.dart';
+import '../../widgets/screen_padding.dart';
 import 'task_form_screen.dart';
 
-/// Form for adding a new home item or editing an existing one.
+/// Form for adding a new home item or editing an existing one. When editing,
+/// it also shows the item's maintenance schedule and can delete the item.
 ///
 /// A new home item can start from a catalog type ([initialType]), from a
 /// device found on the network ([discoveredDevice]), or from scratch within
@@ -126,6 +129,12 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     final navigator = Navigator.of(context);
     final existing = widget.existing;
 
+    // Tasks on an existing home item are saved as soon as they're changed,
+    // so use the latest ones rather than those from when this form opened.
+    final existingTasks = existing == null
+        ? null
+        : controller.findById(existing.id)?.tasks ?? existing.tasks;
+
     final homeItem = HomeItem(
       id: existing?.id ?? generateId(),
       name: _name.text.trim(),
@@ -139,7 +148,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       purchaseDate: _purchaseDate,
       networkId: existing?.networkId ?? widget.discoveredDevice?.id,
       tasks:
-          existing?.tasks ??
+          existingTasks ??
           [
             for (final task in _newTasks)
               if (!_skippedTaskIds.contains(task.id)) task,
@@ -151,18 +160,44 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       navigator.pop();
     } else {
       await controller.addHomeItem(homeItem);
-      // Show the new home item so the user can review or add tasks.
-      final detailRoute = MaterialPageRoute<void>(
-        builder: (_) => HomeItemDetailScreen(homeItemId: homeItem.id),
-      );
       if (widget.discoveredDevice != null) {
-        // Going back returns to the scan results to add more devices.
-        navigator.pushReplacement(detailRoute);
+        // Return to the scan results so the user can add more devices.
+        navigator.pop();
       } else {
-        // Going back skips the category and type pickers and returns to
-        // the list of home items.
-        navigator.pushAndRemoveUntil(detailRoute, (route) => route.isFirst);
+        // Skip the category and type pickers and return to the main screen.
+        navigator.popUntil((route) => route.isFirst);
       }
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final homeItem = widget.existing!;
+    final controller = context.read<HomeItemController>();
+    final navigator = Navigator.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${homeItem.name}?'),
+        content: const Text(
+          'This also deletes its maintenance history and reminders.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed ?? false) {
+      navigator.pop();
+      await controller.deleteHomeItem(homeItem.id);
     }
   }
 
@@ -211,13 +246,21 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Edit home item' : 'Add home item'),
-        actions: [TextButton(onPressed: _save, child: const Text('Save'))],
+        title: Text('${_isEditing ? 'Edit' : 'Add'} ${_category.itemName}'),
+        actions: [
+          if (_isEditing)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete home item',
+              onPressed: _confirmDelete,
+            ),
+          TextButton(onPressed: _save, child: const Text('Save')),
+        ],
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: screenPadding(context),
           children: [
             Card(
               clipBehavior: Clip.antiAlias,
@@ -281,7 +324,9 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (!_isEditing)
+            if (widget.existing case final existing?)
+              _SavedTaskList(homeItemId: existing.id)
+            else
               _NewTaskList(
                 tasks: _newTasks,
                 skippedTaskIds: _skippedTaskIds,
@@ -445,6 +490,57 @@ class _NotesRow extends StatelessWidget {
   }
 }
 
+/// The maintenance schedule of a home item being edited. Tasks are saved as
+/// soon as they're changed, added or marked done.
+class _SavedTaskList extends StatelessWidget {
+  const _SavedTaskList({required this.homeItemId});
+
+  final String homeItemId;
+
+  void _openTask(BuildContext context, [MaintenanceTask? task]) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TaskFormScreen(homeItemId: homeItemId, existing: task),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final homeItem = context.watch<HomeItemController>().findById(homeItemId);
+    // The home item may have just been deleted.
+    if (homeItem == null) return const SizedBox.shrink();
+
+    final tasks = [
+      for (final task in homeItem.tasks) HomeItemTask(homeItem, task),
+    ]..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Maintenance tasks',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          for (final item in tasks)
+            TaskTile(
+              item: item,
+              showHomeItemName: false,
+              onTap: () => _openTask(context, item.task),
+            ),
+          const Divider(height: 1),
+          _AddTaskButton(onPressed: () => _openTask(context)),
+        ],
+      ),
+    );
+  }
+}
+
 /// The maintenance tasks that will be created with a new home item. Each
 /// can be ticked or unticked, and tapped to change it before saving.
 class _NewTaskList extends StatelessWidget {
@@ -482,7 +578,10 @@ class _NewTaskList extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text('Maintenance tasks', style: theme.textTheme.titleMedium),
+            child: Text(
+              'Maintenance tasks',
+              style: theme.textTheme.titleMedium,
+            ),
           ),
           for (final task in tasks)
             ListTile(
@@ -501,12 +600,29 @@ class _NewTaskList extends StatelessWidget {
               onTap: () => onEdit(task),
             ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.add),
-            title: const Text('Add task'),
-            onTap: onAdd,
-          ),
+          _AddTaskButton(onPressed: onAdd),
         ],
+      ),
+    );
+  }
+}
+
+/// A centered + button at the bottom of a task list.
+class _AddTaskButton extends StatelessWidget {
+  const _AddTaskButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Center(
+        child: IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: 'Add task',
+          onPressed: onPressed,
+        ),
       ),
     );
   }
