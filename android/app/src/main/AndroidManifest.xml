@@ -17,6 +17,9 @@
     <!-- Needed to show maintenance reminders and restore them after a reboot. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Needed to add maintenance tasks to a calendar the user picks. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
     <application
         android:label="HomeTrackHub"
         android:name="${applicationName}"

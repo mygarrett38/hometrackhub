@@ -22,11 +22,15 @@ class PrivacySettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Privacy')),
       body: ListView(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Text(
-              'Everything you enter is stored only on this device and is '
-              'never uploaded.',
+              settings.calendarSyncEnabled
+                  ? 'Everything you enter is stored only on this device. Your '
+                        'tasks are also added to the calendar you chose, which '
+                        "may sync them to that calendar's account."
+                  : 'Everything you enter is stored only on this device and is '
+                        'never uploaded.',
             ),
           ),
           SwitchListTile(
@@ -98,9 +102,10 @@ class PrivacySettingsScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete all data?'),
-        content: const Text(
+        content: Text(
           'This permanently deletes all of your home items, maintenance '
-          'history, reminders and settings from this device.',
+          'history, reminders and settings from this device'
+          '${settings.settings.calendarSyncEnabled ? ', and removes your tasks from your calendar' : ''}.',
         ),
         actions: [
           TextButton(

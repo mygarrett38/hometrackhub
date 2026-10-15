@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/app.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
+import 'package:hometrackhub/services/calendar_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
@@ -12,6 +13,8 @@ import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'calendar_sync_test.dart' show FakeCalendarService;
 
 class FakeNotificationService implements NotificationService {
   @override
@@ -67,8 +70,9 @@ class FakeDiscoveryService implements DeviceDiscoveryService {
 Future<void> pumpApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
+  FakeCalendarService? calendar,
 }) async {
-  await startApp(tester, notifications: notifications);
+  await startApp(tester, notifications: notifications, calendar: calendar);
   await tester.pumpAndSettle();
 }
 
@@ -77,6 +81,7 @@ Future<void> pumpApp(
 Future<void> startApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
+  FakeCalendarService? calendar,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -92,6 +97,9 @@ Future<void> startApp(
         ),
         Provider<NotificationService>.value(
           value: notifications ?? FakeNotificationService(),
+        ),
+        Provider<CalendarService>.value(
+          value: calendar ?? FakeCalendarService(),
         ),
         Provider<DeviceDiscoveryService>.value(value: FakeDiscoveryService()),
       ],
@@ -467,6 +475,105 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(notifications.openSettingsCalls, 1);
+  });
+
+  testWidgets('tasks can be added to a calendar the user picks', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar sync'));
+    await tester.pumpAndSettle();
+    expect(find.text('Personal'), findsNothing);
+
+    // Turning sync on picks the main calendar.
+    await tester.tap(find.text('Sync tasks with my calendar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Personal'), findsOneWidget);
+    expect(
+      tester
+          .widget<RadioGroup<String>>(find.byType(RadioGroup<String>))
+          .groupValue,
+      'personal',
+    );
+
+    await tester.tap(find.text('Work'));
+    await tester.pumpAndSettle();
+
+    // The settings list summarizes the choice.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Adding tasks to Work'), findsOneWidget);
+  });
+
+  testWidgets('the calendar list explains how to add a separate calendar', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar sync'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Calendar getting full? Keep tasks separate'),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Sync tasks with my calendar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar getting full? Keep tasks separate'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Create new calendar'), findsOneWidget);
+    // Tests run as Android, so the Android sync step is shown.
+    expect(find.textContaining('Google Calendar app'), findsOneWidget);
+    expect(find.textContaining('syncselect'), findsNothing);
+
+    await tester.tap(find.text('Got it'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Create new calendar'), findsNothing);
+  });
+
+  testWidgets('calendar sync explains itself in a help dialog', (tester) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar sync'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('all-day event'), findsNothing);
+
+    await tester.tap(find.byTooltip('Help'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('all-day event'), findsOneWidget);
+
+    await tester.tap(find.text('Got it'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('all-day event'), findsNothing);
+  });
+
+  testWidgets('calendar sync stays off if calendar access is turned down', (
+    tester,
+  ) async {
+    final calendar = FakeCalendarService()..accessAllowed = false;
+    await pumpApp(tester, calendar: calendar);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calendar sync'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sync tasks with my calendar'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isFalse,
+    );
+    expect(find.textContaining('Allow calendar access'), findsOneWidget);
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
+    expect(calendar.openSettingsCalls, 1);
   });
 
   testWidgets('dark mode can be selected in settings', (tester) async {

@@ -89,6 +89,9 @@ class AppSettings {
     this.networkDiscoveryEnabled = true,
     this.hideDetailsInNotifications = false,
     this.homeLocation = const HomeLocation(),
+    this.calendarSyncEnabled = false,
+    this.syncCalendarId,
+    this.syncCalendarName,
   });
 
   // Notifications
@@ -118,6 +121,18 @@ class AppSettings {
   // Home
   final HomeLocation homeLocation;
 
+  // Calendar
+  /// Whether each task is added to [syncCalendarId] as an all-day event on
+  /// its due date.
+  final bool calendarSyncEnabled;
+
+  /// The device calendar tasks are added to. Kept when calendar sync is
+  /// turned off so the same calendar is used if it's turned back on.
+  final String? syncCalendarId;
+
+  /// The name of [syncCalendarId], shown on the settings list.
+  final String? syncCalendarName;
+
   AppSettings copyWith({
     OverviewFrequency? overviewFrequency,
     int? overviewWeekday,
@@ -127,6 +142,9 @@ class AppSettings {
     bool? networkDiscoveryEnabled,
     bool? hideDetailsInNotifications,
     HomeLocation? homeLocation,
+    bool? calendarSyncEnabled,
+    String? syncCalendarId,
+    String? syncCalendarName,
   }) {
     return AppSettings(
       overviewFrequency: overviewFrequency ?? this.overviewFrequency,
@@ -139,6 +157,9 @@ class AppSettings {
       hideDetailsInNotifications:
           hideDetailsInNotifications ?? this.hideDetailsInNotifications,
       homeLocation: homeLocation ?? this.homeLocation,
+      calendarSyncEnabled: calendarSyncEnabled ?? this.calendarSyncEnabled,
+      syncCalendarId: syncCalendarId ?? this.syncCalendarId,
+      syncCalendarName: syncCalendarName ?? this.syncCalendarName,
     );
   }
 
@@ -151,6 +172,9 @@ class AppSettings {
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
     'hideDetailsInNotifications': hideDetailsInNotifications,
     'homeLocation': homeLocation.toJson(),
+    'calendarSyncEnabled': calendarSyncEnabled,
+    'syncCalendarId': syncCalendarId,
+    'syncCalendarName': syncCalendarName,
   };
 
   /// Reads settings saved by [toJson]. Missing values fall back to the
@@ -180,6 +204,10 @@ class AppSettings {
       homeLocation: homeLocation == null
           ? defaults.homeLocation
           : HomeLocation.fromJson(homeLocation),
+      calendarSyncEnabled:
+          json['calendarSyncEnabled'] as bool? ?? defaults.calendarSyncEnabled,
+      syncCalendarId: json['syncCalendarId'] as String?,
+      syncCalendarName: json['syncCalendarName'] as String?,
     );
   }
 }

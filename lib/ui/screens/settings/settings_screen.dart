@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../models/app_settings.dart';
 import '../../../state/settings_controller.dart';
 import 'appearance_settings_screen.dart';
+import 'calendar_settings_screen.dart';
 import 'home_location_screen.dart';
 import 'notification_settings_screen.dart';
 import 'privacy_settings_screen.dart';
@@ -31,6 +32,17 @@ class SettingsScreen extends StatelessWidget {
             subtitle: Text(_describeOverview(context, settings)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _open(context, const NotificationSettingsScreen()),
+          ),
+          ListTile(
+            leading: const Icon(Icons.event_outlined),
+            title: const Text('Calendar sync'),
+            subtitle: Text(
+              settings.calendarSyncEnabled && settings.syncCalendarName != null
+                  ? 'Adding tasks to ${settings.syncCalendarName}'
+                  : 'Off',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _open(context, const CalendarSettingsScreen()),
           ),
           ListTile(
             leading: const Icon(Icons.palette_outlined),

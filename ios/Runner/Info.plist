@@ -66,6 +66,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>HomeTrackHub adds your maintenance tasks to the calendar you choose and keeps them up to date.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>HomeTrackHub adds your maintenance tasks to the calendar you choose and keeps them up to date.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>HomeTrackHub looks for smart devices nearby over Bluetooth so you can track their maintenance.</string>
 	<key>NSLocalNetworkUsageDescription</key>
