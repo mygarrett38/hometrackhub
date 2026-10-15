@@ -7,6 +7,7 @@ import '../../../utils/date_utils.dart';
 import '../../widgets/task_tile.dart';
 import '../home_items/add_home_item_screen.dart';
 import '../home_items/home_item_form_screen.dart';
+import 'maintenance_calendar_screen.dart';
 
 /// Home tab: every maintenance task, grouped into overdue, due soon and
 /// later.
@@ -16,7 +17,16 @@ class UpcomingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Upcoming Maintenance')),
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Calendar',
+          icon: const Icon(Icons.calendar_month),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const MaintenanceCalendarScreen()),
+          ),
+        ),
+        title: const Text('Upcoming Maintenance'),
+      ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'upcoming_fab',
         tooltip: 'Add home item',
