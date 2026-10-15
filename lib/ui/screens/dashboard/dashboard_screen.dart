@@ -10,7 +10,7 @@ import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../../services/home_assistant_client.dart';
-import '../home_items/home_item_form_screen.dart';
+import '../home_items/task_form_screen.dart';
 import 'home_assistant_chat_screen.dart';
 
 /// The first tab: a live summary of saved maintenance and expense data.
@@ -359,7 +359,11 @@ class _NextTaskTile extends StatelessWidget {
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => HomeItemFormScreen(existing: item.homeItem),
+          builder: (_) => TaskFormScreen(
+            homeItemId: item.homeItem.id,
+            homeItemName: item.homeItem.name,
+            existing: item.task,
+          ),
         ),
       ),
     );
@@ -391,7 +395,11 @@ class _CompletionHistoryTile extends StatelessWidget {
       subtitle: Text('${entry.item.homeItem.name} · Completed $date'),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => HomeItemFormScreen(existing: entry.item.homeItem),
+          builder: (_) => TaskFormScreen(
+            homeItemId: entry.item.homeItem.id,
+            homeItemName: entry.item.homeItem.name,
+            existing: entry.item.task,
+          ),
         ),
       ),
     );
