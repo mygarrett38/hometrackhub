@@ -134,6 +134,9 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     final existingTasks = existing == null
         ? null
         : controller.findById(existing.id)?.tasks ?? existing.tasks;
+    final existingExpenses = existing == null
+        ? null
+        : controller.findById(existing.id)?.expenses ?? existing.expenses;
 
     final homeItem = HomeItem(
       id: existing?.id ?? generateId(),
@@ -153,6 +156,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
             for (final task in _newTasks)
               if (!_skippedTaskIds.contains(task.id)) task,
           ],
+      expenses: existingExpenses ?? const [],
     );
 
     if (existing != null) {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'home_item_category.dart';
+import 'home_expense.dart';
 import 'maintenance_task.dart';
 
 /// Anything in or around the home that needs maintenance: an appliance,
@@ -20,6 +21,7 @@ class HomeItem {
     this.purchaseDate,
     this.networkId,
     this.tasks = const [],
+    this.expenses = const [],
   });
 
   final String id;
@@ -44,6 +46,7 @@ class HomeItem {
   final String? networkId;
 
   final List<MaintenanceTask> tasks;
+  final List<HomeExpense> expenses;
 
   bool get isCustom => catalogTypeId == null;
 
@@ -57,6 +60,7 @@ class HomeItem {
     String? notes,
     DateTime? purchaseDate,
     List<MaintenanceTask>? tasks,
+    List<HomeExpense>? expenses,
   }) {
     return HomeItem(
       id: id,
@@ -71,6 +75,7 @@ class HomeItem {
       purchaseDate: purchaseDate ?? this.purchaseDate,
       networkId: networkId,
       tasks: tasks ?? this.tasks,
+      expenses: expenses ?? this.expenses,
     );
   }
 
@@ -87,6 +92,7 @@ class HomeItem {
     'purchaseDate': purchaseDate?.toIso8601String(),
     'networkId': networkId,
     'tasks': [for (final task in tasks) task.toJson()],
+    'expenses': [for (final expense in expenses) expense.toJson()],
   };
 
   factory HomeItem.fromJson(Map<String, dynamic> json) {
@@ -106,6 +112,10 @@ class HomeItem {
       tasks: [
         for (final task in json['tasks'] as List<dynamic>? ?? [])
           MaintenanceTask.fromJson(task as Map<String, dynamic>),
+      ],
+      expenses: [
+        for (final expense in json['expenses'] as List<dynamic>? ?? [])
+          HomeExpense.fromJson(expense as Map<String, dynamic>),
       ],
     );
   }

@@ -16,6 +16,7 @@ class MaintenanceTask {
     this.recommendedInterval,
     this.lastCompleted,
     this.previousLastCompleted,
+    this.completionDates = const [],
     this.reminder = const TaskReminder(),
   });
 
@@ -39,6 +40,9 @@ class MaintenanceTask {
 
   /// The completion date to restore when the latest completion is undone.
   final DateTime? previousLastCompleted;
+
+  /// Dates this task was completed, retained for monthly dashboard totals.
+  final List<DateTime> completionDates;
 
   /// When, and whether, the user is notified that this task is due.
   final TaskReminder reminder;
@@ -75,6 +79,7 @@ class MaintenanceTask {
     DateTime? previousLastCompleted,
     bool clearLastCompleted = false,
     bool clearPreviousLastCompleted = false,
+    List<DateTime>? completionDates,
     TaskReminder? reminder,
   }) {
     return MaintenanceTask(
@@ -90,6 +95,7 @@ class MaintenanceTask {
       previousLastCompleted: clearPreviousLastCompleted
           ? null
           : previousLastCompleted ?? this.previousLastCompleted,
+      completionDates: completionDates ?? this.completionDates,
       reminder: reminder ?? this.reminder,
     );
   }
@@ -103,6 +109,9 @@ class MaintenanceTask {
     'startDate': startDate.toIso8601String(),
     'lastCompleted': lastCompleted?.toIso8601String(),
     'previousLastCompleted': previousLastCompleted?.toIso8601String(),
+    'completionDates': [
+      for (final date in completionDates) date.toIso8601String(),
+    ],
     'reminder': reminder.toJson(),
   };
 
@@ -111,6 +120,7 @@ class MaintenanceTask {
     final lastCompleted = json['lastCompleted'] as String?;
     final previousLastCompleted = json['previousLastCompleted'] as String?;
     final reminder = json['reminder'] as Map<String, dynamic>?;
+    final completionDates = json['completionDates'] as List<dynamic>?;
     return MaintenanceTask(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -128,6 +138,16 @@ class MaintenanceTask {
       previousLastCompleted: previousLastCompleted == null
           ? null
           : DateTime.parse(previousLastCompleted),
+      completionDates: completionDates == null
+          ? [
+              if (previousLastCompleted != null)
+                DateTime.parse(previousLastCompleted),
+              if (lastCompleted != null) DateTime.parse(lastCompleted),
+            ]
+          : [
+              for (final date in completionDates)
+                DateTime.parse(date as String),
+            ],
       reminder: reminder != null
           ? TaskReminder.fromJson(reminder)
           // Tasks saved before per-task schedules only stored on or off.

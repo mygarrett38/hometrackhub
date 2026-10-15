@@ -6,10 +6,11 @@ import '../services/notification_service.dart';
 import '../state/home_item_controller.dart';
 import '../state/settings_controller.dart';
 import 'screens/home_items/home_item_list_screen.dart';
+import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/upcoming/upcoming_screen.dart';
 
-/// The app's main layout with three tabs. Uses a bottom navigation bar on
+/// The app's main layout with four tabs. Uses a bottom navigation bar on
 /// phones and a side navigation rail on wider screens such as tablets.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -25,12 +26,14 @@ class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
 
   static const _destinations = [
+    (icon: Icons.dashboard_outlined, label: 'Overview'),
     (icon: Icons.event_available, label: 'Upcoming'),
     (icon: Icons.home_repair_service, label: 'My Home'),
     (icon: Icons.settings, label: 'Settings'),
   ];
 
   static const _screens = [
+    DashboardScreen(),
     UpcomingScreen(),
     HomeItemListScreen(),
     SettingsScreen(),

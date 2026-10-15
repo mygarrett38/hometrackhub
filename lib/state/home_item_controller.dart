@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/home_item_repository.dart';
 import '../models/home_item.dart';
+import '../models/home_expense.dart';
 import '../models/home_item_task.dart';
 import '../models/maintenance_task.dart';
 
@@ -134,6 +135,27 @@ class HomeItemController extends ChangeNotifier {
     );
   }
 
+  Future<void> addExpense(String homeItemId, HomeExpense expense) async {
+    final homeItem = findById(homeItemId);
+    if (homeItem == null) return;
+    await updateHomeItem(
+      homeItem.copyWith(expenses: [...homeItem.expenses, expense]),
+    );
+  }
+
+  Future<void> deleteExpense(String homeItemId, String expenseId) async {
+    final homeItem = findById(homeItemId);
+    if (homeItem == null) return;
+    await updateHomeItem(
+      homeItem.copyWith(
+        expenses: [
+          for (final expense in homeItem.expenses)
+            if (expense.id != expenseId) expense,
+        ],
+      ),
+    );
+  }
+
   /// Records that a task was done on [completedOn], which moves its next due
   /// date forward by one interval.
   Future<void> markTaskDone(
@@ -152,6 +174,7 @@ class HomeItemController extends ChangeNotifier {
         lastCompleted: completedOn,
         previousLastCompleted: task.lastCompleted,
         clearPreviousLastCompleted: task.lastCompleted == null,
+        completionDates: [...task.completionDates, completedOn],
       ),
     );
   }
@@ -159,12 +182,24 @@ class HomeItemController extends ChangeNotifier {
   /// Undoes the latest completion and restores the previous maintenance date.
   Future<void> undoTaskDone(String homeItemId, MaintenanceTask task) {
     _justDoneTimers.remove(task.id)?.cancel();
+    final completedDate = task.lastCompleted;
+    final dates = [...task.completionDates];
+    if (completedDate != null) {
+      final index = dates.lastIndexWhere(
+        (date) =>
+            date.year == completedDate.year &&
+            date.month == completedDate.month &&
+            date.day == completedDate.day,
+      );
+      if (index >= 0) dates.removeAt(index);
+    }
     return saveTask(
       homeItemId,
       task.copyWith(
         lastCompleted: task.previousLastCompleted,
         clearLastCompleted: task.previousLastCompleted == null,
         clearPreviousLastCompleted: true,
+        completionDates: dates,
       ),
     );
   }

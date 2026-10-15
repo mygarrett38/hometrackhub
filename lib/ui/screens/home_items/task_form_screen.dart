@@ -112,14 +112,31 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   MaintenanceTask? _buildTask() {
     final interval = _interval;
     if (interval == null) return null;
+    final existing = _existing;
+    final completionDates = [...?existing?.completionDates];
+    if (existing?.lastCompleted != _lastCompleted) {
+      final oldDate = existing?.lastCompleted;
+      if (oldDate != null) {
+        final oldDateIndex = completionDates.lastIndexWhere(
+          (date) =>
+              date.year == oldDate.year &&
+              date.month == oldDate.month &&
+              date.day == oldDate.day,
+        );
+        if (oldDateIndex >= 0) completionDates.removeAt(oldDateIndex);
+      }
+      if (_lastCompleted != null) completionDates.add(_lastCompleted!);
+    }
     return MaintenanceTask(
-      id: _existing?.id ?? generateId(),
+      id: existing?.id ?? generateId(),
       title: _title.text.trim(),
       description: _description.text.trim(),
       interval: interval,
-      recommendedInterval: _existing?.recommendedInterval,
+      recommendedInterval: existing?.recommendedInterval,
       startDate: _startDate,
       lastCompleted: _lastCompleted,
+      previousLastCompleted: existing?.previousLastCompleted,
+      completionDates: completionDates,
       reminder: _reminder,
     );
   }
