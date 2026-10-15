@@ -99,9 +99,6 @@ Future<void> markTaskDoneWithUndo(
   }
 
   if (!context.mounted) return;
-  // Screen reader users need time to reach the Undo button, so their
-  // message stays until they close it.
-  final keepUndo = MediaQuery.accessibleNavigationOf(context);
   messenger.hideCurrentSnackBar();
   final snackBar = messenger.showSnackBar(
     SnackBar(
@@ -117,13 +114,10 @@ Future<void> markTaskDoneWithUndo(
     ),
   );
 
-  if (!completedToday && !keepUndo) {
-    // Remove Undo when the task moves down the list, unless the message was
-    // already replaced or dismissed.
-    var closed = false;
-    snackBar.closed.then((_) => closed = true);
-    Future.delayed(HomeItemController.doneTaskMoveDelay, () {
-      if (!closed) snackBar.close();
-    });
-  }
+  // Keep Undo available briefly while the task returns to its list position.
+  var closed = false;
+  snackBar.closed.then((_) => closed = true);
+  Future.delayed(HomeItemController.doneTaskMoveDelay, () {
+    if (!closed) snackBar.close();
+  });
 }
