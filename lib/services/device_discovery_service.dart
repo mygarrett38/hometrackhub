@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:bonsoir/bonsoir.dart';
@@ -241,29 +242,43 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
     Duration duration = const Duration(seconds: 10),
     bool includeNetwork = true,
   }) {
-    final controller = StreamController<DiscoveredDevice>();
+    final stopped = Completer<void>();
+    late final StreamController<DiscoveredDevice> controller;
+    late final Future<void> scanFinished;
 
     void report(DiscoveredDevice device) {
-      if (!controller.isClosed) controller.add(device);
+      if (!stopped.isCompleted && !controller.isClosed) controller.add(device);
     }
 
     Future<void> runScan() async {
       final results = await Future.wait([
         if (includeNetwork) ...[
-          _runSafely('mDNS', () => _scanMdns(duration, report)),
-          _runSafely('SSDP', () => _scanSsdp(duration, report)),
+          _runSafely('mDNS', () => _scanMdns(duration, report, stopped.future)),
+          _runSafely('SSDP', () => _scanSsdp(duration, report, stopped.future)),
         ],
-        _runSafely('Bluetooth', () => _scanBluetooth(duration, report)),
+        _runSafely(
+          'Bluetooth',
+          () => _scanBluetooth(duration, report, stopped.future),
+        ),
       ]);
-      if (results.every((succeeded) => !succeeded)) {
-        controller.addError(
-          const SocketException('No nearby devices could be scanned for.'),
-        );
+      if (!stopped.isCompleted) {
+        if (results.every((succeeded) => !succeeded)) {
+          controller.addError(
+            const SocketException('No nearby devices could be scanned for.'),
+          );
+        }
+        // Do not await close: cancellation waits for scanner cleanup.
+        unawaited(controller.close());
       }
-      await controller.close();
     }
 
-    runScan();
+    controller = StreamController<DiscoveredDevice>(
+      onListen: () => scanFinished = runScan(),
+      onCancel: () async {
+        if (!stopped.isCompleted) stopped.complete();
+        await scanFinished;
+      },
+    );
     return controller.stream;
   }
 
@@ -282,47 +297,96 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
   Future<void> _scanMdns(
     Duration duration,
     void Function(DiscoveredDevice) report,
+    Future<void> stopped,
   ) async {
     final discoveries = <BonsoirDiscovery>[];
     final subscriptions = <StreamSubscription<BonsoirDiscoveryEvent>>[];
+    final pending = Queue<(BonsoirService, BonsoirDiscovery)>();
+    final seen = <String>{};
+    BonsoirDiscovery? resolvingWith;
+    String? resolvingName;
+    var active = true;
 
+    // A resolve() future only submits a native request; it does not wait for
+    // the address. Wait for the result event before starting the next request.
+    void resolveNext() {
+      if (!active || resolvingWith != null || pending.isEmpty) return;
+      final (service, discovery) = pending.removeFirst();
+      resolvingWith = discovery;
+      resolvingName = service.name;
+      unawaited(
+        service.resolve(discovery.serviceResolver).catchError((Object error) {
+          debugPrint('Could not resolve ${service.name}: $error');
+          if (active &&
+              identical(resolvingWith, discovery) &&
+              resolvingName == service.name) {
+            resolvingWith = null;
+            resolveNext();
+          }
+        }),
+      );
+    }
+
+    unawaited(stopped.then((_) => active = false));
     try {
       for (final MapEntry(key: type, value: known)
           in _knownMdnsServices.entries) {
-        // One service type failing should not stop the others.
+        if (!active) break;
         try {
           final discovery = BonsoirDiscovery(type: type, printLogs: false);
           await discovery.initialize();
+          discoveries.add(discovery);
+          if (!active) break;
           subscriptions.add(
-            discovery.eventStream!.listen((event) {
-              switch (event) {
-                case BonsoirDiscoveryServiceFoundEvent(:final service):
-                  report(_deviceFromMdns(service, known));
-                  // Resolving looks up the device's IP address.
-                  service.resolve(discovery.serviceResolver);
-                case BonsoirDiscoveryServiceResolvedEvent(:final service):
-                  report(_deviceFromMdns(service, known));
-                default:
-                  break;
-              }
-            }),
+            discovery.eventStream!.listen(
+              (event) {
+                if (!active) return;
+                switch (event) {
+                  case BonsoirDiscoveryServiceFoundEvent(:final service):
+                    report(_deviceFromMdns(service, known));
+                    if (service.hostAddress == null &&
+                        seen.add('$type:${service.name}')) {
+                      pending.add((service, discovery));
+                      resolveNext();
+                    }
+                  case BonsoirDiscoveryServiceResolvedEvent(:final service):
+                    report(_deviceFromMdns(service, known));
+                    if (identical(resolvingWith, discovery) &&
+                        resolvingName == service.name) {
+                      resolvingWith = null;
+                      resolveNext();
+                    }
+                  case BonsoirDiscoveryServiceResolveFailedEvent():
+                    if (identical(resolvingWith, discovery)) {
+                      resolvingWith = null;
+                      resolveNext();
+                    }
+                  default:
+                    break;
+                }
+              },
+              onError: (Object error) {
+                debugPrint('Bonjour $type scan error: $error');
+              },
+            ),
           );
           await discovery.start();
-          discoveries.add(discovery);
         } catch (error) {
           debugPrint('Could not search for $type services: $error');
         }
       }
-      if (discoveries.isEmpty) {
+      if (discoveries.isEmpty && active) {
         throw StateError('No Bonjour searches could be started.');
       }
-      await Future<void>.delayed(duration);
+      await Future.any([Future<void>.delayed(duration), stopped]);
     } finally {
+      active = false;
+      pending.clear();
       for (final subscription in subscriptions) {
         await subscription.cancel();
       }
       for (final discovery in discoveries) {
-        await discovery.stop();
+        await _runSafely('Bonjour cleanup', discovery.stop);
       }
     }
   }
@@ -351,6 +415,7 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
   Future<void> _scanSsdp(
     Duration duration,
     void Function(DiscoveredDevice) report,
+    Future<void> stopped,
   ) async {
     // iOS only lets apps send multicast packets with a special entitlement
     // granted by Apple, so SSDP is skipped there. Bonjour still works.
@@ -359,7 +424,7 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     final seenLocations = <String>{};
 
-    socket.listen((event) {
+    final subscription = socket.listen((event) {
       if (event != RawSocketEvent.read) return;
       final datagram = socket.receive();
       if (datagram == null) return;
@@ -397,16 +462,26 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
         '\r\n';
     final multicastAddress = InternetAddress('239.255.255.250');
 
-    // UDP packets can be lost, so the search is sent a few times.
-    const attempts = 3;
-    for (var attempt = 0; attempt < attempts; attempt++) {
-      socket.send(utf8.encode(searchRequest), multicastAddress, 1900);
-      await Future<void>.delayed(const Duration(seconds: 1));
+    var cancelled = false;
+    unawaited(stopped.then((_) => cancelled = true));
+    try {
+      // UDP packets can be lost, so the search is sent a few times.
+      const attempts = 3;
+      for (var attempt = 0; attempt < attempts && !cancelled; attempt++) {
+        socket.send(utf8.encode(searchRequest), multicastAddress, 1900);
+        await Future.any([
+          Future<void>.delayed(const Duration(seconds: 1)),
+          stopped,
+        ]);
+      }
+      final remaining = duration - const Duration(seconds: attempts);
+      if (!cancelled && remaining > Duration.zero) {
+        await Future.any([Future<void>.delayed(remaining), stopped]);
+      }
+    } finally {
+      await subscription.cancel();
+      socket.close();
     }
-    final remaining = duration - const Duration(seconds: attempts);
-    if (remaining > Duration.zero) await Future<void>.delayed(remaining);
-
-    socket.close();
   }
 
   /// Parses the headers of an SSDP response. Header names are lower-cased.
@@ -501,6 +576,7 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
   Future<void> _scanBluetooth(
     Duration duration,
     void Function(DiscoveredDevice) report,
+    Future<void> stopped,
   ) async {
     if (!await FlutterBluePlus.isSupported) {
       throw UnsupportedError('This device does not support Bluetooth.');
@@ -509,25 +585,37 @@ class NearbyDeviceDiscoveryService implements DeviceDiscoveryService {
     // The state is unknown until the system reports it. On iOS, this is
     // also when people are first asked to allow Bluetooth, so they're given
     // as long as the scan takes to answer.
-    final state = await FlutterBluePlus.adapterState
-        .firstWhere((state) => state != BluetoothAdapterState.unknown)
-        .timeout(duration);
+    final state = await Future.any<BluetoothAdapterState?>([
+      FlutterBluePlus.adapterState
+          .firstWhere((state) => state != BluetoothAdapterState.unknown)
+          .timeout(duration),
+      stopped.then((_) => null),
+    ]);
+    if (state == null) return;
     if (state != BluetoothAdapterState.on) {
       throw StateError('Bluetooth is not available: ${state.name}');
     }
 
-    final subscription = FlutterBluePlus.onScanResults.listen((results) {
-      for (final result in results) {
-        final device = _deviceFromBluetooth(result);
-        if (device != null) report(device);
-      }
-    });
+    final subscription = FlutterBluePlus.onScanResults.listen(
+      (results) {
+        for (final result in results) {
+          final device = _deviceFromBluetooth(result);
+          if (device != null) report(device);
+        }
+      },
+      onError: (Object error) {
+        debugPrint('Bluetooth scan error: $error');
+      },
+    );
     try {
       // On Android, this asks for permission to find nearby devices.
       await FlutterBluePlus.startScan(timeout: duration, oneByOne: true);
-      await FlutterBluePlus.isScanning
-          .firstWhere((scanning) => !scanning)
-          .timeout(duration + const Duration(seconds: 5));
+      await Future.any([
+        FlutterBluePlus.isScanning
+            .firstWhere((scanning) => !scanning)
+            .timeout(duration + const Duration(seconds: 5)),
+        stopped,
+      ]);
     } finally {
       await subscription.cancel();
       await FlutterBluePlus.stopScan();

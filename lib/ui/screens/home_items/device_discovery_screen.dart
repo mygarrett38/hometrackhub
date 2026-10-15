@@ -36,6 +36,18 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
   StreamSubscription<DiscoveredDevice>? _subscription;
   _ScanState _state = _ScanState.checkingNetwork;
   int _visibleCount = _pageSize;
+  int _scanGeneration = 0;
+  int _detailsInFlight = 0;
+  Timer? _refreshTimer;
+
+  // Coalesce bursts of advertisements rather than sorting and rebuilding
+  // the list for every packet from a busy network.
+  void _scheduleRefresh() {
+    _refreshTimer ??= Timer(const Duration(milliseconds: 100), () {
+      _refreshTimer = null;
+      if (mounted) setState(() {});
+    });
+  }
 
   /// Whether the phone is on Wi-Fi. Without it, only Bluetooth is scanned.
   bool _connectedToNetwork = true;
@@ -53,13 +65,19 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
 
   @override
   void dispose() {
+    _scanGeneration++;
+    _refreshTimer?.cancel();
     _subscription?.cancel();
     super.dispose();
   }
 
   Future<void> _startScan() async {
+    final generation = ++_scanGeneration;
     final discovery = context.read<DeviceDiscoveryService>();
     await _subscription?.cancel();
+    if (!mounted || generation != _scanGeneration) return;
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     setState(() {
       _devices.clear();
       _detailsRequested.clear();
@@ -67,8 +85,16 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
       _state = _ScanState.checkingNetwork;
     });
 
-    final connected = await discovery.isConnectedToLocalNetwork();
-    if (!mounted) return;
+    bool connected;
+    try {
+      connected = await discovery.isConnectedToLocalNetwork();
+    } catch (error) {
+      if (mounted && generation == _scanGeneration) {
+        setState(() => _state = _ScanState.failed);
+      }
+      return;
+    }
+    if (!mounted || generation != _scanGeneration) return;
 
     setState(() {
       _connectedToNetwork = connected;
@@ -78,19 +104,26 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
         .scan(includeNetwork: connected)
         .listen(
           (device) {
-            setState(() {
-              final previous = _devices[device.id];
-              // Keep a previously found address if the update doesn't have one.
-              _devices[device.id] =
-                  device.address == null && previous?.address != null
-                  ? previous!
-                  : device;
-            });
+            if (!mounted || generation != _scanGeneration) return;
+            final previous = _devices[device.id];
+            // Keep downloaded details and resolved addresses when a repeated
+            // announcement only contains the original placeholder.
+            if (previous != null &&
+                ((!previous.needsDetails && device.needsDetails) ||
+                    (previous.address != null && device.address == null))) {
+              return;
+            }
+            _devices[device.id] = device;
+            _scheduleRefresh();
           },
           onError: (Object error) {
+            if (!mounted || generation != _scanGeneration) return;
             setState(() => _state = _ScanState.failed);
           },
           onDone: () {
+            if (!mounted || generation != _scanGeneration) return;
+            _refreshTimer?.cancel();
+            _refreshTimer = null;
             if (_state == _ScanState.scanning) {
               setState(() => _state = _ScanState.finished);
             }
@@ -101,22 +134,39 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
   /// Loads the details of shown devices that only have an address so far.
   void _loadDetailsOf(Iterable<DiscoveredDevice> shownDevices) {
     final discovery = context.read<DeviceDiscoveryService>();
+    final generation = _scanGeneration;
     for (final device in shownDevices) {
+      if (_detailsInFlight >= 4) break;
       if (!device.needsDetails || !_detailsRequested.add(device.id)) continue;
-      discovery.loadDetails(device).then((detailed) {
-        // Ignore results that arrive after the screen closed or a new scan
-        // started.
-        if (!mounted || !identical(_devices[device.id], device)) return;
-        setState(() {
-          if (detailed == null) {
-            // Unreadable devices are dropped, making room for the next one.
-            _devices.remove(device.id);
-          } else {
-            _devices[device.id] = detailed;
-          }
-        });
-      });
+      _detailsInFlight++;
+      unawaited(_loadDeviceDetails(discovery, device, generation));
     }
+  }
+
+  Future<void> _loadDeviceDetails(
+    DeviceDiscoveryService discovery,
+    DiscoveredDevice device,
+    int generation,
+  ) async {
+    DiscoveredDevice? detailed;
+    try {
+      detailed = await discovery.loadDetails(device);
+    } catch (error) {
+      debugPrint('Could not load device details: $error');
+    } finally {
+      _detailsInFlight--;
+    }
+    if (!mounted) return;
+    setState(() {
+      if (generation != _scanGeneration) return;
+      final current = _devices[device.id];
+      if (current == null || !current.needsDetails) return;
+      if (detailed == null) {
+        _devices.remove(device.id);
+      } else {
+        _devices[device.id] = detailed;
+      }
+    });
   }
 
   @override
@@ -128,7 +178,9 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
       appBar: AppBar(
         title: const Text('Find smart devices'),
         actions: [
-          if (allowed && _state != _ScanState.scanning)
+          if (allowed &&
+              _state != _ScanState.scanning &&
+              _state != _ScanState.checkingNetwork)
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: 'Scan again',
@@ -171,8 +223,11 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
     // networks aren't flooded with requests. Loading more devices loads
     // their details too.
     if (visibleDevices.any((device) => device.needsDetails)) {
+      final generation = _scanGeneration;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loadDetailsOf(visibleDevices);
+        if (mounted && generation == _scanGeneration) {
+          _loadDetailsOf(visibleDevices);
+        }
       });
     }
 
