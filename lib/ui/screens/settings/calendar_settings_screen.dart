@@ -360,8 +360,9 @@ class _CalendarSyncHelpDialog extends StatelessWidget {
           'Each maintenance task is added to your calendar as an all-day '
           'event on its due date. Events move when you complete or change a '
           'task, and are removed when you delete it.\n\n'
-          'Calendar events have no alerts of their own. Reminders set on a '
-          'task still arrive as notifications.',
+          'Calendar events will not send you notifications by themselves '
+          '(unless you set them), so we will still send you a notification '
+          'based on your preferences for each task.',
         ),
       ),
       actions: [

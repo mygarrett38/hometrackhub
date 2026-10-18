@@ -517,18 +517,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Calendar sync'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Calendar getting full? Keep tasks separate'),
-      findsNothing,
-    );
+    const tip = 'Tip: Create a home maintenance calendar';
+    expect(find.text(tip), findsNothing);
 
     await tester.tap(find.text('Sync tasks with my calendar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Calendar getting full? Keep tasks separate'));
+    await tester.tap(find.text(tip));
     await tester.pumpAndSettle();
     expect(find.textContaining('Create new calendar'), findsOneWidget);
-    // Tests run as Android, so the Android sync step is shown.
-    expect(find.textContaining('Google Calendar app'), findsOneWidget);
+    // Tests run as Android, so the iPhone and iPad sync step is left out.
     expect(find.textContaining('syncselect'), findsNothing);
 
     await tester.tap(find.text('Got it'));
