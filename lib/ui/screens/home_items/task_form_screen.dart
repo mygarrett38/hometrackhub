@@ -191,33 +191,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     navigator.pop();
   }
 
-  Future<void> _delete() async {
-    final controller = context.read<HomeItemController>();
-    final navigator = Navigator.of(context);
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete this task?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed ?? false) {
-      await controller.deleteTask(widget.homeItemId!, _existing!.id);
-      navigator.pop();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final recommended = _existing?.recommendedInterval;
@@ -226,17 +199,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_existing == null ? 'Add task' : 'Edit task'),
-        actions: [
-          // Unsaved tasks are left out by unticking them on the home item
-          // form instead.
-          if (_existing != null && widget.homeItemId != null)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete task',
-              onPressed: _delete,
-            ),
-          TextButton(onPressed: _save, child: const Text('Save')),
-        ],
+        actions: [TextButton(onPressed: _save, child: const Text('Save'))],
       ),
       body: Form(
         key: _formKey,

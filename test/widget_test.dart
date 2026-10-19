@@ -200,6 +200,11 @@ void main() {
     await tester.pumpAndSettle();
     // Only saved home items can be deleted.
     expect(find.byTooltip('Delete home item'), findsNothing);
+    // Recommended tasks are only added when asked for.
+    expect(find.text('Replace water filter'), findsNothing);
+    await tester.tap(find.text('Add recommended tasks'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add recommended tasks'), findsNothing);
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -396,6 +401,8 @@ void main() {
     expect(find.text('Living Room TV'), findsOneWidget);
     await tester.tap(find.text('Living Room TV'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Add recommended tasks'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -525,6 +532,46 @@ void main() {
     expect(find.textContaining('not tracking any home items'), findsOneWidget);
   });
 
+  testWidgets('tasks are deleted, not marked done, from the edit screen', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'filter',
+        title: 'Replace water filter',
+        interval: const MaintenanceInterval.weeks(1),
+        startDate: dateOnly(DateTime.now()),
+      ),
+    ]);
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await openHomeItem(tester, 'House');
+    expect(find.byTooltip('Mark done today'), findsNothing);
+
+    // The task's own screen doesn't delete it.
+    await tester.tap(find.text('Replace water filter'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit task'), findsOneWidget);
+    expect(find.byTooltip('Delete task'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Deleting asks first, so cancelling keeps the task.
+    await tester.tap(find.byTooltip('Delete task'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete "Replace water filter"?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replace water filter'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete task'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replace water filter'), findsNothing);
+  });
+
   testWidgets('each category lists only its own types', (tester) async {
     await pumpApp(tester);
 
@@ -548,7 +595,7 @@ void main() {
     expect(find.text('Add custom item'), findsOneWidget);
   });
 
-  testWidgets('recommended tasks can be unticked or changed before saving', (
+  testWidgets('recommended tasks can be removed or changed before saving', (
     tester,
   ) async {
     await pumpApp(tester);
@@ -561,6 +608,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Refrigerator'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Add recommended tasks'));
+    await tester.pumpAndSettle();
 
     // The form's list is the outermost scrollable; text fields have their own.
     final formList = find.byType(Scrollable).first;
@@ -572,10 +621,15 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.widgetWithText(ListTile, 'Replace water filter'),
-        matching: find.byType(Checkbox),
+        matching: find.byTooltip('Delete task'),
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replace water filter'), findsNothing);
+    // The button comes back so a removed task can be added again.
+    expect(find.text('Add recommended tasks'), findsOneWidget);
 
     await tester.tap(find.text('Clean condenser coils'));
     await tester.pumpAndSettle();
@@ -600,7 +654,7 @@ void main() {
     await tester.pumpAndSettle();
     await openHomeItem(tester, 'Refrigerator');
 
-    // Only the ticked tasks are created, with the user's changes.
+    // Only the remaining tasks are created, with the user's changes.
     expect(find.text('Replace water filter'), findsNothing);
     expect(
       find.descendant(
@@ -623,6 +677,8 @@ void main() {
     await tester.tap(find.text('Appliances'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Refrigerator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add recommended tasks'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();

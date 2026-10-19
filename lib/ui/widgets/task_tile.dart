@@ -6,7 +6,7 @@ import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 
 /// A list row for one maintenance task showing how often it repeats, when it
-/// is due, and a button to mark it done.
+/// is due, and a button to mark it done (or to delete it, see [onDelete]).
 class TaskTile extends StatelessWidget {
   const TaskTile({
     super.key,
@@ -14,6 +14,7 @@ class TaskTile extends StatelessWidget {
     this.showHomeItemName = true,
     this.completedOn,
     this.onTap,
+    this.onDelete,
   });
 
   final HomeItemTask item;
@@ -28,6 +29,9 @@ class TaskTile extends StatelessWidget {
   /// for an earlier one.
   final DateTime? completedOn;
   final VoidCallback? onTap;
+
+  /// When set, the row has a delete button in place of the done button.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -62,27 +66,35 @@ class TaskTile extends StatelessWidget {
       // above the list.
       contentPadding: const EdgeInsets.only(left: 4, right: 16),
       horizontalTitleGap: 4,
-      leading: Semantics(
-        checked: checked,
-        child: canToggle
-            ? IconButton(
-                icon: Icon(
-                  checked ? Icons.check_circle : Icons.radio_button_unchecked,
-                ),
-                tooltip: !checked
-                    ? 'Mark done today'
-                    : completedToday
-                    ? 'Unmark done today'
-                    : 'Unmark done',
-                onPressed: () =>
-                    markTaskDoneWithUndo(context, item, isDone: checked),
-              )
-            // Same size as the button, so the row lines up with the others.
-            : const SizedBox.square(
-                dimension: 48,
-                child: Icon(Icons.check_circle),
-              ),
-      ),
+      leading: onDelete != null
+          ? IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete task',
+              onPressed: onDelete,
+            )
+          : Semantics(
+              checked: checked,
+              child: canToggle
+                  ? IconButton(
+                      icon: Icon(
+                        checked
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                      ),
+                      tooltip: !checked
+                          ? 'Mark done today'
+                          : completedToday
+                          ? 'Unmark done today'
+                          : 'Unmark done',
+                      onPressed: () =>
+                          markTaskDoneWithUndo(context, item, isDone: checked),
+                    )
+                  // Same size as the button, so the row lines up with the others.
+                  : const SizedBox.square(
+                      dimension: 48,
+                      child: Icon(Icons.check_circle),
+                    ),
+            ),
       title: Text(task.title),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -56,16 +56,17 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   HomeItemCategory _category = HomeItemCategory.custom;
   DateTime? _purchaseDate;
 
-  /// The catalog type whose recommended tasks will be added. Only used when
-  /// adding a new home item.
+  /// The catalog type whose recommended tasks the user can add. Only used
+  /// when adding a new home item.
   HomeItemType? _template;
+
+  /// The catalog type's recommended tasks, created once so that adding them
+  /// again after removing some doesn't duplicate the others.
+  List<MaintenanceTask> _recommendedTasks = [];
 
   /// Tasks to create with a new home item, including any changes the user
   /// made to them before saving.
   List<MaintenanceTask> _newTasks = [];
-
-  /// Ids of tasks in [_newTasks] that the user unticked.
-  final Set<String> _skippedTaskIds = {};
 
   bool get _isEditing => widget.existing != null;
 
@@ -102,7 +103,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     }
 
     if (existing == null) {
-      _newTasks =
+      _recommendedTasks =
           _template?.createTasks(startDate: dateOnly(DateTime.now())) ?? [];
     }
   }
@@ -150,12 +151,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       notes: _notes.text.trim(),
       purchaseDate: _purchaseDate,
       networkId: existing?.networkId ?? widget.discoveredDevice?.id,
-      tasks:
-          existingTasks ??
-          [
-            for (final task in _newTasks)
-              if (!_skippedTaskIds.contains(task.id)) task,
-          ],
+      tasks: existingTasks ?? _newTasks,
       expenses: existingExpenses ?? const [],
     );
 
@@ -230,8 +226,34 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       } else {
         _newTasks = [..._newTasks]..[index] = edited;
       }
-      // Changing or adding a task means the user wants it.
-      _skippedTaskIds.remove(edited.id);
+    });
+  }
+
+  /// Removes one of the new tasks once the user confirms.
+  Future<void> _removeNewTask(MaintenanceTask task) async {
+    if (!await _confirmDeleteTask(context, task.title, isSaved: false)) return;
+    setState(() {
+      _newTasks = [
+        for (final t in _newTasks)
+          if (t.id != task.id) t,
+      ];
+    });
+  }
+
+  /// Whether any recommended task isn't in the list, such as before the
+  /// user has asked for them or after they removed one.
+  bool get _canUseRecommended => _recommendedTasks.any(
+    (recommended) => !_newTasks.any((task) => task.id == recommended.id),
+  );
+
+  /// Adds the recommended tasks that aren't already in the list.
+  void _useRecommended() {
+    setState(() {
+      _newTasks = [
+        ..._newTasks,
+        for (final recommended in _recommendedTasks)
+          if (!_newTasks.any((task) => task.id == recommended.id)) recommended,
+      ];
     });
   }
 
@@ -347,12 +369,8 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
             else
               _NewTaskList(
                 tasks: _newTasks,
-                skippedTaskIds: _skippedTaskIds,
-                onSelected: (task, selected) => setState(
-                  () => selected
-                      ? _skippedTaskIds.remove(task.id)
-                      : _skippedTaskIds.add(task.id),
-                ),
+                onUseRecommended: _canUseRecommended ? _useRecommended : null,
+                onRemove: _removeNewTask,
                 onEdit: _editNewTask,
                 onAdd: _editNewTask,
               ),
@@ -364,7 +382,8 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
 }
 
 /// The maintenance schedule of a home item being edited. Tasks are saved as
-/// soon as they're changed, added or marked done.
+/// soon as they're changed, added or deleted. They're marked done from the
+/// overview instead.
 class _SavedTaskList extends StatelessWidget {
   const _SavedTaskList({required this.homeItemId, required this.homeItemName});
 
@@ -383,6 +402,13 @@ class _SavedTaskList extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _deleteTask(BuildContext context, MaintenanceTask task) async {
+    final controller = context.read<HomeItemController>();
+    if (await _confirmDeleteTask(context, task.title)) {
+      await controller.deleteTask(homeItemId, task.id);
+    }
   }
 
   @override
@@ -404,7 +430,7 @@ class _SavedTaskList extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              'Maintenance tasks',
+              'Tasks',
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
@@ -413,6 +439,7 @@ class _SavedTaskList extends StatelessWidget {
               item: item,
               showHomeItemName: false,
               onTap: () => _openTask(context, item.task),
+              onDelete: () => _deleteTask(context, item.task),
             ),
           const Divider(height: 1),
           _AddTaskButton(onPressed: () => _openTask(context)),
@@ -423,19 +450,22 @@ class _SavedTaskList extends StatelessWidget {
 }
 
 /// The maintenance tasks that will be created with a new home item. Each
-/// can be ticked or unticked, and tapped to change it before saving.
+/// can be deleted, or tapped to change it before saving.
 class _NewTaskList extends StatelessWidget {
   const _NewTaskList({
     required this.tasks,
-    required this.skippedTaskIds,
-    required this.onSelected,
+    required this.onUseRecommended,
+    required this.onRemove,
     required this.onEdit,
     required this.onAdd,
   });
 
   final List<MaintenanceTask> tasks;
-  final Set<String> skippedTaskIds;
-  final void Function(MaintenanceTask task, bool selected) onSelected;
+
+  /// Adds the home item type's recommended tasks. The button is hidden when
+  /// this is `null`, because there are none left to add.
+  final VoidCallback? onUseRecommended;
+  final ValueChanged<MaintenanceTask> onRemove;
   final ValueChanged<MaintenanceTask> onEdit;
   final VoidCallback onAdd;
 
@@ -458,22 +488,32 @@ class _NewTaskList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Text(
-              'Maintenance tasks',
-              style: theme.textTheme.titleMedium,
+            padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+            child: Row(
+              children: [
+                // As tall as the button, so the heading stays put when the
+                // button goes away.
+                const SizedBox(height: 48),
+                Expanded(
+                  child: Text('Tasks', style: theme.textTheme.titleMedium),
+                ),
+                if (onUseRecommended != null)
+                  TextButton(
+                    onPressed: onUseRecommended,
+                    child: const Text('Add recommended tasks'),
+                  ),
+              ],
             ),
           ),
           for (final task in tasks)
             ListTile(
-              // Keeps the checkbox lined up with the heading's left edge.
-              contentPadding: const EdgeInsets.only(left: 8, right: 16),
-              horizontalTitleGap: 8,
-              leading: Checkbox(
-                visualDensity: VisualDensity.standard,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                value: !skippedTaskIds.contains(task.id),
-                onChanged: (selected) => onSelected(task, selected ?? false),
+              // Keeps the delete button lined up with the heading's left edge.
+              contentPadding: const EdgeInsets.only(left: 4, right: 16),
+              horizontalTitleGap: 4,
+              leading: IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete task',
+                onPressed: () => onRemove(task),
               ),
               title: Text(task.title),
               subtitle: Text(_describeInterval(task)),
@@ -507,4 +547,33 @@ class _AddTaskButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Asks the user to confirm deleting the task named [title], returning
+/// whether they did. A task that [isSaved] also loses its history.
+Future<bool> _confirmDeleteTask(
+  BuildContext context,
+  String title, {
+  bool isSaved = true,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Delete "$title"?'),
+      content: isSaved
+          ? const Text('This also deletes its history and reminders.')
+          : null,
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }
