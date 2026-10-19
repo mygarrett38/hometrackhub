@@ -117,19 +117,25 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
 
   void _onPageChanged(int page) {
     setState(() {
-      _selectedDay = null;
       // Keeps the focus day if the page was changed to show it.
       if (_pageFor(_focusDay) != page) _focusDay = _dayOnPage(page);
+      // Keeps the selected day only if it is on the new page, such as a
+      // faded day that was tapped to move to its month.
+      final selectedDay = _selectedDay;
+      if (selectedDay != null && _pageFor(selectedDay) != page) {
+        _selectedDay = null;
+      }
     });
   }
 
-  /// Switches to [period] and shows the part of it that [day] is in.
-  void _show(DateTime day, CalendarPeriod period) {
+  /// Switches to [period] and shows the part of it that [day] is in, with
+  /// [select] as the selected day.
+  void _show(DateTime day, CalendarPeriod period, {DateTime? select}) {
     final samePeriod = period == _period;
     setState(() {
       _period = period;
       _focusDay = day;
-      _selectedDay = null;
+      _selectedDay = select;
     });
     if (!_pages.hasClients) return;
     final page = _pageFor(day);
@@ -216,6 +222,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                 ],
               ),
             ),
+            if (_period != CalendarPeriod.year) const _WeekdayLabels(),
             // Swipe left or right for the next or previous period.
             SizedBox(
               height: _pageHeight,
@@ -341,8 +348,14 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
       markers: _DayMarkers.between(controller, days, today),
       today: today,
       selectedDay: _selectedDay,
-      onDayTap: (day) =>
-          setState(() => _selectedDay = _selectedDay == day ? null : day),
+      onDayTap: (day) {
+        // A faded day in a month view moves to its own month.
+        if (_period == CalendarPeriod.month && day.month != month) {
+          _show(day, CalendarPeriod.month, select: day);
+        } else {
+          setState(() => _selectedDay = _selectedDay == day ? null : day);
+        }
+      },
     );
   }
 
@@ -410,6 +423,35 @@ class _EmptyMessage extends StatelessWidget {
   }
 }
 
+/// The letters for the days of the week, above the swipeable pages so they
+/// stay still while the days move.
+class _WeekdayLabels extends StatelessWidget {
+  const _WeekdayLabels();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _DayGrid.inset),
+      child: SizedBox(
+        height: 24,
+        child: Row(
+          children: [
+            for (final day in const ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
+              Expanded(
+                child: Center(
+                  child: Text(
+                    day,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The days of a week or month, with dots under each day for the tasks due
 /// or completed on it. Days from other months are faded.
 class _DayGrid extends StatelessWidget {
@@ -422,12 +464,14 @@ class _DayGrid extends StatelessWidget {
     required this.onDayTap,
   });
 
-  static const _weekdayHeight = 24.0;
   static const _rowHeight = 44.0;
 
+  /// Space at each side. [_WeekdayLabels] uses the same, so each letter sits
+  /// centered over its column of days.
+  static const inset = 8.0;
+
   /// The height of a grid showing [weeks] weeks.
-  static double heightFor({required int weeks}) =>
-      _weekdayHeight + weeks * _rowHeight;
+  static double heightFor({required int weeks}) => weeks * _rowHeight;
 
   /// Whole weeks, starting on a Sunday.
   final _DayRange days;
@@ -443,124 +487,97 @@ class _DayGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    // The weekday letters and the days share one inset, so each letter sits
-    // centered over its column of days.
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        children: [
-          SizedBox(
-            height: _weekdayHeight,
-            child: Row(
-              children: const ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                  .map(
-                    (day) => Expanded(
-                      child: Center(
-                        child: Text(
-                          day,
-                          style: TextStyle(fontWeight: FontWeight.w600),
+      padding: const EdgeInsets.symmetric(horizontal: inset),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: days.dayCount,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 7,
+          mainAxisExtent: _rowHeight,
+        ),
+        itemBuilder: (context, index) {
+          final day = DateTime(
+            days.start.year,
+            days.start.month,
+            days.start.day + index,
+          );
+          final due = markers.dueByDay[day] ?? 0;
+          final done = markers.doneByDay[day] ?? 0;
+          final selected = day == selectedDay;
+          final isToday = day == today;
+          final color = selected
+              ? colors.primary
+              : isToday
+              ? colors.primaryContainer
+              : Colors.transparent;
+          // Due dots come first, then completed ones, three at most.
+          final dueColor = day.isBefore(today) ? colors.error : colors.primary;
+          final dotColors = [
+            for (var i = 0; i < due; i++) dueColor,
+            for (var i = 0; i < done; i++) colors.outline,
+          ].take(3);
+
+          return Semantics(
+            button: true,
+            selected: selected,
+            label:
+                '${_monthName(day.month)} ${day.day}, $due due, '
+                '$done completed',
+            excludeSemantics: true,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => onDayTap(day),
+              child: Opacity(
+                opacity: day.month == month ? 1 : 0.5,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          color: selected
+                              ? colors.onPrimary
+                              : isToday
+                              ? _onTodayColor(colors)
+                              : null,
+                          fontWeight: isToday || selected
+                              ? FontWeight.bold
+                              : null,
                         ),
                       ),
                     ),
-                  )
-                  .toList(),
-            ),
-          ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: days.dayCount,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisExtent: _rowHeight,
-            ),
-            itemBuilder: (context, index) {
-              final day = DateTime(
-                days.start.year,
-                days.start.month,
-                days.start.day + index,
-              );
-              final due = markers.dueByDay[day] ?? 0;
-              final done = markers.doneByDay[day] ?? 0;
-              final selected = day == selectedDay;
-              final isToday = day == today;
-              final color = selected
-                  ? colors.primary
-                  : isToday
-                  ? colors.primaryContainer
-                  : Colors.transparent;
-              // Due dots come first, then completed ones, three at most.
-              final dueColor = day.isBefore(today)
-                  ? colors.error
-                  : colors.primary;
-              final dotColors = [
-                for (var i = 0; i < due; i++) dueColor,
-                for (var i = 0; i < done; i++) colors.outline,
-              ].take(3);
-
-              return Semantics(
-                button: true,
-                selected: selected,
-                label:
-                    '${_monthName(day.month)} ${day.day}, $due due, '
-                    '$done completed',
-                excludeSemantics: true,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => onDayTap(day),
-                  child: Opacity(
-                    opacity: day.month == month ? 1 : 0.5,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '${day.day}',
-                            style: TextStyle(
-                              color: selected
-                                  ? colors.onPrimary
-                                  : isToday
-                                  ? _onTodayColor(colors)
-                                  : null,
-                              fontWeight: isToday || selected
-                                  ? FontWeight.bold
-                                  : null,
+                    if (dotColors.isNotEmpty)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final dotColor in dotColors)
+                            Container(
+                              width: 4,
+                              height: 4,
+                              margin: const EdgeInsets.symmetric(horizontal: 1),
+                              decoration: BoxDecoration(
+                                color: dotColor,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                        ),
-                        if (dotColors.isNotEmpty)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              for (final dotColor in dotColors)
-                                Container(
-                                  width: 4,
-                                  height: 4,
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: dotColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ),
+                        ],
+                      ),
+                  ],
                 ),
-              );
-            },
-          ),
-        ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

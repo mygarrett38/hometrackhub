@@ -297,6 +297,31 @@ void main() {
     );
     expect(faded, findsAtLeastNWidgets(42 - 31));
 
+    // The weekday letters stay still above the pages that swipe.
+    expect(
+      find.descendant(of: find.byType(PageView), matching: find.text('M')),
+      findsNothing,
+    );
+
+    // Tapping a faded day moves to its month and selects it. The last day
+    // shown is always in the next month.
+    final shown = DateTime(DateTime.now().year, DateTime.now().month - 1);
+    final lastShown = DateTime(
+      shown.year,
+      shown.month,
+      1 - shown.weekday % 7 + 41,
+    );
+    await tester.tap(faded.last);
+    await tester.pumpAndSettle();
+    expect(find.text(monthTitle(0)), findsOneWidget);
+    expect(
+      find.text(
+        '${months[lastShown.month - 1]} ${lastShown.day}, ${lastShown.year}',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Show whole month'), findsOneWidget);
+
     // Today goes back to this month.
     await tester.tap(find.byTooltip('Today'));
     await tester.pumpAndSettle();
