@@ -7,7 +7,21 @@ import '../../../utils/date_utils.dart';
 import '../../widgets/task_tile.dart';
 import '../home_items/home_item_form_screen.dart';
 
-/// A month calendar showing each active maintenance task on its due dates.
+/// How much time the calendar shows at once.
+enum CalendarPeriod {
+  week('Week'),
+  month('Month'),
+  year('Year');
+
+  const CalendarPeriod(this.label);
+
+  final String label;
+}
+
+/// Calendar tab: a week, month or year of maintenance, with every task due
+/// or completed in that time listed below it. Tapping a day narrows the list
+/// to that day.
+///
 /// Its data comes directly from [HomeItemController], so adding or editing an
 /// appliance/task is reflected as soon as this screen rebuilds.
 class MaintenanceCalendarScreen extends StatefulWidget {
@@ -19,216 +33,843 @@ class MaintenanceCalendarScreen extends StatefulWidget {
 }
 
 class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
-  late DateTime _month;
-  late DateTime _selectedDay;
+  /// The page showing the period [_anchorDay] is in. Pages before and after
+  /// it show earlier and later periods, with plenty to swipe through either
+  /// way.
+  static const _anchorPage = 10000;
+
+  var _period = CalendarPeriod.month;
+
+  /// The day the screen was opened, which pages are counted from.
+  late final DateTime _anchorDay;
+
+  /// A day inside the period being shown.
+  late DateTime _focusDay;
+
+  /// The day the list is narrowed to, or `null` to list the whole period.
+  DateTime? _selectedDay;
+
+  late final PageController _pages;
 
   @override
   void initState() {
     super.initState();
-    final today = dateOnly(DateTime.now());
-    _month = DateTime(today.year, today.month);
-    _selectedDay = today;
+    _anchorDay = dateOnly(DateTime.now());
+    _focusDay = _anchorDay;
+    _pages = PageController(initialPage: _anchorPage);
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  /// The page that shows the period [day] is in.
+  int _pageFor(DateTime day) {
+    final anchor = _anchorDay;
+    return _anchorPage +
+        switch (_period) {
+          CalendarPeriod.week =>
+            calendarDaysBetween(_weekStart(anchor), _weekStart(day)) ~/ 7,
+          CalendarPeriod.month =>
+            (day.year - anchor.year) * 12 + day.month - anchor.month,
+          CalendarPeriod.year => day.year - anchor.year,
+        };
+  }
+
+  /// A day inside the period that [page] shows.
+  DateTime _dayOnPage(int page) {
+    final offset = page - _anchorPage;
+    final anchor = _anchorDay;
+    if (offset == 0) return anchor;
+    return switch (_period) {
+      CalendarPeriod.week => DateTime(
+        anchor.year,
+        anchor.month,
+        anchor.day + 7 * offset,
+      ),
+      CalendarPeriod.month => DateTime(anchor.year, anchor.month + offset),
+      CalendarPeriod.year => DateTime(anchor.year + offset, anchor.month),
+    };
+  }
+
+  /// The week, month or year that [day] is in.
+  _DayRange _periodOf(DateTime day) {
+    return switch (_period) {
+      CalendarPeriod.week => _DayRange.days(_weekStart(day), 7),
+      CalendarPeriod.month => _DayRange(
+        DateTime(day.year, day.month),
+        DateTime(day.year, day.month + 1),
+      ),
+      CalendarPeriod.year => _DayRange(
+        DateTime(day.year),
+        DateTime(day.year + 1),
+      ),
+    };
+  }
+
+  double get _pageHeight => switch (_period) {
+    CalendarPeriod.week => _DayGrid.heightFor(weeks: 1),
+    CalendarPeriod.month => _DayGrid.heightFor(weeks: 6),
+    CalendarPeriod.year => _YearGrid.height,
+  };
+
+  void _onPageChanged(int page) {
+    setState(() {
+      _selectedDay = null;
+      // Keeps the focus day if the page was changed to show it.
+      if (_pageFor(_focusDay) != page) _focusDay = _dayOnPage(page);
+    });
+  }
+
+  /// Switches to [period] and shows the part of it that [day] is in.
+  void _show(DateTime day, CalendarPeriod period) {
+    final samePeriod = period == _period;
+    setState(() {
+      _period = period;
+      _focusDay = day;
+      _selectedDay = null;
+    });
+    if (!_pages.hasClients) return;
+    final page = _pageFor(day);
+    final current = _pages.page?.round() ?? page;
+    if (samePeriod && (page - current).abs() == 1) {
+      _pages.animateToPage(
+        page,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      _pages.jumpToPage(page);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<HomeItemController>();
-    final dueByDay = _dueTasksByDay(controller.allTasks, _month);
-    final selectedTasks = dueByDay[_dayKey(_selectedDay)] ?? const <HomeItemTask>[];
-    final firstOffset = DateTime(_month.year, _month.month, 1).weekday % 7;
-    final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
-    final cellCount = ((firstOffset + daysInMonth + 6) ~/ 7) * 7;
+    final colors = Theme.of(context).colorScheme;
+    final today = dateOnly(DateTime.now());
+    final range = _periodOf(_focusDay);
+    final selectedDay = _selectedDay;
+    final listed = _ListedTasks.between(
+      controller,
+      selectedDay == null ? range : _DayRange.days(selectedDay, 1),
+      today,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Maintenance Calendar')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: 'Previous month',
-                  onPressed: _canGoBack ? () => _changeMonth(-1) : null,
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                Expanded(
-                  child: Text(
-                    '${_monthName(_month.month)} ${_month.year}',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Next month',
-                  onPressed: () => _changeMonth(1),
-                  icon: const Icon(Icons.chevron_right),
-                ),
-              ],
-            ),
-          ),
-          Row(
-            children: const ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                .map((day) => Expanded(
-                      child: Center(
+      // There is no app bar, so the list keeps clear of the status bar.
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            // The period's name, which opens a menu to switch between weeks,
+            // months and years, and a button back to today.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: PopupMenuButton<CalendarPeriod>(
+                        tooltip: 'Show week, month or year',
+                        initialValue: _period,
+                        onSelected: (period) => _show(_focusDay, period),
+                        itemBuilder: (context) => [
+                          for (final period in CalendarPeriod.values)
+                            CheckedPopupMenuItem(
+                              value: period,
+                              checked: period == _period,
+                              child: Text(period.label),
+                            ),
+                        ],
+                        // Lines the title up with the cards below, 16 from
+                        // the edge.
                         child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text(day, style: TextStyle(fontWeight: FontWeight.w600)),
+                          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _title(range),
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down),
+                            ],
+                          ),
                         ),
                       ),
-                    ))
-                .toList(),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: cellCount,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                mainAxisExtent: 54,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Today',
+                    icon: const Icon(Icons.today),
+                    onPressed: () => _show(today, _period),
+                  ),
+                ],
               ),
-              itemBuilder: (context, index) {
-                final dayNumber = index - firstOffset + 1;
-                if (dayNumber < 1 || dayNumber > daysInMonth) {
-                  return const SizedBox.shrink();
-                }
-                final day = DateTime(_month.year, _month.month, dayNumber);
-                final tasks = dueByDay[_dayKey(day)] ?? const <HomeItemTask>[];
-                final selected = _sameDay(day, _selectedDay);
-                final today = _sameDay(day, dateOnly(DateTime.now()));
-                final color = selected
-                    ? Theme.of(context).colorScheme.primary
-                    : today
-                        ? Theme.of(context).colorScheme.primaryContainer
-                        : Colors.transparent;
-                return Semantics(
-                  button: true,
-                  label: '${_monthName(day.month)} ${day.day}, ${tasks.length} tasks due',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => setState(() => _selectedDay = day),
+            ),
+            // Swipe left or right for the next or previous period.
+            SizedBox(
+              height: _pageHeight,
+              child: PageView.builder(
+                controller: _pages,
+                onPageChanged: _onPageChanged,
+                itemBuilder: (context, page) =>
+                    _buildPage(context, page, controller, today),
+              ),
+            ),
+            const Divider(height: 12),
+            if (selectedDay != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${_monthName(selectedDay.month)} ${selectedDay.day}, '
+                        '${selectedDay.year}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() => _selectedDay = null),
+                      child: Text('Show whole ${_period.name}'),
+                    ),
+                  ],
+                ),
+              ),
+            if (controller.hasNoTasks)
+              const _EmptyMessage(
+                'No maintenance scheduled yet.\n\n'
+                'Add your appliances, vehicles and other home items on the '
+                'My Home tab to start tracking maintenance.',
+              )
+            else if (listed.isEmpty)
+              _EmptyMessage(
+                selectedDay != null
+                    ? 'No maintenance on this day'
+                    : 'No maintenance this ${_period.name}',
+              )
+            else ...[
+              // Tinted with the colors of the matching Overview cards.
+              ..._section(
+                context,
+                'Overdue',
+                listed.overdue,
+                accent: colors.error,
+              ),
+              ..._section(context, 'Due', listed.due, accent: colors.primary),
+              ..._section(
+                context,
+                'Completed',
+                listed.completed,
+                accent: colors.secondary,
+                completedOn: listed.completedOn,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _title(_DayRange range) {
+    final start = range.start;
+    switch (_period) {
+      case CalendarPeriod.year:
+        return '${start.year}';
+      case CalendarPeriod.month:
+        return '${_monthName(start.month)} ${start.year}';
+      case CalendarPeriod.week:
+        final last = range.lastDay;
+        if (start.year != last.year) {
+          return '${_shortDate(start)}, ${start.year} – '
+              '${_shortDate(last)}, ${last.year}';
+        }
+        if (start.month != last.month) {
+          return '${_shortDate(start)} – ${_shortDate(last)}, ${start.year}';
+        }
+        return '${_shortDate(start)} – ${last.day}, ${start.year}';
+    }
+  }
+
+  /// One swipeable page: the calendar for one week, month or year.
+  Widget _buildPage(
+    BuildContext context,
+    int page,
+    HomeItemController controller,
+    DateTime today,
+  ) {
+    final range = _periodOf(_dayOnPage(page));
+    if (_period == CalendarPeriod.year) {
+      return _YearGrid(
+        year: range.start.year,
+        controller: controller,
+        today: today,
+        onMonthTap: (month) => _show(
+          month.year == today.year && month.month == today.month
+              ? today
+              : month,
+          CalendarPeriod.month,
+        ),
+      );
+    }
+
+    // A month always shows six whole weeks, so every page is the same
+    // height. A week belongs to the month most of its days are in.
+    final days = _period == CalendarPeriod.month
+        ? _DayRange.days(_weekStart(range.start), 7 * 6)
+        : range;
+    final month = _period == CalendarPeriod.month
+        ? range.start.month
+        : DateTime(
+            range.start.year,
+            range.start.month,
+            range.start.day + 3,
+          ).month;
+    return _DayGrid(
+      days: days,
+      month: month,
+      markers: _DayMarkers.between(controller, days, today),
+      today: today,
+      selectedDay: _selectedDay,
+      onDayTap: (day) =>
+          setState(() => _selectedDay = _selectedDay == day ? null : day),
+    );
+  }
+
+  List<Widget> _section(
+    BuildContext context,
+    String title,
+    List<HomeItemTask> items, {
+    required Color accent,
+    Map<HomeItemTask, DateTime> completedOn = const {},
+  }) {
+    if (items.isEmpty) return [];
+    final theme = Theme.of(context);
+    final cardColor =
+        theme.cardTheme.color ?? theme.colorScheme.surfaceContainerLow;
+    // A card like the home item screen's maintenance tasks, with a light
+    // wash of [accent]. At 12% every text color in the rows keeps a
+    // contrast of at least 4.5:1. The margin lines the card's edges up 16
+    // from the screen's.
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Card(
+          color: Color.lerp(cardColor, accent, 0.12),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  '$title (${items.length})',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              for (final item in items)
+                TaskTile(
+                  item: item,
+                  completedOn: completedOn[item],
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          HomeItemFormScreen(existing: item.homeItem),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
+class _EmptyMessage extends StatelessWidget {
+  const _EmptyMessage(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Text(message, textAlign: TextAlign.center),
+    );
+  }
+}
+
+/// The days of a week or month, with dots under each day for the tasks due
+/// or completed on it. Days from other months are faded.
+class _DayGrid extends StatelessWidget {
+  const _DayGrid({
+    required this.days,
+    required this.month,
+    required this.markers,
+    required this.today,
+    required this.selectedDay,
+    required this.onDayTap,
+  });
+
+  static const _weekdayHeight = 24.0;
+  static const _rowHeight = 44.0;
+
+  /// The height of a grid showing [weeks] weeks.
+  static double heightFor({required int weeks}) =>
+      _weekdayHeight + weeks * _rowHeight;
+
+  /// Whole weeks, starting on a Sunday.
+  final _DayRange days;
+
+  /// The month being shown. Days in other months are faded.
+  final int month;
+  final _DayMarkers markers;
+  final DateTime today;
+  final DateTime? selectedDay;
+  final ValueChanged<DateTime> onDayTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    // The weekday letters and the days share one inset, so each letter sits
+    // centered over its column of days.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        children: [
+          SizedBox(
+            height: _weekdayHeight,
+            child: Row(
+              children: const ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                  .map(
+                    (day) => Expanded(
+                      child: Center(
+                        child: Text(
+                          day,
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: days.dayCount,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisExtent: _rowHeight,
+            ),
+            itemBuilder: (context, index) {
+              final day = DateTime(
+                days.start.year,
+                days.start.month,
+                days.start.day + index,
+              );
+              final due = markers.dueByDay[day] ?? 0;
+              final done = markers.doneByDay[day] ?? 0;
+              final selected = day == selectedDay;
+              final isToday = day == today;
+              final color = selected
+                  ? colors.primary
+                  : isToday
+                  ? colors.primaryContainer
+                  : Colors.transparent;
+              // Due dots come first, then completed ones, three at most.
+              final dueColor = day.isBefore(today)
+                  ? colors.error
+                  : colors.primary;
+              final dotColors = [
+                for (var i = 0; i < due; i++) dueColor,
+                for (var i = 0; i < done; i++) colors.outline,
+              ].take(3);
+
+              return Semantics(
+                button: true,
+                selected: selected,
+                label:
+                    '${_monthName(day.month)} ${day.day}, $due due, '
+                    '$done completed',
+                excludeSemantics: true,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => onDayTap(day),
+                  child: Opacity(
+                    opacity: day.month == month ? 1 : 0.5,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          width: 34,
-                          height: 34,
+                          width: 30,
+                          height: 30,
                           alignment: Alignment.center,
-                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
                           child: Text(
-                            '$dayNumber',
+                            '${day.day}',
                             style: TextStyle(
                               color: selected
-                                  ? Theme.of(context).colorScheme.onPrimary
+                                  ? colors.onPrimary
+                                  : isToday
+                                  ? _onTodayColor(colors)
                                   : null,
-                              fontWeight: today || selected ? FontWeight.bold : null,
+                              fontWeight: isToday || selected
+                                  ? FontWeight.bold
+                                  : null,
                             ),
                           ),
                         ),
-                        if (tasks.isNotEmpty)
+                        if (dotColors.isNotEmpty)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              tasks.length.clamp(1, 3).toInt(),
-                              (_) => Container(
-                                width: 4,
-                                height: 4,
-                                margin: const EdgeInsets.symmetric(horizontal: 1),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  shape: BoxShape.circle,
+                            children: [
+                              for (final dotColor in dotColors)
+                                Container(
+                                  width: 4,
+                                  height: 4,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: dotColor,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
-                            ),
+                            ],
                           ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          const Divider(height: 20),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${_monthName(_selectedDay.month)} ${_selectedDay.day}, ${_selectedDay.year} · ${selectedTasks.length} ${selectedTasks.length == 1 ? 'task' : 'tasks'}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-          ),
-          Expanded(
-            child: selectedTasks.isEmpty
-                ? Center(
-                    child: Text(
-                      'No maintenance due this day',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  )
-                : ListView(
-                    children: [
-                      for (final item in selectedTasks)
-                        TaskTile(
-                          item: item,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => HomeItemFormScreen(existing: item.homeItem),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
     );
   }
+}
 
-  bool get _canGoBack {
-    final now = DateTime.now();
-    return _month.year > now.year || (_month.year == now.year && _month.month > now.month);
-  }
+/// The twelve months of a year, each showing how many tasks are due and
+/// completed in it. Tapping a month opens it.
+class _YearGrid extends StatelessWidget {
+  const _YearGrid({
+    required this.year,
+    required this.controller,
+    required this.today,
+    required this.onMonthTap,
+  });
 
-  void _changeMonth(int amount) {
-    setState(() {
-      _month = DateTime(_month.year, _month.month + amount);
-      _selectedDay = DateTime(_month.year, _month.month, 1);
-    });
+  static const _cardHeight = 60.0;
+  static const _spacing = 6.0;
+  static const _padding = 4.0;
+
+  /// The height of the twelve months, in four rows.
+  static const height = 4 * _cardHeight + 3 * _spacing + 2 * _padding;
+
+  final int year;
+  final HomeItemController controller;
+  final DateTime today;
+  final ValueChanged<DateTime> onMonthTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: _padding),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 12,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisExtent: _cardHeight,
+          mainAxisSpacing: _spacing,
+          crossAxisSpacing: _spacing,
+        ),
+        itemBuilder: (context, index) {
+          final month = DateTime(year, index + 1);
+          final listed = _ListedTasks.between(
+            controller,
+            _DayRange(month, DateTime(year, index + 2)),
+            today,
+          );
+          final due = listed.overdue.length + listed.due.length;
+          final done = listed.completed.length;
+          final isThisMonth =
+              month.year == today.year && month.month == today.month;
+
+          return Semantics(
+            button: true,
+            label: '${_monthName(month.month)}, $due due, $done completed',
+            excludeSemantics: true,
+            child: Material(
+              // Other months match the cards used on the other screens.
+              color: isThisMonth
+                  ? theme.colorScheme.primaryContainer
+                  : theme.cardTheme.color ??
+                        theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => onMonthTap(month),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _monthName(month.month).substring(0, 3),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: isThisMonth
+                              ? _onTodayColor(theme.colorScheme)
+                              : null,
+                        ),
+                      ),
+                      const Spacer(),
+                      // Both counts share one line to keep the card short.
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            if (due > 0)
+                              TextSpan(
+                                text: '$due due',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            if (due > 0 && done > 0)
+                              const TextSpan(text: ' · '),
+                            if (done > 0)
+                              TextSpan(
+                                text: '$done done',
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 
-Map<String, List<HomeItemTask>> _dueTasksByDay(
-  List<HomeItemTask> tasks,
-  DateTime month,
+/// The days from [start] up to, but not including, [end].
+@immutable
+class _DayRange {
+  const _DayRange(this.start, this.end);
+
+  _DayRange.days(DateTime start, int count)
+    : this(start, DateTime(start.year, start.month, start.day + count));
+
+  final DateTime start;
+  final DateTime end;
+
+  DateTime get lastDay => DateTime(end.year, end.month, end.day - 1);
+
+  int get dayCount => calendarDaysBetween(start, end);
+
+  bool contains(DateTime day) => !day.isBefore(start) && day.isBefore(end);
+}
+
+/// The tasks to list for a range of days, split into overdue, due and
+/// completed. A task is listed at most once in each group, even if it is due
+/// or was completed several times in the range.
+class _ListedTasks {
+  _ListedTasks._(this.overdue, this.due, this.completed, this.completedOn);
+
+  factory _ListedTasks.between(
+    HomeItemController controller,
+    _DayRange range,
+    DateTime today,
+  ) {
+    final overdue = <(DateTime, HomeItemTask)>[];
+    final due = <(DateTime, HomeItemTask)>[];
+    final completed = <(DateTime, HomeItemTask)>[];
+
+    for (final item in controller.allTasks) {
+      final nextDue = dateOnly(controller.listDueDate(item));
+      // Overdue tasks are listed for the day they were due and for today,
+      // since they still need doing.
+      if (nextDue.isBefore(today) &&
+          (range.contains(nextDue) || range.contains(today))) {
+        overdue.add((nextDue, item));
+      } else {
+        final firstDue = _dueDates(controller, item, range, today).firstOrNull;
+        if (firstDue != null) due.add((firstDue, item));
+      }
+
+      final lastCompleted = _completionDates(
+        controller,
+        item,
+        range,
+        today,
+      ).lastOrNull;
+      if (lastCompleted != null) completed.add((lastCompleted, item));
+    }
+
+    int byDateThenTitle(
+      (DateTime, HomeItemTask) a,
+      (DateTime, HomeItemTask) b,
+    ) {
+      final byDate = a.$1.compareTo(b.$1);
+      if (byDate != 0) return byDate;
+      return a.$2.task.title.toLowerCase().compareTo(
+        b.$2.task.title.toLowerCase(),
+      );
+    }
+
+    overdue.sort(byDateThenTitle);
+    due.sort(byDateThenTitle);
+    // Most recently completed first.
+    completed.sort((a, b) => byDateThenTitle(b, a));
+    return _ListedTasks._(
+      [for (final (_, item) in overdue) item],
+      [for (final (_, item) in due) item],
+      [for (final (_, item) in completed) item],
+      Map.identity()..addEntries([
+        for (final (date, item) in completed) MapEntry(item, date),
+      ]),
+    );
+  }
+
+  final List<HomeItemTask> overdue;
+  final List<HomeItemTask> due;
+  final List<HomeItemTask> completed;
+
+  /// The latest day in the range that each of [completed] was done.
+  final Map<HomeItemTask, DateTime> completedOn;
+
+  bool get isEmpty => overdue.isEmpty && due.isEmpty && completed.isEmpty;
+}
+
+/// How many tasks are due and completed on each day of a range.
+class _DayMarkers {
+  _DayMarkers._(this.dueByDay, this.doneByDay);
+
+  factory _DayMarkers.between(
+    HomeItemController controller,
+    _DayRange range,
+    DateTime today,
+  ) {
+    final dueByDay = <DateTime, int>{};
+    final doneByDay = <DateTime, int>{};
+    for (final item in controller.allTasks) {
+      for (final day in _dueDates(controller, item, range, today)) {
+        dueByDay[day] = (dueByDay[day] ?? 0) + 1;
+      }
+      for (final day in _completionDates(controller, item, range, today)) {
+        doneByDay[day] = (doneByDay[day] ?? 0) + 1;
+      }
+    }
+    return _DayMarkers._(dueByDay, doneByDay);
+  }
+
+  final Map<DateTime, int> dueByDay;
+  final Map<DateTime, int> doneByDay;
+}
+
+/// Every date in [range] that [item] is due, in order: its next due date,
+/// then the dates it repeats on after that.
+///
+/// Repeats that would fall before [today] are left out, since an overdue task
+/// doesn't come due again until it is done.
+Iterable<DateTime> _dueDates(
+  HomeItemController controller,
+  HomeItemTask item,
+  _DayRange range,
+  DateTime today,
+) sync* {
+  final interval = item.task.interval;
+  final nextDue = dateOnly(controller.listDueDate(item));
+  if (range.contains(nextDue)) yield nextDue;
+
+  final from = range.start.isAfter(today) ? range.start : today;
+  var due = interval.addTo(nextDue);
+  var steps = 0;
+  while (due.isBefore(from) && steps++ < 100000) {
+    due = interval.addTo(due);
+  }
+  while (due.isBefore(range.end) && steps++ < 100000) {
+    yield due;
+    due = interval.addTo(due);
+  }
+}
+
+/// Every date in [range] that [item] was completed, in order.
+///
+/// A task that was just marked done today isn't counted until it moves to
+/// the completed tasks, so it doesn't jump away as soon as the user taps it.
+Iterable<DateTime> _completionDates(
+  HomeItemController controller,
+  HomeItemTask item,
+  _DayRange range,
+  DateTime today,
 ) {
-  final result = <String, List<HomeItemTask>>{};
-  final monthStart = DateTime(month.year, month.month);
-  final monthEnd = DateTime(month.year, month.month + 1);
-  for (final item in tasks) {
-    var due = dateOnly(item.dueDate);
-    var steps = 0;
-    while (due.isBefore(monthStart) && steps++ < 100000) {
-      due = item.task.interval.addTo(due);
-    }
-    while (due.isBefore(monthEnd) && steps++ < 100000) {
-      (result[_dayKey(due)] ??= []).add(item);
-      due = item.task.interval.addTo(due);
-    }
-  }
-  for (final dayTasks in result.values) {
-    dayTasks.sort((a, b) => a.task.title.toLowerCase().compareTo(b.task.title.toLowerCase()));
-  }
-  return result;
+  final dates = {
+    for (final date in item.task.completionDates)
+      if (range.contains(dateOnly(date)) &&
+          (dateOnly(date) != today || controller.isListedAsDone(item)))
+        dateOnly(date),
+  }.toList()..sort();
+  return dates;
 }
 
-String _dayKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
-bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+/// The text color for today's day and this month's name, which sit on a
+/// sage highlight: the light cream of the navigation bar. In dark mode the
+/// bar is navy, so the logo's cream is used instead.
+Color _onTodayColor(ColorScheme colors) => colors.brightness == Brightness.light
+    ? colors.surfaceContainer
+    : colors.onPrimaryContainer;
+
+/// The Sunday on or before [day].
+DateTime _weekStart(DateTime day) =>
+    DateTime(day.year, day.month, day.day - day.weekday % 7);
+
+String _shortDate(DateTime date) =>
+    '${_monthName(date.month).substring(0, 3)} ${date.day}';
 
 String _monthName(int month) => const [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ][month - 1];
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+][month - 1];

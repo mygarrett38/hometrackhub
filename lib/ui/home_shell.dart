@@ -8,7 +8,7 @@ import '../state/settings_controller.dart';
 import 'screens/home_items/home_item_list_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/settings/settings_screen.dart';
-import 'screens/upcoming/upcoming_screen.dart';
+import 'screens/upcoming/maintenance_calendar_screen.dart';
 
 /// The app's main layout with four tabs. Uses a bottom navigation bar on
 /// phones and a side navigation rail on wider screens such as tablets.
@@ -27,14 +27,14 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _destinations = [
     (icon: Icons.dashboard_outlined, label: 'Overview'),
-    (icon: Icons.event_available, label: 'Upcoming'),
+    (icon: Icons.calendar_month, label: 'Calendar'),
     (icon: Icons.home_repair_service, label: 'My Home'),
     (icon: Icons.settings, label: 'Settings'),
   ];
 
   static const _screens = [
     DashboardScreen(),
-    UpcomingScreen(),
+    MaintenanceCalendarScreen(),
     HomeItemListScreen(),
     SettingsScreen(),
   ];

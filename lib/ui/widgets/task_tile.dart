@@ -12,6 +12,7 @@ class TaskTile extends StatelessWidget {
     super.key,
     required this.item,
     this.showHomeItemName = true,
+    this.completedOn,
     this.onTap,
   });
 
@@ -20,14 +21,27 @@ class TaskTile extends StatelessWidget {
   /// Whether to include the home item's name. Hidden on the home item's own
   /// page, where it would be repeated on every row.
   final bool showHomeItemName;
+
+  /// The completion this row stands for, in a list of completed tasks. The
+  /// row is shown checked even if the task wasn't done today. Only the
+  /// task's latest completion can be undone, so the check can't be tapped
+  /// for an earlier one.
+  final DateTime? completedOn;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final task = item.task;
     final today = dateOnly(DateTime.now());
+    final lastCompleted = task.lastCompleted;
     final completedToday =
-        task.lastCompleted != null && dateOnly(task.lastCompleted!) == today;
+        lastCompleted != null && dateOnly(lastCompleted) == today;
+    final completedOn = this.completedOn;
+    final checked = completedOn != null || completedToday;
+    final canToggle =
+        completedOn == null ||
+        (lastCompleted != null &&
+            dateOnly(lastCompleted) == dateOnly(completedOn));
     final daysUntilDue = calendarDaysBetween(today, item.dueDate);
     final colors = Theme.of(context).colorScheme;
     final dueColor = daysUntilDue < 0
@@ -49,14 +63,25 @@ class TaskTile extends StatelessWidget {
       contentPadding: const EdgeInsets.only(left: 4, right: 16),
       horizontalTitleGap: 4,
       leading: Semantics(
-        checked: completedToday,
-        child: IconButton(
-          icon: Icon(
-            completedToday ? Icons.check_circle : Icons.radio_button_unchecked,
-          ),
-          tooltip: completedToday ? 'Unmark done today' : 'Mark done today',
-          onPressed: () => markTaskDoneWithUndo(context, item),
-        ),
+        checked: checked,
+        child: canToggle
+            ? IconButton(
+                icon: Icon(
+                  checked ? Icons.check_circle : Icons.radio_button_unchecked,
+                ),
+                tooltip: !checked
+                    ? 'Mark done today'
+                    : completedToday
+                    ? 'Unmark done today'
+                    : 'Unmark done',
+                onPressed: () =>
+                    markTaskDoneWithUndo(context, item, isDone: checked),
+              )
+            // Same size as the button, so the row lines up with the others.
+            : const SizedBox.square(
+                dimension: 48,
+                child: Icon(Icons.check_circle),
+              ),
       ),
       title: Text(task.title),
       subtitle: Column(
@@ -76,17 +101,22 @@ class TaskTile extends StatelessWidget {
 }
 
 /// Toggles today's completion and shows a message with an Undo button.
+///
+/// Pass [isDone] to say whether the row shows the task as done. When true,
+/// the task's latest completion is undone, even if it wasn't today.
 Future<void> markTaskDoneWithUndo(
   BuildContext context,
-  HomeItemTask item,
-) async {
+  HomeItemTask item, {
+  bool? isDone,
+}) async {
   final controller = context.read<HomeItemController>();
   final messenger = ScaffoldMessenger.of(context);
   final previousTask = item.task;
   final today = dateOnly(DateTime.now());
   final completedToday =
-      previousTask.lastCompleted != null &&
-      dateOnly(previousTask.lastCompleted!) == today;
+      isDone ??
+      (previousTask.lastCompleted != null &&
+          dateOnly(previousTask.lastCompleted!) == today);
 
   if (completedToday) {
     await controller.undoTaskDone(item.homeItem.id, previousTask);

@@ -3,14 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/app.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
+import 'package:hometrackhub/models/home_item.dart';
+import 'package:hometrackhub/models/home_item_category.dart';
+import 'package:hometrackhub/models/maintenance_interval.dart';
+import 'package:hometrackhub/models/maintenance_task.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
+import 'package:hometrackhub/ui/home_shell.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
+import 'package:hometrackhub/utils/date_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -133,11 +139,55 @@ Future<void> openHomeItem(WidgetTester tester, String name) async {
   await tester.pumpAndSettle();
 }
 
+/// Saves a home item with [tasks], as if the user had added it.
+Future<void> addTasks(WidgetTester tester, List<MaintenanceTask> tasks) async {
+  final controller = tester
+      .element(find.byType(HomeShell))
+      .read<HomeItemController>();
+  await controller.addHomeItem(
+    HomeItem(
+      id: 'house',
+      name: 'House',
+      category: HomeItemCategory.custom,
+      tasks: tasks,
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Scrolls the visible tab's list until [finder] is on screen.
+Future<void> scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Swipes the calendar to the next week, month or year, or to the previous
+/// one when [back] is true.
+Future<void> swipeCalendar(WidgetTester tester, {bool back = false}) async {
+  await tester.fling(find.byType(PageView), Offset(back ? 300 : -300, 0), 1000);
+  await tester.pumpAndSettle();
+}
+
+/// Picks [label] ("Week", "Month" or "Year") from the menu under the
+/// calendar's title.
+Future<void> showPeriod(WidgetTester tester, String label) async {
+  await tester.tap(find.byTooltip('Show week, month or year'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('adding a home item from the catalog schedules its maintenance', (
     tester,
   ) async {
     await pumpApp(tester);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('No maintenance scheduled yet'), findsOneWidget);
 
     await tester.tap(find.text('My Home'));
@@ -165,10 +215,145 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // The tasks also appear on the Upcoming tab.
-    await tester.tap(find.text('Upcoming'));
+    // The tasks also appear on the Calendar tab in the month they are due,
+    // which for door gaskets is three months from now.
+    await tester.tap(find.text('Calendar'));
     await tester.pumpAndSettle();
+    expect(find.text('Clean door gaskets'), findsNothing);
+    for (var i = 0; i < 3; i++) {
+      await swipeCalendar(tester);
+    }
     expect(find.text('Clean door gaskets'), findsOneWidget);
+  });
+
+  testWidgets('completed tasks are checked, even from earlier days', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final today = dateOnly(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'smoke-alarms',
+        title: 'Test smoke alarms',
+        interval: const MaintenanceInterval.months(1),
+        startDate: yesterday.subtract(const Duration(days: 30)),
+        lastCompleted: yesterday,
+        completionDates: [yesterday],
+      ),
+    ]);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    if (yesterday.month != today.month) {
+      await swipeCalendar(tester, back: true);
+    }
+
+    final row = find.widgetWithText(ListTile, 'Test smoke alarms');
+    await scrollTo(tester, row);
+    expect(find.text('Completed (1)'), findsOneWidget);
+    expect(
+      find.descendant(of: row, matching: find.byIcon(Icons.check_circle)),
+      findsOneWidget,
+    );
+
+    // Unchecking it undoes yesterday's completion.
+    await tester.tap(find.byTooltip('Unmark done'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Completed'), findsNothing);
+
+    // Lets the message with Undo close.
+    await tester.pump(HomeItemController.doneTaskMoveDelay);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the calendar is swiped between months, fading other months', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June', 'July', //
+      'August', 'September', 'October', 'November', 'December',
+    ];
+    String monthTitle(int monthsFromNow) {
+      final now = DateTime.now();
+      final month = DateTime(now.year, now.month + monthsFromNow);
+      return '${months[month.month - 1]} ${month.year}';
+    }
+
+    expect(find.text(monthTitle(0)), findsOneWidget);
+    await swipeCalendar(tester);
+    expect(find.text(monthTitle(1)), findsOneWidget);
+    await swipeCalendar(tester, back: true);
+    await swipeCalendar(tester, back: true);
+    expect(find.text(monthTitle(-1)), findsOneWidget);
+
+    // Six weeks are always shown, so some days belong to the months either
+    // side and are half faded.
+    final faded = find.byWidgetPredicate(
+      (widget) => widget is Opacity && widget.opacity == 0.5,
+    );
+    expect(faded, findsAtLeastNWidgets(42 - 31));
+
+    // Today goes back to this month.
+    await tester.tap(find.byTooltip('Today'));
+    await tester.pumpAndSettle();
+    expect(find.text(monthTitle(0)), findsOneWidget);
+  });
+
+  testWidgets('the calendar lists every task in the period shown', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final today = dateOnly(DateTime.now());
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'gutters',
+        title: 'Clean gutters',
+        interval: const MaintenanceInterval.weeks(1),
+        startDate: today.subtract(const Duration(days: 14)),
+      ),
+      MaintenanceTask(
+        id: 'water-heater',
+        title: 'Flush water heater',
+        interval: const MaintenanceInterval.years(1),
+        startDate: today,
+        lastCompleted: today,
+        completionDates: [today],
+      ),
+      MaintenanceTask(
+        id: 'mower',
+        title: 'Service lawn mower',
+        interval: const MaintenanceInterval.years(1),
+        startDate: today,
+      ),
+    ]);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+
+    // This month: the overdue task, then the one completed today at the
+    // bottom. The mower isn't due until next year.
+    expect(find.text('Overdue (1)'), findsOneWidget);
+    expect(find.text('Clean gutters'), findsOneWidget);
+    await scrollTo(tester, find.text('Flush water heater'));
+    expect(find.text('Completed (1)'), findsOneWidget);
+    expect(find.text('Flush water heater'), findsOneWidget);
+    expect(find.text('Service lawn mower'), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('Flush water heater')).dy,
+      greaterThan(tester.getTopLeft(find.text('Clean gutters')).dy),
+    );
+
+    // Next year has both yearly tasks due, and nothing completed yet.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+    await tester.pumpAndSettle();
+    await showPeriod(tester, 'Year');
+    await swipeCalendar(tester);
+    await scrollTo(tester, find.text('Service lawn mower'));
+    await scrollTo(tester, find.text('Flush water heater'));
+    expect(find.textContaining('Completed'), findsNothing);
   });
 
   testWidgets('network scan results can be added as home items', (
@@ -240,21 +425,27 @@ void main() {
     tester,
   ) async {
     await pumpApp(tester);
-
-    await tester.tap(find.text('My Home'));
+    // Two weekly tasks due today. Once done, a weekly task is next due
+    // outside this week, so it is only listed once as completed.
+    final lastWeek = dateOnly(DateTime.now()).subtract(const Duration(days: 7));
+    await addTasks(tester, [
+      for (final (id, title) in [
+        ('salt', 'Check water softener salt'),
+        ('filter', 'Replace water filter'),
+      ])
+        MaintenanceTask(
+          id: id,
+          title: title,
+          interval: const MaintenanceInterval.weeks(1),
+          startDate: lastWeek,
+        ),
+    ]);
+    await tester.tap(find.text('Calendar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Add home item'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Appliances'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Refrigerator'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Upcoming'));
-    await tester.pumpAndSettle();
+    await showPeriod(tester, 'Week');
 
     final task = find.text('Replace water filter');
+    await scrollTo(tester, task);
     final topBefore = tester.getTopLeft(task).dy;
     await tester.tap(
       find.descendant(
@@ -266,15 +457,16 @@ void main() {
 
     // At first the task stays where it was, showing that it's done.
     expect(tester.getTopLeft(task).dy, topBefore);
-    expect(find.textContaining('Done today'), findsNothing);
+    expect(find.textContaining('Completed'), findsNothing);
 
     expect(find.text('Undo'), findsOneWidget);
 
     await tester.pump(HomeItemController.doneTaskMoveDelay);
-    expect(find.text('Done today (1)'), findsOneWidget);
+    expect(find.text('Due (1)'), findsOneWidget);
+    expect(find.text('Completed (1)'), findsOneWidget);
     expect(
       tester.getTopLeft(task).dy,
-      greaterThan(tester.getTopLeft(find.text('Done today (1)')).dy),
+      greaterThan(tester.getTopLeft(find.text('Completed (1)')).dy),
     );
 
     // The message with Undo goes away once the task has moved.
@@ -589,7 +781,7 @@ void main() {
 
   group('launch screen', () {
     final logo = find.image(LaunchScreen.logo);
-    final mainScreen = find.text('Upcoming Maintenance');
+    final mainScreen = find.text('HomeTrack Hub');
 
     testWidgets('shows the logo, then reveals the main screen', (tester) async {
       await startApp(tester);
