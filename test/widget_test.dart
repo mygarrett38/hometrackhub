@@ -846,6 +846,71 @@ void main() {
     expect(calendar.openSettingsCalls, 1);
   });
 
+  testWidgets('the tabs are ordered around the overview, which opens first', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    // The test screen is wide, so the tabs are on the side rail.
+    final labels = ['My Home', 'Calendar', 'Overview', 'Assist', 'Settings'];
+    final tops = [
+      for (final label in labels)
+        tester
+            .getCenter(
+              find.descendant(
+                of: find.byType(NavigationRail),
+                // The Overview tab is just the app's icon, without a label.
+                matching: label == 'Overview'
+                    ? find.byTooltip(label)
+                    : find.text(label),
+              ),
+            )
+            .dy,
+    ];
+    expect(tops, orderedEquals([...tops]..sort()));
+    expect(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.text('Overview'),
+      ),
+      findsNothing,
+    );
+    expect(
+      tester.widget<NavigationRail>(find.byType(NavigationRail)).selectedIndex,
+      labels.indexOf('Overview'),
+    );
+
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Assist'), findsOneWidget);
+  });
+
+  testWidgets('on phones, the overview is a round button above the bar', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 900) * 3;
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await pumpApp(tester);
+
+    final button = find.byTooltip('Overview');
+    final bar = find.byType(NavigationBar);
+    // Centered across the bar, sticking out a little above it.
+    expect(tester.getCenter(button).dx, tester.getCenter(bar).dx);
+    expect(tester.getTopLeft(button).dy, lessThan(tester.getTopLeft(bar).dy));
+    expect(
+      tester.getBottomLeft(button).dy,
+      greaterThan(tester.getTopLeft(bar).dy),
+    );
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    // The part above the bar can be tapped too.
+    await tester.tapAt(tester.getTopLeft(button) + const Offset(32, 4));
+    await tester.pumpAndSettle();
+    expect(tester.widget<NavigationBar>(bar).selectedIndex, 2);
+  });
+
   testWidgets('dark mode can be selected in settings', (tester) async {
     await pumpApp(tester);
 

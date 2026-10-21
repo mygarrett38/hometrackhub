@@ -9,9 +9,7 @@ import '../../../models/home_item_task.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
-import '../../../services/home_assistant_client.dart';
 import '../home_items/task_form_screen.dart';
-import 'home_assistant_chat_screen.dart';
 
 /// The first tab: a live summary of saved maintenance and expense data.
 class DashboardScreen extends StatefulWidget {
@@ -154,51 +152,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: colors.tertiary,
                     ),
                   ],
-                ),
-                const SizedBox(height: 28),
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => HomeAssistantChatScreen(
-                          client: HomeAssistantClient(),
-                        ),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: colors.primaryContainer,
-                            foregroundColor: colors.onPrimaryContainer,
-                            child: const Icon(Icons.auto_awesome),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'AI Home Assistant',
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Ask about a noise, repair, or basic maintenance.',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.chevron_right),
-                        ],
-                      ),
-                    ),
-                  ),
                 ),
                 const SizedBox(height: 24),
                 Text('Next Up', style: Theme.of(context).textTheme.titleLarge),
