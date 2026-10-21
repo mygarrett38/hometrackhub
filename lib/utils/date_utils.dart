@@ -24,3 +24,29 @@ String describeDueDate(DateTime dueDate, DateTime today) {
   if (days == 1) return 'Due tomorrow';
   return 'Due in $days days';
 }
+
+/// Describes when something is due, in weeks or months when it's far off:
+/// "Due in 3 months" past six weeks, "Due in 3 weeks" past two weeks, and
+/// otherwise as [describeDueDate] does, for example "Due in 5 days" or
+/// "Overdue by 2 days".
+String describeDueDateRoughly(DateTime dueDate, DateTime today) {
+  final days = calendarDaysBetween(today, dueDate);
+  if (days > 6 * 7) {
+    final months = (days / _averageDaysPerMonth).round();
+    return 'Due in $months ${months == 1 ? 'month' : 'months'}';
+  }
+  if (days > 14) {
+    final weeks = (days / 7).round();
+    return 'Due in $weeks weeks';
+  }
+  return describeDueDate(dueDate, today);
+}
+
+/// Describes when a home item's next task is due, for example "Next task
+/// due in 3 months" or "Next task overdue by 2 days". See
+/// [describeDueDateRoughly].
+String describeNextTaskDue(DateTime dueDate, DateTime today) =>
+    'Next task ${describeDueDateRoughly(dueDate, today).toLowerCase()}';
+
+/// 365.25 days a year spread over 12 months.
+const _averageDaysPerMonth = 365.25 / 12;

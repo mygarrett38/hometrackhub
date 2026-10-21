@@ -572,6 +572,70 @@ void main() {
     expect(find.text('Replace water filter'), findsNothing);
   });
 
+  testWidgets('My Home lists items by room, then by name', (tester) async {
+    await pumpApp(tester);
+    final controller = tester
+        .element(find.byType(HomeShell))
+        .read<HomeItemController>();
+    final today = dateOnly(DateTime.now());
+    for (final (id, name, location) in [
+      ('1', 'Stove', 'Kitchen'),
+      ('2', 'Car', ''),
+      ('3', 'Dishwasher', 'kitchen'),
+      ('4', 'Water heater', 'Basement'),
+    ]) {
+      await controller.addHomeItem(
+        HomeItem(
+          id: id,
+          name: name,
+          category: HomeItemCategory.custom,
+          location: location,
+          tasks: [
+            MaintenanceTask(
+              id: 't$id',
+              title: 'Check',
+              interval: const MaintenanceInterval.weeks(3),
+              startDate: today,
+            ),
+          ],
+        ),
+      );
+    }
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+
+    final order = [
+      'Basement',
+      'Water heater',
+      'Kitchen',
+      'Dishwasher',
+      'Stove',
+      'Unknown',
+      'Car',
+    ];
+    final tops = [
+      for (final text in order) tester.getTopLeft(find.text(text)).dy,
+    ];
+    expect(tops, orderedEquals([...tops]..sort()));
+    // "kitchen" and "Kitchen" are the same room.
+    expect(find.text('kitchen'), findsNothing);
+    expect(find.textContaining('task'), findsNWidgets(4));
+    // Only when the next task is due, without counting the tasks.
+    expect(find.text('Next task due in 3 weeks'), findsNWidgets(4));
+    // Each room's heading shows how many items are in it.
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('1'), findsNWidgets(2));
+
+    // Tapping a room's heading collapses it to just the heading.
+    await tester.tap(find.text('Kitchen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stove'), findsNothing);
+    expect(find.text('Water heater'), findsOneWidget);
+    await tester.tap(find.text('Kitchen'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stove'), findsOneWidget);
+  });
+
   testWidgets('each category lists only its own types', (tester) async {
     await pumpApp(tester);
 
