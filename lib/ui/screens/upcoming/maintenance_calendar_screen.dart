@@ -214,11 +214,6 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Today',
-                    icon: const Icon(Icons.today),
-                    onPressed: () => _show(today, _period),
-                  ),
                 ],
               ),
             ),
