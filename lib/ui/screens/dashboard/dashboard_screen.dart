@@ -70,6 +70,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               expense.date.isBefore(nextMonth),
         )
         .fold<double>(0, (total, expense) => total + expense.amount);
+    final monthlyExpenses = [
+      for (final item in controller.homeItems)
+        for (final expense in item.expenses)
+          if (!expense.date.isBefore(monthStart) && expense.date.isBefore(nextMonth))
+            _ExpenseDetailEntry(item, expense),
+    ]..sort((a, b) => b.expense.date.compareTo(a.expense.date));
     final nextTasks = controller.orderForList(activeTasks).take(5).toList();
     final completionHistory = [
       for (final item in controller.allTasks)
@@ -150,6 +156,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       value: '\$${spentThisMonth.toStringAsFixed(2)}',
                       icon: Icons.account_balance_wallet_outlined,
                       color: colors.tertiary,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => _MonthlyExpensesScreen(
+                            entries: monthlyExpenses,
+                            month: now,
+                            total: spentThisMonth,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -252,17 +267,22 @@ class _SummaryCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,7 +307,60 @@ class _SummaryCard extends StatelessWidget {
             ),
           ],
         ),
+        ),
       ),
+    );
+  }
+}
+
+class _ExpenseDetailEntry {
+  const _ExpenseDetailEntry(this.item, this.expense);
+
+  final HomeItem item;
+  final HomeExpense expense;
+}
+
+class _MonthlyExpensesScreen extends StatelessWidget {
+  const _MonthlyExpensesScreen({required this.entries, required this.month, required this.total});
+
+  final List<_ExpenseDetailEntry> entries;
+  final DateTime month;
+  final double total;
+
+  @override
+  Widget build(BuildContext context) {
+    final monthName = MaterialLocalizations.of(context).formatMonthYear(month);
+    return Scaffold(
+      appBar: AppBar(title: Text('$monthName Expenses')),
+      body: entries.isEmpty
+          ? const Center(child: Text('No expenses recorded this month.'))
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              children: [
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.account_balance_wallet_outlined),
+                    title: const Text('Total spent'),
+                    trailing: Text('\$${total.toStringAsFixed(2)}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(children: [
+                    for (var i = 0; i < entries.length; i++) ...[
+                      if (i > 0) const Divider(height: 1, indent: 16),
+                      ListTile(
+                        leading: const Icon(Icons.receipt_long_outlined),
+                        title: Text(entries[i].expense.description),
+                        subtitle: Text('${entries[i].item.name} · ${MaterialLocalizations.of(context).formatMediumDate(entries[i].expense.date)}'),
+                        trailing: Text('\$${entries[i].expense.amount.toStringAsFixed(2)}'),
+                      ),
+                    ],
+                  ]),
+                ),
+              ],
+            ),
     );
   }
 }
