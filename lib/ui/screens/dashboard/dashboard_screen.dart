@@ -190,7 +190,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       children: [
                         for (var i = 0; i < nextTasks.length; i++) ...[
-                          if (i > 0) const Divider(height: 1, indent: 16),
+                          if (i > 0) const Divider(height: 1),
                           _NextTaskTile(item: nextTasks[i]),
                         ],
                       ],
@@ -221,7 +221,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         for (final entry in completionHistory.take(5)) ...[
                           if (entry != completionHistory.first)
-                            const Divider(height: 1, indent: 16),
+                            const Divider(height: 1),
                           _CompletionHistoryTile(entry: entry),
                         ],
                       ],
@@ -349,7 +349,7 @@ class _MonthlyExpensesScreen extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: Column(children: [
                     for (var i = 0; i < entries.length; i++) ...[
-                      if (i > 0) const Divider(height: 1, indent: 16),
+                      if (i > 0) const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.receipt_long_outlined),
                         title: Text(entries[i].expense.description),
