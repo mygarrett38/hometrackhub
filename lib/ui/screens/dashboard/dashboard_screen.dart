@@ -10,6 +10,7 @@ import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../home_items/task_form_screen.dart';
+import 'dashboard_setup_card.dart';
 
 /// The first tab: a live summary of saved maintenance and expense data.
 class DashboardScreen extends StatefulWidget {
@@ -121,6 +122,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                if (controller.hasNoTasks) ...[
+                  const DashboardSetupCard(),
+                  const SizedBox(height: 20),
+                ],
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -178,7 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Center(
                         child: Text(
                           controller.allTasks.isEmpty
-                              ? 'Add a home item to start planning maintenance.'
+                              ? 'Your upcoming maintenance will appear here.'
                               : 'You’re all caught up for now.',
                         ),
                       ),
