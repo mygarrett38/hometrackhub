@@ -172,9 +172,11 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
           padding: const EdgeInsets.only(bottom: 16),
           children: [
             // The period's name, which opens a menu to switch between weeks,
-            // months and years, and a button back to today.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+            // months and years. As tall as an app bar, with the name centered
+            // in it, so it lines up with the other tabs' titles.
+            Container(
+              height: kToolbarHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Row(
                 children: [
                   Expanded(

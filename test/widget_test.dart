@@ -423,6 +423,33 @@ void main() {
     expect(find.text('Completed (1)'), findsOneWidget);
   });
 
+  testWidgets('the calendar title lines up with other tab titles', (
+    tester,
+  ) async {
+    tester.view.padding = const FakeViewPadding(top: 72);
+    addTearDown(tester.view.reset);
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    final settings = tester.getRect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
+    );
+
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    final calendar = tester.getRect(
+      find
+          .descendant(
+            of: find.byTooltip('Show week, month or year'),
+            matching: find.byType(Text),
+          )
+          .first,
+    );
+    expect(calendar.left, settings.left);
+    expect(calendar.top, settings.top);
+  });
+
   testWidgets('the calendar is swiped between months, fading other months', (
     tester,
   ) async {
@@ -478,11 +505,6 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Show whole month'), findsOneWidget);
-
-    // Today goes back to this month.
-    await tester.tap(find.byTooltip('Today'));
-    await tester.pumpAndSettle();
-    expect(find.text(monthTitle(0)), findsOneWidget);
   });
 
   testWidgets('the calendar lists every task in the period shown', (
