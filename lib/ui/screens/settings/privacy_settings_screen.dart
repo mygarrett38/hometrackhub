@@ -9,8 +9,18 @@ import '../../../state/settings_controller.dart';
 
 /// Privacy settings: network scanning, notification details, and exporting
 /// or deleting the user's data.
-class PrivacySettingsScreen extends StatelessWidget {
+class PrivacySettingsScreen extends StatefulWidget {
   const PrivacySettingsScreen({super.key});
+
+  @override
+  State<PrivacySettingsScreen> createState() => _PrivacySettingsScreenState();
+}
+
+class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
+  // Confirmations shown in place of a row's usual description once its
+  // action is done.
+  bool _exported = false;
+  bool _deleted = false;
 
   @override
   Widget build(BuildContext context) {
@@ -59,8 +69,12 @@ class PrivacySettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.copy_all_outlined),
             title: const Text('Export my data'),
-            subtitle: const Text('Copy all of your data to the clipboard'),
-            onTap: () => _exportData(context),
+            subtitle: Text(
+              _exported
+                  ? 'Your data was copied to the clipboard'
+                  : 'Copy all of your data to the clipboard',
+            ),
+            onTap: _exportData,
           ),
           ListTile(
             leading: Icon(Icons.delete_forever_outlined, color: errorColor),
@@ -68,16 +82,19 @@ class PrivacySettingsScreen extends StatelessWidget {
               'Delete all my data',
               style: TextStyle(color: errorColor),
             ),
-            subtitle: const Text('Removes all home items and settings'),
-            onTap: () => _confirmDeleteAll(context),
+            subtitle: Text(
+              _deleted
+                  ? 'All data was deleted'
+                  : 'Removes all home items and settings',
+            ),
+            onTap: _confirmDeleteAll,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _exportData(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _exportData() async {
     final export = {
       'exportedAt': DateTime.now().toIso8601String(),
       'settings': context.read<SettingsController>().settings.toJson(),
@@ -88,15 +105,12 @@ class PrivacySettingsScreen extends StatelessWidget {
     };
     final json = const JsonEncoder.withIndent('  ').convert(export);
     await Clipboard.setData(ClipboardData(text: json));
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Your data was copied to the clipboard.')),
-    );
+    if (mounted) setState(() => _exported = true);
   }
 
-  Future<void> _confirmDeleteAll(BuildContext context) async {
+  Future<void> _confirmDeleteAll() async {
     final homeItems = context.read<HomeItemController>();
     final settings = context.read<SettingsController>();
-    final messenger = ScaffoldMessenger.of(context);
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -123,9 +137,7 @@ class PrivacySettingsScreen extends StatelessWidget {
     if (confirmed ?? false) {
       await homeItems.deleteAll();
       await settings.reset();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('All data was deleted.')),
-      );
+      if (mounted) setState(() => _deleted = true);
     }
   }
 }

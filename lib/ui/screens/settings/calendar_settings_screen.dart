@@ -27,6 +27,9 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
   /// prompt.
   bool _isTurningOn = false;
 
+  /// Why calendar sync couldn't be turned on, shown under the switch.
+  _TurnOnProblem? _problem;
+
   CalendarService get _service => context.read<CalendarService>();
 
   @override
@@ -63,28 +66,25 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
     setState(() {
       _hasAccess = hasAccess;
       _calendars = calendars;
+      // Drop a problem the user has since fixed, such as by allowing access
+      // in the device settings.
+      if ((_problem == _TurnOnProblem.noAccess && hasAccess) ||
+          (_problem == _TurnOnProblem.noCalendars && calendars.isNotEmpty)) {
+        _problem = null;
+      }
     });
   }
 
   Future<void> _turnOn() async {
     final service = _service;
     final controller = context.read<SettingsController>();
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _isTurningOn = true);
+    setState(() {
+      _isTurningOn = true;
+      _problem = null;
+    });
     try {
       if (!await service.requestAccess()) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Allow calendar access in Settings to add tasks to your '
-              'calendar.',
-            ),
-            action: SnackBarAction(
-              label: 'Settings',
-              onPressed: service.openAppSettings,
-            ),
-          ),
-        );
+        if (mounted) setState(() => _problem = _TurnOnProblem.noAccess);
         return;
       }
       final calendars = await service.listWritableCalendars();
@@ -94,14 +94,7 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
         _calendars = calendars;
       });
       if (calendars.isEmpty) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'There is no calendar on this device that tasks can be '
-              'added to.',
-            ),
-          ),
-        );
+        setState(() => _problem = _TurnOnProblem.noCalendars);
         return;
       }
 
@@ -122,9 +115,7 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
       );
     } catch (error) {
       debugPrint('Could not turn on calendar sync: $error');
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not open your calendars.')),
-      );
+      if (mounted) setState(() => _problem = _TurnOnProblem.failed);
     } finally {
       if (mounted) setState(() => _isTurningOn = false);
     }
@@ -186,10 +177,34 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
                   ? null
                   : (turnOn) => turnOn ? _turnOn() : _turnOff(),
             ),
+            if (!enabled && _problem != null) _problemRow(_problem!),
             if (enabled) ..._calendarChoices(settings.syncCalendarId),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _problemRow(_TurnOnProblem problem) {
+    return ListTile(
+      leading: Icon(
+        Icons.warning_amber_rounded,
+        color: Theme.of(context).colorScheme.error,
+      ),
+      title: Text(switch (problem) {
+        _TurnOnProblem.noAccess =>
+          'Allow calendar access in Settings to add tasks to your calendar.',
+        _TurnOnProblem.noCalendars =>
+          'There is no calendar on this device that tasks can be added to. '
+              'Add an account in your calendar app, then try again.',
+        _TurnOnProblem.failed => 'Could not open your calendars. Try again.',
+      }),
+      trailing: problem == _TurnOnProblem.noAccess
+          ? TextButton(
+              onPressed: _service.openAppSettings,
+              child: const Text('Settings'),
+            )
+          : null,
     );
   }
 
@@ -290,6 +305,18 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
       ),
     ];
   }
+}
+
+/// Why turning on calendar sync didn't work.
+enum _TurnOnProblem {
+  /// The user turned down calendar access.
+  noAccess,
+
+  /// The device has no calendar tasks can be added to.
+  noCalendars,
+
+  /// Something went wrong loading the calendars.
+  failed,
 }
 
 /// Step-by-step instructions for making a calendar just for maintenance

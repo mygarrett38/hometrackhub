@@ -19,8 +19,22 @@ const weekdayNames = {
 
 /// Settings for the weekly or monthly maintenance overview notification.
 /// Reminders for individual tasks are set on each task.
-class NotificationSettingsScreen extends StatelessWidget {
+class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
+
+  @override
+  State<NotificationSettingsScreen> createState() =>
+      _NotificationSettingsScreenState();
+}
+
+class _NotificationSettingsScreenState
+    extends State<NotificationSettingsScreen> {
+  /// Whether notifications turned out to be blocked when the overview was
+  /// turned on.
+  bool _blocked = false;
+
+  /// Whether the device's notification settings couldn't be opened.
+  bool _couldNotOpenSettings = false;
 
   @override
   Widget build(BuildContext context) {
@@ -54,14 +68,13 @@ class NotificationSettingsScreen extends StatelessWidget {
                     ),
                 ],
                 selected: {settings.overviewFrequency},
-                onSelectionChanged: (selection) => _setOverviewFrequency(
-                  context,
-                  controller,
-                  selection.single,
-                ),
+                onSelectionChanged: (selection) =>
+                    _setOverviewFrequency(controller, selection.single),
               ),
             ),
           ),
+          if (_blocked && settings.overviewFrequency != OverviewFrequency.off)
+            const NotificationsBlockedNotice(),
           if (settings.overviewFrequency == OverviewFrequency.weekly)
             ListTile(
               leading: const Icon(Icons.calendar_view_week),
@@ -114,8 +127,17 @@ class NotificationSettingsScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.phone_android),
             title: const Text('Notification settings'),
+            subtitle: _couldNotOpenSettings
+                ? Text(
+                    "Could not open notification settings. Open your "
+                    "device's Settings app and find HomeTrackHub instead.",
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  )
+                : null,
             trailing: const Icon(Icons.open_in_new),
-            onTap: () => _openDeviceSettings(context),
+            onTap: _openDeviceSettings,
           ),
           ListTile(
             leading: const Icon(Icons.notification_add_outlined),
@@ -129,33 +151,23 @@ class NotificationSettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _openDeviceSettings(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _openDeviceSettings() async {
     final opened = await context
         .read<NotificationService>()
         .openDeviceNotificationSettings();
-    if (!opened) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Could not open notification settings. Open your device's "
-            'Settings app and find HomeTrackHub instead.',
-          ),
-        ),
-      );
-    }
+    if (mounted) setState(() => _couldNotOpenSettings = !opened);
   }
 
   Future<void> _setOverviewFrequency(
-    BuildContext context,
     SettingsController controller,
     OverviewFrequency frequency,
   ) async {
     await controller.update(
       controller.settings.copyWith(overviewFrequency: frequency),
     );
-    if (frequency != OverviewFrequency.off && context.mounted) {
-      await requestNotificationPermission(context);
+    if (frequency != OverviewFrequency.off && mounted) {
+      final allowed = await requestNotificationPermission(context);
+      if (mounted) setState(() => _blocked = !allowed);
     }
   }
 }

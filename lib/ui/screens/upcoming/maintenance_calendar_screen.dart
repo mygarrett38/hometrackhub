@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -51,6 +53,15 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
 
   late final PageController _pages;
 
+  /// The task just marked done or undone, shown with an Undo button between
+  /// the calendar and the task lists for a few seconds.
+  TaskDoneChange? _doneChange;
+  Timer? _doneChangeTimer;
+
+  /// The section ("Overdue", "Due" or "Completed") whose card [_doneChange]
+  /// was made in.
+  String? _doneChangeSection;
+
   @override
   void initState() {
     super.initState();
@@ -61,8 +72,49 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
 
   @override
   void dispose() {
+    _doneChangeTimer?.cancel();
     _pages.dispose();
     super.dispose();
+  }
+
+  void _showDoneChange(TaskDoneChange change, String section) {
+    if (!mounted) return;
+    setState(() {
+      _doneChange = change;
+      _doneChangeSection = section;
+    });
+    // Undo stays available while the task returns to its list position.
+    _doneChangeTimer?.cancel();
+    _doneChangeTimer = Timer(HomeItemController.doneTaskMoveDelay, () {
+      if (mounted) setState(() => _doneChange = null);
+    });
+  }
+
+  /// The section whose card shows [_doneChange]: the one it was made in,
+  /// or if the task has since left that card, the first one it's now in.
+  String? _doneChangeNoteSection(_ListedTasks listed) {
+    final change = _doneChange;
+    if (change == null) return null;
+    final sections = {
+      'Overdue': listed.overdue,
+      'Due': listed.due,
+      'Completed': listed.completed,
+    };
+    bool listsTask(String section) =>
+        sections[section]!.any((item) => item.task.id == change.taskId);
+    if (_doneChangeSection case final section?
+        when sections.containsKey(section) && listsTask(section)) {
+      return section;
+    }
+    return sections.keys.where(listsTask).firstOrNull;
+  }
+
+  Future<void> _undoDoneChange() async {
+    final change = _doneChange;
+    if (change == null) return;
+    _doneChangeTimer?.cancel();
+    setState(() => _doneChange = null);
+    await change.undo();
   }
 
   /// The page that shows the period [day] is in.
@@ -163,6 +215,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
       selectedDay == null ? range : _DayRange.days(selectedDay, 1),
       today,
     );
+    final noteSection = _doneChangeNoteSection(listed);
 
     return Scaffold(
       // There is no app bar, so the list keeps clear of the status bar.
@@ -270,6 +323,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                 listed.overdue,
                 accent: colors.error,
                 dueOn: listed.dueOn,
+                showsDoneChange: noteSection == 'Overdue',
               ),
               ..._section(
                 context,
@@ -277,6 +331,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                 listed.due,
                 accent: colors.primary,
                 dueOn: listed.dueOn,
+                showsDoneChange: noteSection == 'Due',
               ),
               ..._section(
                 context,
@@ -286,6 +341,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                 completedOn: listed.completedOn,
                 // Finished tasks are a record, so they don't open.
                 opensTasks: false,
+                showsDoneChange: noteSection == 'Completed',
               ),
             ],
           ],
@@ -373,6 +429,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
     Map<HomeItemTask, DateTime> dueOn = const {},
     Map<HomeItemTask, DateTime> completedOn = const {},
     bool opensTasks = true,
+    bool showsDoneChange = false,
   }) {
     if (items.isEmpty) return [];
     final theme = Theme.of(context);
@@ -391,11 +448,39 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // A fixed height that fits the Undo button, so the card doesn't
+              // change size when the note comes and goes.
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  '$title (${items.length})',
-                  style: Theme.of(context).textTheme.titleMedium,
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$title (${items.length})',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      // Appears straight away, but fades out when it goes.
+                      AnimatedSwitcher(
+                        duration: Duration.zero,
+                        reverseDuration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 250),
+                        child: showsDoneChange && _doneChange != null
+                            ? _DoneChangeNote(
+                                // The same key for every note, so a new one
+                                // replaces the last in place rather than
+                                // showing through it as it fades.
+                                key: const ValueKey('note'),
+                                change: _doneChange!,
+                                onUndo: _undoDoneChange,
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               for (final item in items)
@@ -407,6 +492,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                   dueDate: dueOn[item],
                   completedOn: completedOn[item],
                   showArrow: opensTasks,
+                  onDoneChanged: (change) => _showDoneChange(change, title),
                   onTap: opensTasks
                       ? () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -424,6 +510,61 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
         ),
       ),
     ];
+  }
+}
+
+/// A short note that a task was just marked done or undone, with a button
+/// to undo it, for the top right of the card the task is in.
+class _DoneChangeNote extends StatelessWidget {
+  const _DoneChangeNote({
+    super.key,
+    required this.change,
+    required this.onUndo,
+  });
+
+  final TaskDoneChange change;
+  final VoidCallback onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      // A light tint of the usual dark message color, so it reads as a
+      // message without standing out as much as a solid one.
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.inverseSurface.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                change.markedDone ? 'Marked as done' : 'Marked incomplete',
+                // The card has no room for the task's name, but screen
+                // readers still hear it.
+                semanticsLabel: change.message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurface,
+                ),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: onUndo,
+                child: const Text('Undo'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

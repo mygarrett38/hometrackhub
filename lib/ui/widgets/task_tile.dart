@@ -20,6 +20,7 @@ class TaskTile extends StatelessWidget {
     this.completedOn,
     this.onTap,
     this.onDelete,
+    this.onDoneChanged,
   });
 
   final HomeItemTask item;
@@ -55,6 +56,10 @@ class TaskTile extends StatelessWidget {
 
   /// When set, the row has a delete button in place of the done button.
   final VoidCallback? onDelete;
+
+  /// Called after the done button marks the task done or undoes it, so the
+  /// screen can offer to undo that.
+  final ValueChanged<TaskDoneChange>? onDoneChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -130,8 +135,14 @@ class TaskTile extends StatelessWidget {
                           : completedToday
                           ? 'Unmark done today'
                           : 'Unmark done',
-                      onPressed: () =>
-                          markTaskDoneWithUndo(context, item, isDone: checked),
+                      onPressed: () async {
+                        final change = await toggleTaskDone(
+                          context.read<HomeItemController>(),
+                          item,
+                          isDone: checked,
+                        );
+                        onDoneChanged?.call(change);
+                      },
                     )
                   // Same size as the button, so the row lines up with the others.
                   : const SizedBox.square(
@@ -155,17 +166,37 @@ class TaskTile extends StatelessWidget {
   }
 }
 
-/// Toggles today's completion and shows a message with an Undo button.
+/// A task that was just marked done, or unmarked, and how to take it back.
+class TaskDoneChange {
+  const TaskDoneChange({
+    required this.taskId,
+    required this.markedDone,
+    required this.message,
+    required this.undo,
+  });
+
+  /// The [MaintenanceTask.id] of the task that changed.
+  final String taskId;
+
+  /// Whether the task was marked done, rather than unmarked.
+  final bool markedDone;
+
+  /// For example 'Marked "Replace water filter" as done'.
+  final String message;
+
+  /// Puts the task back the way it was.
+  final Future<void> Function() undo;
+}
+
+/// Toggles today's completion of [item].
 ///
 /// Pass [isDone] to say whether the row shows the task as done. When true,
 /// the task's latest completion is undone, even if it wasn't today.
-Future<void> markTaskDoneWithUndo(
-  BuildContext context,
+Future<TaskDoneChange> toggleTaskDone(
+  HomeItemController controller,
   HomeItemTask item, {
   bool? isDone,
 }) async {
-  final controller = context.read<HomeItemController>();
-  final messenger = ScaffoldMessenger.of(context);
   final previousTask = item.task;
   final today = dateOnly(DateTime.now());
   final completedToday =
@@ -183,26 +214,12 @@ Future<void> markTaskDoneWithUndo(
     );
   }
 
-  if (!context.mounted) return;
-  messenger.hideCurrentSnackBar();
-  final snackBar = messenger.showSnackBar(
-    SnackBar(
-      content: Text(
-        completedToday
-            ? 'Unmarked "${previousTask.title}" as done'
-            : 'Marked "${previousTask.title}" as done',
-      ),
-      action: SnackBarAction(
-        label: 'Undo',
-        onPressed: () => controller.saveTask(item.homeItem.id, previousTask),
-      ),
-    ),
+  return TaskDoneChange(
+    taskId: previousTask.id,
+    markedDone: !completedToday,
+    message: completedToday
+        ? 'Unmarked "${previousTask.title}" as done'
+        : 'Marked "${previousTask.title}" as done',
+    undo: () => controller.saveTask(item.homeItem.id, previousTask),
   );
-
-  // Keep Undo available briefly while the task returns to its list position.
-  var closed = false;
-  snackBar.closed.then((_) => closed = true);
-  Future.delayed(HomeItemController.doneTaskMoveDelay, () {
-    if (!closed) snackBar.close();
-  });
 }

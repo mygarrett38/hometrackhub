@@ -71,6 +71,10 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   DateTime? _lastCompleted;
   TaskReminder _reminder = const TaskReminder();
 
+  /// Whether notifications turned out to be blocked when the reminder was
+  /// turned on, so it won't arrive.
+  bool _notificationsBlocked = false;
+
   MaintenanceTask? get _existing => widget.existing;
 
   @override
@@ -158,7 +162,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           : _reminder.copyWith(enabled: true, daysBefore: choice),
     );
     if (!wasEnabled && _reminder.enabled) {
-      await requestNotificationPermission(context);
+      final allowed = await requestNotificationPermission(context);
+      if (mounted) setState(() => _notificationsBlocked = !allowed);
     }
   }
 
@@ -300,6 +305,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
+                    if (_notificationsBlocked)
+                      const NotificationsBlockedNotice(),
                   ],
                 ],
               ),

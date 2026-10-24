@@ -452,10 +452,41 @@ class _RecordExpenseDialogState extends State<_RecordExpenseDialog> {
   late String _itemId;
   DateTime _date = dateOnly(DateTime.now());
 
+  /// Shown under a field after trying to save without filling it in
+  /// properly, until the field is changed.
+  String? _descriptionError;
+  String? _amountError;
+
   @override
   void initState() {
     super.initState();
     _itemId = widget.items.first.id;
+  }
+
+  void _save() {
+    final description = _description.text.trim();
+    final amount = double.tryParse(_amount.text.trim());
+    final validAmount = amount != null && amount > 0;
+    if (description.isEmpty || !validAmount) {
+      setState(() {
+        _descriptionError = description.isEmpty
+            ? 'Enter a description'
+            : null;
+        _amountError = validAmount ? null : 'Enter an amount above \$0';
+      });
+      return;
+    }
+    Navigator.of(context).pop(
+      _ExpenseEntry(
+        _itemId,
+        HomeExpense(
+          id: generateId(),
+          description: description,
+          amount: amount,
+          date: _date,
+        ),
+      ),
+    );
   }
 
   @override
@@ -487,15 +518,27 @@ class _RecordExpenseDialogState extends State<_RecordExpenseDialog> {
             ),
             TextField(
               controller: _description,
-              decoration: const InputDecoration(labelText: 'Description'),
+              decoration: InputDecoration(
+                labelText: 'Description',
+                errorText: _descriptionError,
+              ),
               textCapitalization: TextCapitalization.sentences,
+              onChanged: (_) {
+                if (_descriptionError != null) {
+                  setState(() => _descriptionError = null);
+                }
+              },
             ),
             TextField(
               controller: _amount,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Amount',
                 prefixText: '\$',
+                errorText: _amountError,
               ),
+              onChanged: (_) {
+                if (_amountError != null) setState(() => _amountError = null);
+              },
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -525,33 +568,7 @@ class _RecordExpenseDialogState extends State<_RecordExpenseDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: () {
-            final amount = double.tryParse(_amount.text.trim());
-            if (amount == null ||
-                amount <= 0 ||
-                _description.text.trim().isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Enter a description and valid amount.'),
-                ),
-              );
-              return;
-            }
-            Navigator.of(context).pop(
-              _ExpenseEntry(
-                _itemId,
-                HomeExpense(
-                  id: generateId(),
-                  description: _description.text.trim(),
-                  amount: amount,
-                  date: _date,
-                ),
-              ),
-            );
-          },
-          child: const Text('Save expense'),
-        ),
+        FilledButton(onPressed: _save, child: const Text('Save expense')),
       ],
     );
   }

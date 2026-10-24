@@ -7,6 +7,7 @@ import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
+import 'package:hometrackhub/models/task_reminder.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/notification_service.dart';
@@ -26,8 +27,11 @@ class FakeNotificationService implements NotificationService {
   @override
   Future<void> initialize() async {}
 
+  /// What the user answers when asked to allow notifications.
+  bool permissionGranted = true;
+
   @override
-  Future<bool> requestPermission() async => true;
+  Future<bool> requestPermission() async => permissionGranted;
 
   @override
   Future<void> replaceScheduledReminders(
@@ -627,6 +631,136 @@ void main() {
     );
   });
 
+  testWidgets('marking a task done offers Undo at the top of its card', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final lastWeek = dateOnly(DateTime.now()).subtract(const Duration(days: 7));
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'filter',
+        title: 'Replace water filter',
+        interval: const MaintenanceInterval.weeks(1),
+        startDate: lastWeek,
+      ),
+    ]);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    final markDone = find.byTooltip('Mark done today');
+    await scrollTo(tester, markDone);
+
+    final message = find.text('Marked as done');
+    // The fade nearest the message is its own.
+    double opacity() => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(of: message, matching: find.byType(FadeTransition))
+              .first,
+        )
+        .opacity
+        .value;
+
+    // It shows straight away, without fading in.
+    await tester.tap(markDone);
+    await tester.pump();
+    expect(opacity(), 1);
+    expect(find.byType(SnackBar), findsNothing);
+    await tester.pumpAndSettle();
+
+    // It's on the right of the heading of the card the task is in, and
+    // screen readers hear which task it was.
+    final heading = find.text('Due (1)');
+    expect(tester.getCenter(message).dy, tester.getCenter(heading).dy);
+    expect(
+      tester.getTopLeft(message).dx,
+      greaterThanOrEqualTo(tester.getTopRight(heading).dx),
+    );
+    expect(
+      tester.widget<Text>(message).semanticsLabel,
+      'Marked "Replace water filter" as done',
+    );
+
+    // Undo puts the task back.
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(message, findsNothing);
+    expect(find.byTooltip('Mark done today'), findsOneWidget);
+
+    // Otherwise it fades out once the task has moved down.
+    await tester.tap(find.byTooltip('Mark done today'));
+    await tester.pumpAndSettle();
+    expect(opacity(), 1);
+    await tester.pump(HomeItemController.doneTaskMoveDelay);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opacity(), inExclusiveRange(0, 1));
+    await tester.pumpAndSettle();
+    expect(message, findsNothing);
+    expect(find.text('Completed (1)'), findsOneWidget);
+  });
+
+  testWidgets('an incomplete expense is explained under its fields', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await addTasks(tester, []);
+
+    await tester.tap(find.byTooltip('Record an expense'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save expense'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.text('Enter a description'), findsOneWidget);
+    expect(find.text('Enter an amount above \$0'), findsOneWidget);
+
+    // Each message goes away once its field is changed.
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Description'),
+      'New filter',
+    );
+    await tester.pump();
+    expect(find.text('Enter a description'), findsNothing);
+    expect(find.text('Enter an amount above \$0'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Amount'), '25');
+    await tester.tap(find.text('Save expense'));
+    await tester.pumpAndSettle();
+    expect(find.text('Record an expense'), findsNothing);
+  });
+
+  testWidgets('turning on a reminder with notifications blocked says so', (
+    tester,
+  ) async {
+    final notifications = FakeNotificationService()..permissionGranted = false;
+    await pumpApp(tester, notifications: notifications);
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'filter',
+        title: 'Replace water filter',
+        interval: const MaintenanceInterval.weeks(1),
+        startDate: dateOnly(DateTime.now()),
+        reminder: const TaskReminder(enabled: false),
+      ),
+    ]);
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await openHomeItem(tester, 'House');
+    await tester.tap(find.text('Replace water filter'));
+    await tester.pumpAndSettle();
+
+    final form = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(find.text('Never'), 200, scrollable: form);
+    await tester.tap(find.text('Never'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('On the due date').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.textContaining('Notifications are blocked'),
+      200,
+      scrollable: form,
+    );
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
   testWidgets('tasks marked done move to the bottom after a few seconds', (
     tester,
   ) async {
@@ -1095,8 +1229,19 @@ void main() {
       tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
       isFalse,
     );
-    expect(find.textContaining('Allow calendar access'), findsOneWidget);
-    await tester.tap(find.widgetWithText(SnackBarAction, 'Settings'));
+    // The problem is explained on the screen, not in a pop-up.
+    expect(find.byType(SnackBar), findsNothing);
+    final problem = find.widgetWithText(
+      ListTile,
+      'Allow calendar access in Settings to add tasks to your calendar.',
+    );
+    expect(problem, findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: problem,
+        matching: find.widgetWithText(TextButton, 'Settings'),
+      ),
+    );
     expect(calendar.openSettingsCalls, 1);
   });
 
