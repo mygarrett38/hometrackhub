@@ -5,7 +5,7 @@ import '../../../models/home_item_task.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../widgets/task_tile.dart';
-import '../home_items/home_item_form_screen.dart';
+import '../home_items/task_form_screen.dart';
 
 /// How much time the calendar shows at once.
 enum CalendarPeriod {
@@ -267,14 +267,23 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                 'Overdue',
                 listed.overdue,
                 accent: colors.error,
+                dueOn: listed.dueOn,
               ),
-              ..._section(context, 'Due', listed.due, accent: colors.primary),
+              ..._section(
+                context,
+                'Due',
+                listed.due,
+                accent: colors.primary,
+                dueOn: listed.dueOn,
+              ),
               ..._section(
                 context,
                 'Completed',
                 listed.completed,
                 accent: colors.secondary,
                 completedOn: listed.completedOn,
+                // Finished tasks are a record, so they don't open.
+                opensTasks: false,
               ),
             ],
           ],
@@ -359,7 +368,9 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
     String title,
     List<HomeItemTask> items, {
     required Color accent,
+    Map<HomeItemTask, DateTime> dueOn = const {},
     Map<HomeItemTask, DateTime> completedOn = const {},
+    bool opensTasks = true,
   }) {
     if (items.isEmpty) return [];
     final theme = Theme.of(context);
@@ -388,13 +399,23 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
               for (final item in items)
                 TaskTile(
                   item: item,
+                  // When it's due or was done matters more here than how
+                  // often it repeats.
+                  showInterval: false,
+                  dueDate: dueOn[item],
                   completedOn: completedOn[item],
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          HomeItemFormScreen(existing: item.homeItem),
-                    ),
-                  ),
+                  showArrow: opensTasks,
+                  onTap: opensTasks
+                      ? () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => TaskFormScreen(
+                              homeItemId: item.homeItem.id,
+                              homeItemName: item.homeItem.name,
+                              existing: item.task,
+                            ),
+                          ),
+                        )
+                      : null,
                 ),
             ],
           ),
@@ -718,7 +739,13 @@ class _DayRange {
 /// completed. A task is listed at most once in each group, even if it is due
 /// or was completed several times in the range.
 class _ListedTasks {
-  _ListedTasks._(this.overdue, this.due, this.completed, this.completedOn);
+  _ListedTasks._(
+    this.overdue,
+    this.due,
+    this.completed,
+    this.dueOn,
+    this.completedOn,
+  );
 
   factory _ListedTasks.between(
     HomeItemController controller,
@@ -770,6 +797,9 @@ class _ListedTasks {
       [for (final (_, item) in due) item],
       [for (final (_, item) in completed) item],
       Map.identity()..addEntries([
+        for (final (date, item) in [...overdue, ...due]) MapEntry(item, date),
+      ]),
+      Map.identity()..addEntries([
         for (final (date, item) in completed) MapEntry(item, date),
       ]),
     );
@@ -778,6 +808,11 @@ class _ListedTasks {
   final List<HomeItemTask> overdue;
   final List<HomeItemTask> due;
   final List<HomeItemTask> completed;
+
+  /// The day each of [overdue] and [due] is listed for, which they're sorted
+  /// by. For a period after this one, that's the first time the task repeats
+  /// in it rather than its next due date.
+  final Map<HomeItemTask, DateTime> dueOn;
 
   /// The latest day in the range that each of [completed] was done.
   final Map<HomeItemTask, DateTime> completedOn;

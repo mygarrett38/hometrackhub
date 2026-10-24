@@ -5,13 +5,18 @@ import '../../models/home_item_task.dart';
 import '../../state/home_item_controller.dart';
 import '../../utils/date_utils.dart';
 
-/// A list row for one maintenance task showing how often it repeats, when it
-/// is due, and a button to mark it done (or to delete it, see [onDelete]).
+/// A list row for one maintenance task showing how often it repeats (see
+/// [showInterval]), when it's due or was completed (see [showTiming]), and a
+/// button to mark it done (or to delete it, see [onDelete]).
 class TaskTile extends StatelessWidget {
   const TaskTile({
     super.key,
     required this.item,
     this.showHomeItemName = true,
+    this.showInterval = true,
+    this.showTiming = true,
+    this.showArrow = false,
+    this.dueDate,
     this.completedOn,
     this.onTap,
     this.onDelete,
@@ -23,10 +28,28 @@ class TaskTile extends StatelessWidget {
   /// page, where it would be repeated on every row.
   final bool showHomeItemName;
 
+  /// Whether to say how often the task repeats.
+  final bool showInterval;
+
+  /// Whether to say when the task is due, such as "Due in 3 weeks", or for
+  /// a task shown as done, when it was completed.
+  final bool showTiming;
+
+  /// Whether to show an arrow at the end of the row, hinting that tapping it
+  /// opens the task to change it.
+  final bool showArrow;
+
+  /// The due date this row stands for, when the task is listed for a later
+  /// time it repeats rather than its next due date. Used by [showTiming].
+  final DateTime? dueDate;
+
   /// The completion this row stands for, in a list of completed tasks. The
   /// row is shown checked even if the task wasn't done today. Only the
   /// task's latest completion can be undone, so the check can't be tapped
   /// for an earlier one.
+  ///
+  /// Once a completion is more than a day old it's settled: the row can't
+  /// be unchecked or tapped.
   final DateTime? completedOn;
   final VoidCallback? onTap;
 
@@ -42,26 +65,47 @@ class TaskTile extends StatelessWidget {
         lastCompleted != null && dateOnly(lastCompleted) == today;
     final completedOn = this.completedOn;
     final checked = completedOn != null || completedToday;
+    final settled =
+        completedOn != null && calendarDaysBetween(completedOn, today) > 1;
     final canToggle =
         completedOn == null ||
-        (lastCompleted != null &&
+        (!settled &&
+            lastCompleted != null &&
             dateOnly(lastCompleted) == dateOnly(completedOn));
-    final daysUntilDue = calendarDaysBetween(today, item.dueDate);
+    final dueDate = this.dueDate ?? item.dueDate;
+    final daysUntilDue = calendarDaysBetween(today, dueDate);
     final colors = Theme.of(context).colorScheme;
     final dueColor = daysUntilDue < 0
         ? colors.error
         : daysUntilDue <= 7
         ? colors.tertiary
-        : colors.onSurfaceVariant;
+        : null;
+
+    final TextSpan? timing;
+    if (!showTiming) {
+      timing = null;
+    } else if (checked) {
+      timing = TextSpan(
+        text: describeCompletedRoughly(completedOn ?? today, today),
+      );
+    } else {
+      timing = TextSpan(
+        text: describeDueDateRoughly(dueDate, today),
+        style: TextStyle(color: dueColor),
+      );
+    }
 
     final details = [
-      if (showHomeItemName) item.homeItem.name,
-      task.interval.label,
-      if (!task.reminder.enabled) 'Reminder off',
-    ].join(' · ');
+      if (showHomeItemName) TextSpan(text: item.homeItem.name),
+      if (showInterval) TextSpan(text: task.interval.label),
+      ?timing,
+      // A reminder no longer matters once the task is done.
+      if (!task.reminder.enabled && !checked)
+        const TextSpan(text: 'Reminder off'),
+    ];
 
     return ListTile(
-      onTap: onTap,
+      onTap: settled ? null : onTap,
       // Lines the done button's icon up with the left edge of the headings
       // above the list.
       contentPadding: const EdgeInsets.only(left: 4, right: 16),
@@ -96,18 +140,17 @@ class TaskTile extends StatelessWidget {
                     ),
             ),
       title: Text(task.title),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(details),
-          Text(
-            '${describeDueDate(item.dueDate, today)} '
-            '(${MaterialLocalizations.of(context).formatMediumDate(item.dueDate)})',
-            style: TextStyle(color: dueColor),
-          ),
-        ],
+      subtitle: Text.rich(
+        TextSpan(
+          children: [
+            for (final (index, part) in details.indexed) ...[
+              if (index > 0) const TextSpan(text: ' · '),
+              part,
+            ],
+          ],
+        ),
       ),
-      isThreeLine: true,
+      trailing: showArrow ? const Icon(Icons.chevron_right) : null,
     );
   }
 }

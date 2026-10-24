@@ -260,15 +260,167 @@ void main() {
       find.descendant(of: row, matching: find.byIcon(Icons.check_circle)),
       findsOneWidget,
     );
+    // A completed task says when it was done instead of when it's due, and
+    // the calendar leaves out how often it repeats.
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text('House · Completed yesterday', findRichText: true),
+      ),
+      findsOneWidget,
+    );
 
     // Unchecking it undoes yesterday's completion.
     await tester.tap(find.byTooltip('Unmark done'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Completed'), findsNothing);
+    expect(find.textContaining('Completed ('), findsNothing);
 
     // Lets the message with Undo close.
     await tester.pump(HomeItemController.doneTaskMoveDelay);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'due tasks on the calendar open the task; completed ones do not',
+    (tester) async {
+      await pumpApp(tester);
+      final today = dateOnly(DateTime.now());
+      await addTasks(tester, [
+        MaintenanceTask(
+          id: 'filter',
+          title: 'Replace water filter',
+          interval: const MaintenanceInterval.weeks(1),
+          startDate: today.subtract(const Duration(days: 7)),
+        ),
+        MaintenanceTask(
+          id: 'smoke-alarms',
+          title: 'Test smoke alarms',
+          interval: const MaintenanceInterval.months(1),
+          startDate: today.subtract(const Duration(days: 30)),
+          lastCompleted: today,
+          completionDates: [today],
+        ),
+      ]);
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      await showPeriod(tester, 'Week');
+
+      final due = find.widgetWithText(ListTile, 'Replace water filter');
+      final done = find.widgetWithText(ListTile, 'Test smoke alarms');
+      await scrollTo(tester, done);
+      expect(
+        find.descendant(of: done, matching: find.byIcon(Icons.chevron_right)),
+        findsNothing,
+      );
+      await tester.tap(find.text('Test smoke alarms'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit task'), findsNothing);
+
+      await scrollTo(tester, due);
+      expect(
+        find.descendant(of: due, matching: find.byIcon(Icons.chevron_right)),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Replace water filter'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit task'), findsOneWidget);
+      expect(
+        find.widgetWithText(TextFormField, 'Replace water filter'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('a later month lists tasks by when they are due in it', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final today = dateOnly(DateTime.now());
+    final shownMonth = DateTime(today.year, today.month + 2);
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'plants',
+        title: 'Water plants',
+        interval: const MaintenanceInterval.weeks(1),
+        startDate: today,
+      ),
+      // Due on the first of the month shown.
+      MaintenanceTask(
+        id: 'filter',
+        title: 'Change filter',
+        interval: const MaintenanceInterval.months(1),
+        startDate: DateTime(shownMonth.year, shownMonth.month - 1),
+      ),
+    ]);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    await swipeCalendar(tester);
+    await swipeCalendar(tester);
+
+    // The weekly task is listed for the first time it repeats in that
+    // month, and says so, rather than when it's next due.
+    var plantsDue = today.add(const Duration(days: 7));
+    while (plantsDue.isBefore(shownMonth)) {
+      plantsDue = plantsDue.add(const Duration(days: 7));
+    }
+    Finder rowSays(String title, DateTime due) => find.descendant(
+      of: find.widgetWithText(ListTile, title),
+      matching: find.text(
+        'House · ${describeDueDateRoughly(due, today)}',
+        findRichText: true,
+      ),
+    );
+    await scrollTo(tester, find.text('Water plants'));
+    expect(rowSays('Water plants', plantsDue), findsOneWidget);
+    expect(rowSays('Change filter', shownMonth), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Change filter')).dy,
+      lessThan(tester.getTopLeft(find.text('Water plants')).dy),
+    );
+  });
+
+  testWidgets('tasks completed more than a day ago can no longer be changed', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final today = dateOnly(DateTime.now());
+    final threeDaysAgo = today.subtract(const Duration(days: 3));
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'smoke-alarms',
+        title: 'Test smoke alarms',
+        interval: const MaintenanceInterval.months(1),
+        startDate: threeDaysAgo.subtract(const Duration(days: 30)),
+        lastCompleted: threeDaysAgo,
+        completionDates: [threeDaysAgo],
+      ),
+    ]);
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    if (threeDaysAgo.month != today.month) {
+      await swipeCalendar(tester, back: true);
+    }
+
+    final row = find.widgetWithText(ListTile, 'Test smoke alarms');
+    await scrollTo(tester, row);
+    expect(
+      find.descendant(of: row, matching: find.byIcon(Icons.check_circle)),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Unmark done'), findsNothing);
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text('House · Completed 3 days ago', findRichText: true),
+      ),
+      findsOneWidget,
+    );
+
+    // Tapping it doesn't open the home item.
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit custom item'), findsNothing);
+    expect(find.text('Completed (1)'), findsOneWidget);
   });
 
   testWidgets('the calendar is swiped between months, fading other months', (
@@ -383,7 +535,7 @@ void main() {
     await swipeCalendar(tester);
     await scrollTo(tester, find.text('Service lawn mower'));
     await scrollTo(tester, find.text('Flush water heater'));
-    expect(find.textContaining('Completed'), findsNothing);
+    expect(find.textContaining('Completed ('), findsNothing);
   });
 
   testWidgets('network scan results can be added as home items', (
@@ -489,7 +641,7 @@ void main() {
 
     // At first the task stays where it was, showing that it's done.
     expect(tester.getTopLeft(task).dy, topBefore);
-    expect(find.textContaining('Completed'), findsNothing);
+    expect(find.textContaining('Completed ('), findsNothing);
 
     expect(find.text('Undo'), findsOneWidget);
 
@@ -548,6 +700,22 @@ void main() {
     await tester.pumpAndSettle();
     await openHomeItem(tester, 'House');
     expect(find.byTooltip('Mark done today'), findsNothing);
+    // An arrow shows that tapping a task opens it.
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Replace water filter'),
+        matching: find.byIcon(Icons.chevron_right),
+      ),
+      findsOneWidget,
+    );
+    // Nor does it say when each task is due.
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Replace water filter'),
+        matching: find.textContaining('Due'),
+      ),
+      findsNothing,
+    );
 
     // The task's own screen doesn't delete it.
     await tester.tap(find.text('Replace water filter'));

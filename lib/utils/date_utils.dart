@@ -31,15 +31,31 @@ String describeDueDate(DateTime dueDate, DateTime today) {
 /// "Overdue by 2 days".
 String describeDueDateRoughly(DateTime dueDate, DateTime today) {
   final days = calendarDaysBetween(today, dueDate);
+  if (_inWeeksOrMonths(days) case final time?) return 'Due in $time';
+  return describeDueDate(dueDate, today);
+}
+
+/// Describes how long ago something was completed, rounded the same way as
+/// [describeDueDateRoughly]: "Completed today", "Completed yesterday",
+/// "Completed 5 days ago", "Completed 3 weeks ago" or "Completed 2 months
+/// ago".
+String describeCompletedRoughly(DateTime completedOn, DateTime today) {
+  final days = calendarDaysBetween(completedOn, today);
+  if (days <= 0) return 'Completed today';
+  if (days == 1) return 'Completed yesterday';
+  final time = _inWeeksOrMonths(days) ?? '$days days';
+  return 'Completed $time ago';
+}
+
+/// [days] in months past six weeks, such as "3 months", or in weeks past
+/// two weeks, such as "3 weeks". `null` for two weeks or less.
+String? _inWeeksOrMonths(int days) {
   if (days > 6 * 7) {
     final months = (days / _averageDaysPerMonth).round();
-    return 'Due in $months ${months == 1 ? 'month' : 'months'}';
+    return '$months ${months == 1 ? 'month' : 'months'}';
   }
-  if (days > 14) {
-    final weeks = (days / 7).round();
-    return 'Due in $weeks weeks';
-  }
-  return describeDueDate(dueDate, today);
+  if (days > 14) return '${(days / 7).round()} weeks';
+  return null;
 }
 
 /// Describes when a home item's next task is due, for example "Next task

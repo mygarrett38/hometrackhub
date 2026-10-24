@@ -438,6 +438,9 @@ class _SavedTaskList extends StatelessWidget {
             TaskTile(
               item: item,
               showHomeItemName: false,
+              // The home item's tasks are its schedule, not a to-do list.
+              showTiming: false,
+              showArrow: true,
               onTap: () => _openTask(context, item.task),
               onDelete: () => _deleteTask(context, item.task),
             ),

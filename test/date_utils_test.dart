@@ -2,6 +2,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/utils/date_utils.dart';
 
 void main() {
+  test('describeDueDateRoughly uses months, weeks or days', () {
+    final today = DateTime(2026, 1, 1);
+    String inDays(int days) =>
+        describeDueDateRoughly(today.add(Duration(days: days)), today);
+    expect(inDays(90), 'Due in 3 months');
+    expect(inDays(20), 'Due in 3 weeks');
+    expect(inDays(5), 'Due in 5 days');
+    expect(inDays(-2), 'Overdue by 2 days');
+  });
+
+  test('describeCompletedRoughly uses months, weeks or days ago', () {
+    final today = DateTime(2026, 6, 1);
+    String daysAgo(int days) =>
+        describeCompletedRoughly(today.subtract(Duration(days: days)), today);
+    expect(daysAgo(0), 'Completed today');
+    expect(daysAgo(1), 'Completed yesterday');
+    expect(daysAgo(5), 'Completed 5 days ago');
+    expect(daysAgo(20), 'Completed 3 weeks ago');
+    expect(daysAgo(45), 'Completed 1 month ago');
+    expect(daysAgo(90), 'Completed 3 months ago');
+  });
+
   group('describeNextTaskDue', () {
     final today = DateTime(2026, 1, 1);
     String inDays(int days) =>
