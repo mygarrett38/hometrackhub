@@ -46,3 +46,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Assist tab settings with the app token (see assist_config.example.json)
+assist_config.json
+/assist/.wrangler
+/assist/node_modules

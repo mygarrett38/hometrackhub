@@ -6,8 +6,14 @@ import 'dart:io';
 class AssistantMessage {
   const AssistantMessage({required this.role, required this.content});
 
+  const AssistantMessage.user(this.content) : role = 'user';
+
+  const AssistantMessage.assistant(this.content) : role = 'assistant';
+
   final String role;
   final String content;
+
+  bool get isUser => role == 'user';
 
   Map<String, String> toJson() => {'role': role, 'content': content};
 }
@@ -24,34 +30,30 @@ class AssistantReply {
   final String? professionalReason;
 }
 
-/// Calls a server-side AI proxy. The model API key must remain on that server,
-/// never in this mobile app. Configure with --dart-define=HOME_ASSISTANT_API_URL.
+/// Calls the server-side AI proxy in `assist/`. The model API key and the
+/// assistant's instructions stay on that server, never in this mobile app.
+/// Configure with --dart-define=HOME_ASSISTANT_API_URL and
+/// --dart-define=HOME_ASSISTANT_API_TOKEN.
 class HomeAssistantClient {
-  HomeAssistantClient({String endpoint = _configuredEndpoint})
-    : _endpoint = endpoint.trim();
+  HomeAssistantClient({
+    String endpoint = _configuredEndpoint,
+    String token = _configuredToken,
+  }) : _endpoint = endpoint.trim(),
+       _token = token.trim();
 
   static const String _configuredEndpoint = String.fromEnvironment(
     'HOME_ASSISTANT_API_URL',
   );
 
-  static const _safetyInstructions = '''
-You are HomeTrack Hub's home maintenance assistant. Give clear, basic next
-steps and explain simple maintenance in plain language. Ask a short follow-up
-question if the symptoms are unclear. Do not claim certainty from limited
-information. Recommend a properly licensed professional when diagnosis or
-repair involves gas, electrical wiring, refrigerant, structural work, or any
-uncertain safety risk. Tell the user to stop using affected equipment when it
-may be unsafe. Never provide instructions for bypassing safety devices or
-working on live electrical or gas systems. For a gas smell, fire, smoke, or a
-carbon monoxide alarm, advise leaving the area and contacting emergency
-services or the relevant utility from a safe location. Return JSON with
-"answer" (string), "recommendProfessional" (boolean), and
-"professionalReason" (string or null).
-''';
+  /// Must match the APP_TOKEN secret on the server.
+  static const String _configuredToken = String.fromEnvironment(
+    'HOME_ASSISTANT_API_TOKEN',
+  );
 
   final String _endpoint;
+  final String _token;
 
-  bool get isConfigured => _endpoint.isNotEmpty;
+  bool get isConfigured => _endpoint.isNotEmpty && _token.isNotEmpty;
 
   Future<AssistantReply> ask(List<AssistantMessage> conversation) async {
     if (!isConfigured) {
@@ -74,9 +76,9 @@ services or the relevant utility from a safe location. Return JSON with
           .postUrl(uri)
           .timeout(const Duration(seconds: 20));
       request.headers.contentType = ContentType.json;
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
       request.write(
         jsonEncode({
-          'systemInstructions': _safetyInstructions,
           'messages': [for (final message in conversation) message.toJson()],
         }),
       );
@@ -85,8 +87,19 @@ services or the relevant utility from a safe location. Return JSON with
       );
       final responseBody = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        // The server explains what went wrong in "error" when it can.
+        String? serverMessage;
+        try {
+          final payload = jsonDecode(responseBody);
+          if (payload is Map<String, dynamic>) {
+            serverMessage = payload['error'] as String?;
+          }
+        } on FormatException {
+          // Not JSON, for example a proxy's error page.
+        }
         throw AssistantConnectionException(
-          'The assistant service returned status ${response.statusCode}.',
+          serverMessage ??
+              'The assistant service returned status ${response.statusCode}.',
         );
       }
       final payload = jsonDecode(responseBody) as Map<String, dynamic>;

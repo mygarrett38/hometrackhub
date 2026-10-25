@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../services/home_assistant_client.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 
 /// Privacy settings: network scanning, notification details, and exporting
-/// or deleting the user's data.
+/// or deleting the user's data. Also explains what leaves the device.
 class PrivacySettingsScreen extends StatefulWidget {
   const PrivacySettingsScreen({super.key});
 
@@ -26,6 +27,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
   Widget build(BuildContext context) {
     final controller = context.watch<SettingsController>();
     final settings = controller.settings;
+    final assistAvailable = context.read<HomeAssistantClient>().isConfigured;
     final errorColor = Theme.of(context).colorScheme.error;
 
     return Scaffold(
@@ -35,12 +37,21 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
-              settings.calendarSyncEnabled
-                  ? 'Everything you enter is stored only on this device. Your '
-                        'tasks are also added to the calendar you chose, which '
-                        "may sync them to that calendar's account."
-                  : 'Everything you enter is stored only on this device and is '
-                        'never uploaded.',
+              [
+                if (settings.calendarSyncEnabled)
+                  'Everything you enter is stored only on this device. Your '
+                      'tasks are also added to the calendar you chose, which '
+                      "may sync them to that calendar's account."
+                else if (assistAvailable)
+                  'Everything you enter is stored only on this device.'
+                else
+                  'Everything you enter is stored only on this device and is '
+                      'never uploaded.',
+                if (assistAvailable)
+                  "Questions you ask on the Assist tab are sent to Anthropic's "
+                      'Claude AI to answer them. Your home items are not '
+                      'sent with them.',
+              ].join(' '),
             ),
           ),
           SwitchListTile(

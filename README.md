@@ -13,8 +13,11 @@ A home maintenance app designed to track maintenance tasks, find local services,
   overdue maintenance.
 - Finds smart devices on the current Wi-Fi network using Bonjour/mDNS and
   UPnP/SSDP.
+- An Assist tab for asking home maintenance questions, answered by Claude
+  Haiku 5.5 through a small server in `assist/`.
 - Settings for notifications, light/dark mode, privacy and home location.
-  All data is stored only on the device.
+  All data is stored only on the device. Only questions typed on the Assist
+  tab leave it.
 
 ## Supported platforms
 
@@ -28,18 +31,31 @@ flutter run            # pick a device
 flutter test           # unit and widget tests
 ```
 
+### Assist tab
+
+The Assist tab needs the server in [`assist/`](assist/README.md), which
+holds the Anthropic API key. Without it, the tab says the assistant isn't
+available. Once the server is deployed:
+
+1. Copy `assist_config.example.json` to `assist_config.json`. Git ignores
+   that file.
+2. Fill in the Worker's address ending in `/chat`, and the same `APP_TOKEN`
+   you gave the Worker.
+3. Run the app via this command: `flutter run -dart-define-from-file=assist_config.json`, or select the Run and Debug option in VS Code.
+
 ## Project structure
 
 | Folder | Contents |
 | --- | --- |
 | `lib/models/` | Plain data classes: home items, maintenance tasks, intervals, settings. |
 | `lib/data/` | The built-in home item catalog and repositories that save data with `shared_preferences`. |
-| `lib/services/` | Notification scheduling, reminder planning and nearby device discovery over Wi-Fi and Bluetooth. |
+| `lib/services/` | Notification scheduling, reminder planning, nearby device discovery over Wi-Fi and Bluetooth, and the Assist tab's connection to `assist/`. |
 | `lib/state/` | `ChangeNotifier` controllers the UI listens to, plus `ReminderSync`, which reschedules notifications after every change. |
-| `lib/ui/screens/` | Screens, grouped by the tab they belong to: `dashboard/`, `upcoming/` (the maintenance calendar), `home_items/` and `settings/`. |
+| `lib/ui/screens/` | Screens, grouped by the tab they belong to: `dashboard/`, `upcoming/` (the maintenance calendar), `home_items/`, `assist/` and `settings/`. |
 | `lib/ui/widgets/` | Small widgets shared by several screens. |
 | `lib/ui/theme/` | The light and dark color themes, built from the logo's navy, sage and beige. |
 | `test/` | Unit tests for the models, planner and catalog, plus widget tests. |
+| `assist/` | The Cloudflare Worker that answers Assist questions with Claude. See its README to deploy it. |
 
 State is shared with the [provider](https://pub.dev/packages/provider)
 package. `lib/main.dart` creates the controllers and services and provides

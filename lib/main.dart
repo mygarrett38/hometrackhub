@@ -8,6 +8,7 @@ import 'data/home_item_repository.dart';
 import 'data/settings_repository.dart';
 import 'services/calendar_service.dart';
 import 'services/device_discovery_service.dart';
+import 'services/home_assistant_client.dart';
 import 'services/notification_service.dart';
 import 'state/calendar_sync.dart';
 import 'state/home_item_controller.dart';
@@ -57,6 +58,7 @@ Future<void> main() async {
         Provider<DeviceDiscoveryService>.value(
           value: NearbyDeviceDiscoveryService(),
         ),
+        Provider<HomeAssistantClient>.value(value: HomeAssistantClient()),
       ],
       child: const HomeTrackHubApp(),
     ),

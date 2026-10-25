@@ -10,11 +10,13 @@ import 'package:hometrackhub/models/maintenance_task.dart';
 import 'package:hometrackhub/models/task_reminder.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
+import 'package:hometrackhub/services/home_assistant_client.dart';
 import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:hometrackhub/ui/home_shell.dart';
+import 'package:hometrackhub/ui/screens/assist/assist_screen.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:hometrackhub/utils/date_utils.dart';
@@ -74,6 +76,28 @@ class FakeDiscoveryService implements DeviceDiscoveryService {
       device;
 }
 
+class FakeAssistantClient implements HomeAssistantClient {
+  FakeAssistantClient({this.isConfigured = true});
+
+  @override
+  final bool isConfigured;
+
+  /// What the next question gets: an [AssistantReply] to return, or an
+  /// exception to throw.
+  Object reply = const AssistantReply(answer: 'Every 90 days.');
+
+  /// The conversation sent with each question, oldest first.
+  final conversations = <List<AssistantMessage>>[];
+
+  @override
+  Future<AssistantReply> ask(List<AssistantMessage> conversation) async {
+    conversations.add(List.of(conversation));
+    final reply = this.reply;
+    if (reply is AssistantReply) return reply;
+    throw reply;
+  }
+}
+
 /// Starts the app with fake services and waits until the launch animation
 /// has finished. Pass [notifications] to inspect what the app asked the
 /// notification service to do.
@@ -81,8 +105,14 @@ Future<void> pumpApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
   FakeCalendarService? calendar,
+  FakeAssistantClient? assistant,
 }) async {
-  await startApp(tester, notifications: notifications, calendar: calendar);
+  await startApp(
+    tester,
+    notifications: notifications,
+    calendar: calendar,
+    assistant: assistant,
+  );
   await tester.pumpAndSettle();
 }
 
@@ -92,6 +122,7 @@ Future<void> startApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
   FakeCalendarService? calendar,
+  FakeAssistantClient? assistant,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -112,6 +143,9 @@ Future<void> startApp(
           value: calendar ?? FakeCalendarService(),
         ),
         Provider<DeviceDiscoveryService>.value(value: FakeDiscoveryService()),
+        Provider<HomeAssistantClient>.value(
+          value: assistant ?? FakeAssistantClient(),
+        ),
       ],
       child: const HomeTrackHubApp(),
     ),
@@ -126,6 +160,15 @@ Future<void> startApp(
     ),
   );
   await tester.pump();
+}
+
+/// Types [question] on the Assist tab and sends it.
+Future<void> askAssistant(WidgetTester tester, String question) async {
+  await tester.enterText(find.byType(TextField), question);
+  // The send button is enabled on the next frame.
+  await tester.pump();
+  await tester.tap(find.byTooltip('Send'));
+  await tester.pumpAndSettle();
 }
 
 /// Taps [name] on the My Home tab to open it for editing, then scrolls down
@@ -1282,6 +1325,107 @@ void main() {
     await tester.tap(find.text('Assist'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Assist'), findsOneWidget);
+  });
+
+  testWidgets('the assistant answers and remembers the conversation', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantReply(
+        answer: 'Turn off the breaker before you check it.',
+        recommendProfessional: true,
+        professionalReason: 'Wiring work needs an electrician.',
+      );
+    await pumpApp(tester, assistant: assistant);
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+
+    await askAssistant(tester, 'My outlet sparks');
+    expect(find.text('My outlet sparks'), findsOneWidget);
+    expect(
+      find.text('Turn off the breaker before you check it.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Consider a professional: Wiring work needs an electrician.'),
+      findsOneWidget,
+    );
+
+    // Tapping an example question asks it straight away.
+    await tester.tap(find.byTooltip('New conversation'));
+    await tester.pumpAndSettle();
+    assistant.reply = const AssistantReply(answer: 'Every 90 days.');
+    await tester.tap(find.text(AssistScreen.suggestions.first));
+    await tester.pumpAndSettle();
+    expect(find.text('Every 90 days.'), findsOneWidget);
+    expect(find.text('My outlet sparks'), findsNothing);
+
+    // Follow-up questions are sent with the conversation so far.
+    await askAssistant(tester, 'And for a heat pump?');
+    expect(
+      [
+        for (final message in assistant.conversations.last)
+          (message.role, message.content),
+      ],
+      [
+        ('user', AssistScreen.suggestions.first),
+        ('assistant', 'Every 90 days.'),
+        ('user', 'And for a heat pump?'),
+      ],
+    );
+  });
+
+  testWidgets('the assistant shows errors on screen and can try again', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantConnectionException(
+        'Could not reach the assistant service.',
+      );
+    await pumpApp(tester, assistant: assistant);
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+
+    await askAssistant(tester, 'Why is my sink slow?');
+    expect(find.text('Could not reach the assistant service.'), findsOneWidget);
+
+    assistant.reply = const AssistantReply(answer: 'Clean the P-trap.');
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not reach the assistant service.'), findsNothing);
+    expect(find.text('Clean the P-trap.'), findsOneWidget);
+    // The question is asked again rather than added a second time.
+    expect(assistant.conversations.last.length, 1);
+  });
+
+  testWidgets('the Assist tab explains when the assistant is not set up', (
+    tester,
+  ) async {
+    await pumpApp(tester, assistant: FakeAssistantClient(isConfigured: false));
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining("isn't available in this version"),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('on phones, the Overview button does not cover the Assist box', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 900) * 3;
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await pumpApp(tester);
+    await tester.tap(find.byTooltip('Assist'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getBottomLeft(find.byType(TextField)).dy,
+      lessThanOrEqualTo(tester.getTopLeft(find.byTooltip('Overview')).dy),
+    );
   });
 
   testWidgets('on phones, the overview is a round button above the bar', (
