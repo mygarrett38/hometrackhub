@@ -105,7 +105,6 @@ void main() {
     expect(settings.themeMode, ThemeMode.dark);
     expect(settings.overviewFrequency, OverviewFrequency.off);
     expect(settings.overviewWeekday, DateTime.monday);
-    expect(settings.homeLocation.isEmpty, isTrue);
   });
 
   test('tasks saved before per-task reminders keep their on or off choice', () {

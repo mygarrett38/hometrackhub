@@ -5,7 +5,6 @@ import '../../../models/app_settings.dart';
 import '../../../state/settings_controller.dart';
 import 'appearance_settings_screen.dart';
 import 'calendar_settings_screen.dart';
-import 'home_location_screen.dart';
 import 'notification_settings_screen.dart';
 import 'privacy_settings_screen.dart';
 
@@ -59,17 +58,6 @@ class SettingsScreen extends StatelessWidget {
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _open(context, const PrivacySettingsScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.home_outlined),
-            title: const Text('Home location'),
-            subtitle: Text(
-              settings.homeLocation.isEmpty
-                  ? 'Not set'
-                  : settings.homeLocation.summary,
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(context, const HomeLocationScreen()),
           ),
         ],
       ),

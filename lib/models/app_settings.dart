@@ -2,66 +2,6 @@ import 'package:flutter/material.dart' show ThemeMode, immutable;
 
 import 'task_reminder.dart';
 
-/// The user's home address. Every field is optional.
-@immutable
-class HomeLocation {
-  const HomeLocation({
-    this.streetAddress = '',
-    this.city = '',
-    this.region = '',
-    this.postalCode = '',
-    this.country = '',
-  });
-
-  final String streetAddress;
-  final String city;
-
-  /// State, province, or county.
-  final String region;
-  final String postalCode;
-  final String country;
-
-  bool get isEmpty => [
-    streetAddress,
-    city,
-    region,
-    postalCode,
-    country,
-  ].every((field) => field.trim().isEmpty);
-
-  /// A single line summary such as "Springfield, IL 62701, USA".
-  String get summary {
-    final regionAndPostal = [
-      region,
-      postalCode,
-    ].where((part) => part.isNotEmpty).join(' ');
-    return [
-      streetAddress,
-      city,
-      regionAndPostal,
-      country,
-    ].where((part) => part.isNotEmpty).join(', ');
-  }
-
-  Map<String, dynamic> toJson() => {
-    'streetAddress': streetAddress,
-    'city': city,
-    'region': region,
-    'postalCode': postalCode,
-    'country': country,
-  };
-
-  factory HomeLocation.fromJson(Map<String, dynamic> json) {
-    return HomeLocation(
-      streetAddress: json['streetAddress'] as String? ?? '',
-      city: json['city'] as String? ?? '',
-      region: json['region'] as String? ?? '',
-      postalCode: json['postalCode'] as String? ?? '',
-      country: json['country'] as String? ?? '',
-    );
-  }
-}
-
 /// How often the overview notification summarizing upcoming maintenance is
 /// sent.
 enum OverviewFrequency {
@@ -88,7 +28,6 @@ class AppSettings {
     this.themeMode = ThemeMode.system,
     this.networkDiscoveryEnabled = true,
     this.hideDetailsInNotifications = false,
-    this.homeLocation = const HomeLocation(),
     this.calendarSyncEnabled = false,
     this.syncCalendarId,
     this.syncCalendarName,
@@ -118,9 +57,6 @@ class AppSettings {
   /// on a locked screen.
   final bool hideDetailsInNotifications;
 
-  // Home
-  final HomeLocation homeLocation;
-
   // Calendar
   /// Whether each task is added to [syncCalendarId] as an all-day event on
   /// its due date.
@@ -141,7 +77,6 @@ class AppSettings {
     ThemeMode? themeMode,
     bool? networkDiscoveryEnabled,
     bool? hideDetailsInNotifications,
-    HomeLocation? homeLocation,
     bool? calendarSyncEnabled,
     String? syncCalendarId,
     String? syncCalendarName,
@@ -156,7 +91,6 @@ class AppSettings {
           networkDiscoveryEnabled ?? this.networkDiscoveryEnabled,
       hideDetailsInNotifications:
           hideDetailsInNotifications ?? this.hideDetailsInNotifications,
-      homeLocation: homeLocation ?? this.homeLocation,
       calendarSyncEnabled: calendarSyncEnabled ?? this.calendarSyncEnabled,
       syncCalendarId: syncCalendarId ?? this.syncCalendarId,
       syncCalendarName: syncCalendarName ?? this.syncCalendarName,
@@ -171,7 +105,6 @@ class AppSettings {
     'themeMode': themeMode.name,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
     'hideDetailsInNotifications': hideDetailsInNotifications,
-    'homeLocation': homeLocation.toJson(),
     'calendarSyncEnabled': calendarSyncEnabled,
     'syncCalendarId': syncCalendarId,
     'syncCalendarName': syncCalendarName,
@@ -181,7 +114,6 @@ class AppSettings {
   /// defaults so older saved data keeps working after settings change.
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     const defaults = AppSettings();
-    final homeLocation = json['homeLocation'] as Map<String, dynamic>?;
     final themeName = json['themeMode'] as String?;
     final overviewName = json['overviewFrequency'] as String?;
     return AppSettings(
@@ -201,9 +133,6 @@ class AppSettings {
       hideDetailsInNotifications:
           json['hideDetailsInNotifications'] as bool? ??
           defaults.hideDetailsInNotifications,
-      homeLocation: homeLocation == null
-          ? defaults.homeLocation
-          : HomeLocation.fromJson(homeLocation),
       calendarSyncEnabled:
           json['calendarSyncEnabled'] as bool? ?? defaults.calendarSyncEnabled,
       syncCalendarId: json['syncCalendarId'] as String?,

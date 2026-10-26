@@ -15,7 +15,7 @@ A home maintenance app designed to track maintenance tasks, find local services,
   UPnP/SSDP.
 - An Assist tab for asking home maintenance questions, answered by Claude
   Haiku 5.5 through a small server in `assist/`.
-- Settings for notifications, light/dark mode, privacy and home location.
+- Settings for notifications, light/dark mode, calendar sync and privacy.
   All data is stored only on the device. Only questions typed on the Assist
   tab leave it.
 
