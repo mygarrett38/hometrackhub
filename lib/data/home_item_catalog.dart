@@ -473,7 +473,7 @@ const List<HomeItemType> homeItemCatalog = [
   // Vehicles
   HomeItemType(
     id: 'car',
-    name: 'Car / SUV / truck',
+    name: 'Gas vehicle',
     category: HomeItemCategory.vehicle,
     tasks: [
       TaskTemplate(
