@@ -9,6 +9,7 @@ import '../../../models/home_item_task.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
+import '../../widgets/task_tile.dart';
 import '../home_items/task_form_screen.dart';
 import 'dashboard_setup_card.dart';
 
@@ -77,12 +78,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (!expense.date.isBefore(monthStart) && expense.date.isBefore(nextMonth))
             _ExpenseDetailEntry(item, expense),
     ]..sort((a, b) => b.expense.date.compareTo(a.expense.date));
-    final nextTasks = controller.orderForList(activeTasks).take(5).toList();
-    final completionHistory = [
-      for (final item in controller.allTasks)
-        for (final date in item.task.completionDates)
-          _CompletionHistoryEntry(item, date),
-    ]..sort((a, b) => b.date.compareTo(a.date));
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -143,18 +138,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       value: '$dueSoon',
                       icon: Icons.schedule,
                       color: colors.primary,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const _TaskListScreen(
+                            kind: _TaskListKind.dueSoon,
+                          ),
+                        ),
+                      ),
                     ),
                     _SummaryCard(
                       label: 'Overdue',
                       value: '$overdue',
                       icon: Icons.warning_amber_rounded,
                       color: colors.error,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const _TaskListScreen(
+                            kind: _TaskListKind.overdue,
+                          ),
+                        ),
+                      ),
                     ),
                     _SummaryCard(
                       label: 'Completed This Month',
                       value: '$completedThisMonth',
                       icon: Icons.task_alt,
                       color: colors.secondary,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const _CompletionHistoryScreen(),
+                        ),
+                      ),
                     ),
                     _SummaryCard(
                       label: 'Spent This Month',
@@ -173,65 +187,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Text('Next Up', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                if (nextTasks.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Center(
-                        child: Text(
-                          controller.allTasks.isEmpty
-                              ? 'Your upcoming maintenance will appear here.'
-                              : 'You’re all caught up for now.',
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < nextTasks.length; i++) ...[
-                          if (i > 0) const Divider(height: 1),
-                          _NextTaskTile(item: nextTasks[i]),
-                        ],
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 24),
-                Text(
-                  'Completion History',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                if (completionHistory.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Center(
-                        child: Text(
-                          'Tasks you check off will appear here with their completion dates.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        for (final entry in completionHistory.take(5)) ...[
-                          if (entry != completionHistory.first)
-                            const Divider(height: 1),
-                          _CompletionHistoryTile(entry: entry),
-                        ],
-                      ],
-                    ),
-                  ),
               ],
             ),
           );
@@ -370,35 +325,60 @@ class _MonthlyExpensesScreen extends StatelessWidget {
   }
 }
 
-class _NextTaskTile extends StatelessWidget {
-  const _NextTaskTile({required this.item});
+enum _TaskListKind { dueSoon, overdue }
 
-  final HomeItemTask item;
+class _TaskListScreen extends StatelessWidget {
+  const _TaskListScreen({required this.kind});
+
+  final _TaskListKind kind;
 
   @override
   Widget build(BuildContext context) {
-    final date = MaterialLocalizations.of(context)
-        .formatMediumDate(item.dueDate);
-    return ListTile(
-      leading: const Icon(Icons.home_repair_service_outlined),
-      title: Text(
-        item.task.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text('${item.homeItem.name} · Due $date'),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => TaskFormScreen(
-            homeItemId: item.homeItem.id,
-            homeItemName: item.homeItem.name,
-            existing: item.task,
-          ),
-        ),
-      ),
+    final controller = context.watch<HomeItemController>();
+    final today = dateOnly(DateTime.now());
+    final activeTasks = controller.allTasks
+        .where((item) => !controller.isListedAsDone(item));
+    final items = controller.orderForList(activeTasks.where((item) {
+      final days = calendarDaysBetween(today, item.dueDate);
+      return kind == _TaskListKind.overdue
+          ? days < 0
+          : days >= 0 && days <= 30;
+    }));
+    final title = kind == _TaskListKind.overdue ? 'Overdue' : 'Due Soon';
+    final emptyMessage = kind == _TaskListKind.overdue
+        ? 'No overdue tasks.'
+        : 'No tasks are due in the next 30 days.';
+
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: items.isEmpty
+          ? Center(child: Text(emptyMessage))
+          : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return TaskTile(
+                  item: item,
+                  showArrow: true,
+                  onTap: () => _openTask(context, item),
+                );
+              },
+            ),
     );
   }
+}
+
+void _openTask(BuildContext context, HomeItemTask item) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => TaskFormScreen(
+        homeItemId: item.homeItem.id,
+        homeItemName: item.homeItem.name,
+        existing: item.task,
+      ),
+    ),
+  );
 }
 
 class _CompletionHistoryEntry {
@@ -408,31 +388,35 @@ class _CompletionHistoryEntry {
   final DateTime date;
 }
 
-class _CompletionHistoryTile extends StatelessWidget {
-  const _CompletionHistoryTile({required this.entry});
-
-  final _CompletionHistoryEntry entry;
+class _CompletionHistoryScreen extends StatelessWidget {
+  const _CompletionHistoryScreen();
 
   @override
   Widget build(BuildContext context) {
-    final date = MaterialLocalizations.of(context).formatMediumDate(entry.date);
-    return ListTile(
-      leading: const Icon(Icons.task_alt_outlined),
-      title: Text(
-        entry.item.task.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text('${entry.item.homeItem.name} · Completed $date'),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => TaskFormScreen(
-            homeItemId: entry.item.homeItem.id,
-            homeItemName: entry.item.homeItem.name,
-            existing: entry.item.task,
-          ),
-        ),
-      ),
+    final controller = context.watch<HomeItemController>();
+    final entries = [
+      for (final item in controller.allTasks)
+        for (final date in item.task.completionDates)
+          _CompletionHistoryEntry(item, date),
+    ]..sort((a, b) => b.date.compareTo(a.date));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Completion History')),
+      body: entries.isEmpty
+          ? const Center(child: Text('No completed tasks yet.'))
+          : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: entries.length,
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                return TaskTile(
+                  item: entry.item,
+                  completedOn: entry.date,
+                  showArrow: true,
+                  onTap: () => _openTask(context, entry.item),
+                );
+              },
+            ),
     );
   }
 }
