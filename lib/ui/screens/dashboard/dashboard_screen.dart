@@ -15,7 +15,9 @@ import 'dashboard_setup_card.dart';
 
 /// The first tab: a live summary of saved maintenance and expense data.
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, required this.onAssistPressed});
+
+  final VoidCallback onAssistPressed;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -72,27 +74,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               expense.date.isBefore(nextMonth),
         )
         .fold<double>(0, (total, expense) => total + expense.amount);
-    final monthlyExpenses = [
-      for (final item in controller.homeItems)
-        for (final expense in item.expenses)
-          if (!expense.date.isBefore(monthStart) && expense.date.isBefore(nextMonth))
-            _ExpenseDetailEntry(item, expense),
-    ]..sort((a, b) => b.expense.date.compareTo(a.expense.date));
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('HomeTrack Hub'),
-        actions: [
-          IconButton(
-            tooltip: 'Record an expense',
-            onPressed: controller.homeItems.isEmpty
-                ? null
-                : () => _recordExpense(context, controller),
-            icon: const Icon(Icons.add_card_outlined),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('HomeTrack Hub')),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final horizontal = constraints.maxWidth >= 640 ? 28.0 : 16.0;
@@ -103,14 +88,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Text(
                   _greeting,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: colors.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Your home at a glance',
+                  'Your home at a glance.',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: colors.primary,
@@ -178,14 +163,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => _MonthlyExpensesScreen(
-                            entries: monthlyExpenses,
                             month: now,
-                            total: spentThisMonth,
+                            onRecordExpense: () =>
+                                _recordExpense(context, controller),
                           ),
                         ),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.onAssistPressed,
+                    icon: const Icon(Icons.forum_outlined),
+                    label: const Text('Have a home question? Ask AI Assist'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -281,46 +281,227 @@ class _ExpenseDetailEntry {
 }
 
 class _MonthlyExpensesScreen extends StatelessWidget {
-  const _MonthlyExpensesScreen({required this.entries, required this.month, required this.total});
+  const _MonthlyExpensesScreen({
+    required this.month,
+    required this.onRecordExpense,
+  });
 
-  final List<_ExpenseDetailEntry> entries;
   final DateTime month;
-  final double total;
+  final VoidCallback onRecordExpense;
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<HomeItemController>();
+    final now = DateTime.now();
+    final isCurrentMonth = month.year == now.year && month.month == now.month;
+    final monthStart = DateTime(month.year, month.month);
+    final nextMonth = DateTime(month.year, month.month + 1);
+    final entries = [
+      for (final item in controller.homeItems)
+        for (final expense in item.expenses)
+          if (!expense.date.isBefore(monthStart) && expense.date.isBefore(nextMonth))
+            _ExpenseDetailEntry(item, expense),
+    ]..sort((a, b) => b.expense.date.compareTo(a.expense.date));
+    final total = entries.fold<double>(
+      0,
+      (sum, entry) => sum + entry.expense.amount,
+    );
     final monthName = MaterialLocalizations.of(context).formatMonthYear(month);
     return Scaffold(
       appBar: AppBar(title: Text('$monthName Expenses')),
-      body: entries.isEmpty
-          ? const Center(child: Text('No expenses recorded this month.'))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              children: [
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.account_balance_wallet_outlined),
-                    title: const Text('Total spent'),
-                    trailing: Text('\$${total.toStringAsFixed(2)}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => _YearlyExpensesScreen(
+                        initialYear: month.year,
+                        onRecordExpense: onRecordExpense,
+                      ),
+                    ),
+                  ),
+                  child: const Text(
+                    'Yearly History',
+                    maxLines: 1,
+                    softWrap: false,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(children: [
-                    for (var i = 0; i < entries.length; i++) ...[
-                      if (i > 0) const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.receipt_long_outlined),
-                        title: Text(entries[i].expense.description),
-                        subtitle: Text('${entries[i].item.name} · ${MaterialLocalizations.of(context).formatMediumDate(entries[i].expense.date)}'),
-                        trailing: Text('\$${entries[i].expense.amount.toStringAsFixed(2)}'),
-                      ),
-                    ],
-                  ]),
+              ),
+              if (isCurrentMonth) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: FilledButton.icon(
+                    onPressed: controller.homeItems.isEmpty
+                        ? null
+                        : onRecordExpense,
+                    icon: const Icon(Icons.add_card_outlined),
+                    label: const Text(
+                      'Record an expense',
+                      maxLines: 1,
+                      softWrap: false,
+                    ),
+                  ),
                 ),
               ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: const Text('Total spent'),
+              trailing: Text(
+                '\$${total.toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
+          ),
+          if (entries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('No expenses recorded this month.')),
+            )
+          else ...[
+            const SizedBox(height: 8),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (var i = 0; i < entries.length; i++) ...[
+                    if (i > 0) const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.receipt_long_outlined),
+                      title: Text(entries[i].expense.description),
+                      subtitle: Text(
+                        '${entries[i].item.name} · ${MaterialLocalizations.of(context).formatMediumDate(entries[i].expense.date)}',
+                      ),
+                      trailing: Text(
+                        '\$${entries[i].expense.amount.toStringAsFixed(2)}',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _YearlyExpensesScreen extends StatefulWidget {
+  const _YearlyExpensesScreen({
+    required this.initialYear,
+    required this.onRecordExpense,
+  });
+
+  final int initialYear;
+  final VoidCallback onRecordExpense;
+
+  @override
+  State<_YearlyExpensesScreen> createState() => _YearlyExpensesScreenState();
+}
+
+class _YearlyExpensesScreenState extends State<_YearlyExpensesScreen> {
+  late int _year = widget.initialYear;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<HomeItemController>();
+    final localizations = MaterialLocalizations.of(context);
+    final entriesByMonth = <int, List<_ExpenseDetailEntry>>{
+      for (var month = 1; month <= 12; month++) month: <_ExpenseDetailEntry>[],
+    };
+    for (final item in controller.homeItems) {
+      for (final expense in item.expenses) {
+        if (expense.date.year == _year) {
+          entriesByMonth[expense.date.month]!.add(
+            _ExpenseDetailEntry(item, expense),
+          );
+        }
+      }
+    }
+    for (final entries in entriesByMonth.values) {
+      entries.sort((a, b) => b.expense.date.compareTo(a.expense.date));
+    }
+    final yearlyTotal = entriesByMonth.values
+        .expand((entries) => entries)
+        .fold<double>(0, (total, entry) => total + entry.expense.amount);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('$_year Expense History'),
+        actions: [
+          IconButton(
+            tooltip: 'Previous year',
+            onPressed: () => setState(() => _year--),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          IconButton(
+            tooltip: 'Next year',
+            onPressed: _year >= DateTime.now().year
+                ? null
+                : () => setState(() => _year++),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.account_balance_wallet_outlined),
+              title: const Text('Year total'),
+              trailing: Text(
+                '\$${yearlyTotal.toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (var month = 1; month <= 12; month++) ...[
+                  if (month > 1) const Divider(height: 1),
+                  ListTile(
+                    title: Text(
+                      localizations.formatMonthYear(DateTime(_year, month)),
+                    ),
+                    subtitle: Text(
+                      '${entriesByMonth[month]!.length} expenses',
+                    ),
+                    trailing: Text(
+                      '\$${entriesByMonth[month]!.fold<double>(0, (total, entry) => total + entry.expense.amount).toStringAsFixed(2)}',
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => _MonthlyExpensesScreen(
+                          month: DateTime(_year, month),
+                          onRecordExpense: widget.onRecordExpense,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

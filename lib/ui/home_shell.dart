@@ -45,14 +45,6 @@ class _HomeShellState extends State<HomeShell> {
     (icon: Icons.settings, label: 'Settings'),
   ];
 
-  static const _screens = [
-    HomeItemListScreen(),
-    MaintenanceCalendarScreen(),
-    DashboardScreen(),
-    AssistScreen(),
-    SettingsScreen(),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -78,7 +70,16 @@ class _HomeShellState extends State<HomeShell> {
     final isWide =
         MediaQuery.sizeOf(context).width >= HomeShell.wideLayoutBreakpoint;
     // IndexedStack keeps each tab's scroll position when switching tabs.
-    final body = IndexedStack(index: _selectedIndex, children: _screens);
+    final body = IndexedStack(
+      index: _selectedIndex,
+      children: [
+        const HomeItemListScreen(),
+        const MaintenanceCalendarScreen(),
+        DashboardScreen(onAssistPressed: () => _select(3)),
+        const AssistScreen(),
+        const SettingsScreen(),
+      ],
+    );
 
     if (isWide) {
       return Scaffold(
