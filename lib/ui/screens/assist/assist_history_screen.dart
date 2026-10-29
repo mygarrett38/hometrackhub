@@ -69,21 +69,13 @@ class AssistHistoryScreen extends StatelessWidget {
     );
   }
 
-  /// When the chat was last active and when it will be deleted, for example
-  /// "Active 3 days ago · Deleted in 11 days".
+  /// When the chat will be deleted, for example "Deleted in 11 days".
   static String _describe(AssistChat chat, DateTime now) {
-    final daysAgo = calendarDaysBetween(chat.lastActiveAt, now);
-    final active = switch (daysAgo) {
-      <= 0 => 'Active today',
-      1 => 'Active yesterday',
-      _ => 'Active $daysAgo days ago',
-    };
     final daysLeft = calendarDaysBetween(now, chat.expiresAt);
-    final deleted = switch (daysLeft) {
-      <= 0 => 'Deleted today',
-      1 => 'Deleted tomorrow',
-      _ => 'Deleted in $daysLeft days',
+    return switch (daysLeft) {
+      <= 0 => 'Deleting today',
+      1 => 'Deleting tomorrow',
+      _ => 'Deleting in $daysLeft days',
     };
-    return '$active · $deleted';
   }
 }
