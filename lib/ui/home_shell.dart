@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_settings.dart';
@@ -65,7 +66,7 @@ class _HomeShellState extends State<HomeShell> {
     final isWide =
         MediaQuery.sizeOf(context).width >= HomeShell.wideLayoutBreakpoint;
     // IndexedStack keeps each tab's scroll position when switching tabs.
-    final body = IndexedStack(
+    final tabs = IndexedStack(
       index: _selectedIndex,
       children: [
         const HomeItemListScreen(),
@@ -74,6 +75,14 @@ class _HomeShellState extends State<HomeShell> {
         const AssistScreen(),
         const SettingsScreen(),
       ],
+    );
+    // Status bar icons that show up against the theme's background. App bars
+    // set this themselves, but the Overview and Calendar don't have one.
+    final body = AnnotatedRegion<SystemUiOverlayStyle>(
+      value: Theme.of(context).brightness == Brightness.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: tabs,
     );
 
     if (isWide) {

@@ -18,6 +18,7 @@ import 'package:hometrackhub/state/assist_chat_controller.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:hometrackhub/ui/home_shell.dart';
+import 'package:hometrackhub/ui/screens/dashboard/dashboard_screen.dart';
 import 'package:hometrackhub/ui/screens/assist/assist_new_chat_screen.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
@@ -1646,7 +1647,7 @@ void main() {
 
   group('launch screen', () {
     final logo = find.image(LaunchScreen.logo);
-    final mainScreen = find.text('HomeTrack Hub');
+    final mainScreen = find.byType(DashboardScreen);
 
     testWidgets('shows the logo, then reveals the main screen', (tester) async {
       await startApp(tester);

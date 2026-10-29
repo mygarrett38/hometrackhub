@@ -77,120 +77,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('HomeTrack Hub')),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final horizontal = constraints.maxWidth >= 640 ? 28.0 : 16.0;
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(horizontal, 20, horizontal, 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _greeting,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colors.onSurface,
+      // There is no app bar, so the content keeps clear of the status bar.
+      body: SafeArea(
+        bottom: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontal = constraints.maxWidth >= 640 ? 28.0 : 16.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(horizontal, 40, horizontal, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _greeting,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: colors.onSurface,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Your home at a glance.',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: colors.primary,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (controller.hasNoTasks) ...[
-                  const DashboardSetupCard(),
-                  const SizedBox(height: 20),
-                ],
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: constraints.maxWidth < 360
-                      ? 0.95
-                      : constraints.maxWidth < 640
-                      ? 1.08
-                      : 1.32,
-                  children: [
-                    _SummaryCard(
-                      label: 'Due Soon',
-                      value: '$dueSoon',
-                      icon: Icons.schedule,
+                  const SizedBox(height: 2),
+                  Text(
+                    'Your home at a glance',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                       color: colors.primary,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const _TaskListScreen(
-                            kind: _TaskListKind.dueSoon,
-                          ),
-                        ),
-                      ),
                     ),
-                    _SummaryCard(
-                      label: 'Overdue',
-                      value: '$overdue',
-                      icon: Icons.warning_amber_rounded,
-                      color: colors.error,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const _TaskListScreen(
-                            kind: _TaskListKind.overdue,
-                          ),
-                        ),
-                      ),
-                    ),
-                    _SummaryCard(
-                      label: 'Completed This Month',
-                      value: '$completedThisMonth',
-                      icon: Icons.task_alt,
-                      color: colors.secondary,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const _CompletionHistoryScreen(),
-                        ),
-                      ),
-                    ),
-                    _SummaryCard(
-                      label: 'Spent This Month',
-                      value: '\$${spentThisMonth.toStringAsFixed(2)}',
-                      icon: Icons.account_balance_wallet_outlined,
-                      color: colors.tertiary,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => _MonthlyExpensesScreen(
-                            month: now,
-                            onRecordExpense: () =>
-                                _recordExpense(context, controller),
-                          ),
-                        ),
-                      ),
-                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (controller.hasNoTasks) ...[
+                    const DashboardSetupCard(),
+                    const SizedBox(height: 20),
                   ],
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    onPressed: widget.onAssistPressed,
-                    icon: const Icon(Icons.forum_outlined),
-                    label: const Text('Have a home question? Ask AI Assist'),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: constraints.maxWidth < 360
+                        ? 0.95
+                        : constraints.maxWidth < 640
+                        ? 1.08
+                        : 1.32,
+                    children: [
+                      _SummaryCard(
+                        label: 'Due Soon',
+                        value: '$dueSoon',
+                        icon: Icons.schedule,
+                        color: colors.primary,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const _TaskListScreen(
+                              kind: _TaskListKind.dueSoon,
+                            ),
+                          ),
+                        ),
+                      ),
+                      _SummaryCard(
+                        label: 'Overdue',
+                        value: '$overdue',
+                        icon: Icons.warning_amber_rounded,
+                        color: colors.error,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const _TaskListScreen(
+                              kind: _TaskListKind.overdue,
+                            ),
+                          ),
+                        ),
+                      ),
+                      _SummaryCard(
+                        label: 'Completed This Month',
+                        value: '$completedThisMonth',
+                        icon: Icons.task_alt,
+                        color: colors.secondary,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const _CompletionHistoryScreen(),
+                          ),
+                        ),
+                      ),
+                      _SummaryCard(
+                        label: 'Spent This Month',
+                        value: '\$${spentThisMonth.toStringAsFixed(2)}',
+                        icon: Icons.account_balance_wallet_outlined,
+                        color: colors.tertiary,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => _MonthlyExpensesScreen(
+                              month: now,
+                              onRecordExpense: () =>
+                                  _recordExpense(context, controller),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: widget.onAssistPressed,
+                      icon: const Icon(Icons.forum_outlined),
+                      label: const Text('Have a home question? Ask AI Assist'),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
