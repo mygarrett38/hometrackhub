@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/app.dart';
+import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/home_item.dart';
@@ -13,10 +14,11 @@ import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/home_assistant_client.dart';
 import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
+import 'package:hometrackhub/state/assist_chat_controller.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:hometrackhub/ui/home_shell.dart';
-import 'package:hometrackhub/ui/screens/assist/assist_screen.dart';
+import 'package:hometrackhub/ui/screens/assist/assist_new_chat_screen.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:hometrackhub/utils/date_utils.dart';
@@ -136,6 +138,10 @@ Future<void> startApp(
         ChangeNotifierProvider(
           create: (_) => SettingsController(SettingsRepository(preferences)),
         ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              AssistChatController(AssistChatRepository(preferences)),
+        ),
         Provider<NotificationService>.value(
           value: notifications ?? FakeNotificationService(),
         ),
@@ -162,7 +168,20 @@ Future<void> startApp(
   await tester.pump();
 }
 
-/// Types [question] on the Assist tab and sends it.
+/// The default name of a chat started today: "October 28th Chat", or with
+/// [number] when several chats were started today.
+String todaysChat([int? number]) =>
+    '${monthDayOrdinal(DateTime.now())} Chat${number == null ? '' : ' $number'}';
+
+/// Opens the Assist tab and its New conversation screen.
+Future<void> openNewConversation(WidgetTester tester) async {
+  await tester.tap(find.text('Assist'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('New conversation'));
+  await tester.pumpAndSettle();
+}
+
+/// Types [question] on an Assist screen and sends it.
 Future<void> askAssistant(WidgetTester tester, String question) async {
   await tester.enterText(find.byType(TextField), question);
   // The send button is enabled on the next frame.
@@ -1324,10 +1343,10 @@ void main() {
 
     await tester.tap(find.text('Assist'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Assist'), findsOneWidget);
+    expect(find.text('What would you like to do today?'), findsOneWidget);
   });
 
-  testWidgets('the assistant answers and remembers the conversation', (
+  testWidgets('a question opens its own chat screen, named after it', (
     tester,
   ) async {
     final assistant = FakeAssistantClient()
@@ -1337,11 +1356,12 @@ void main() {
         professionalReason: 'Wiring work needs an electrician.',
       );
     await pumpApp(tester, assistant: assistant);
-    await tester.tap(find.text('Assist'));
-    await tester.pumpAndSettle();
+    await openNewConversation(tester);
 
     await askAssistant(tester, 'My outlet sparks');
-    expect(find.text('My outlet sparks'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, todaysChat()), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.byTooltip('Chat history'), findsNothing);
     expect(
       find.text('Turn off the breaker before you check it.'),
       findsOneWidget,
@@ -1351,28 +1371,34 @@ void main() {
       findsOneWidget,
     );
 
-    // Tapping an example question asks it straight away.
-    await tester.tap(find.byTooltip('New conversation'));
-    await tester.pumpAndSettle();
-    assistant.reply = const AssistantReply(answer: 'Every 90 days.');
-    await tester.tap(find.text(AssistScreen.suggestions.first));
-    await tester.pumpAndSettle();
-    expect(find.text('Every 90 days.'), findsOneWidget);
-    expect(find.text('My outlet sparks'), findsNothing);
-
     // Follow-up questions are sent with the conversation so far.
-    await askAssistant(tester, 'And for a heat pump?');
+    assistant.reply = const AssistantReply(answer: 'Only after it is fixed.');
+    await askAssistant(tester, 'Can I still use it?');
     expect(
       [
         for (final message in assistant.conversations.last)
           (message.role, message.content),
       ],
       [
-        ('user', AssistScreen.suggestions.first),
-        ('assistant', 'Every 90 days.'),
-        ('user', 'And for a heat pump?'),
+        ('user', 'My outlet sparks'),
+        ('assistant', 'Turn off the breaker before you check it.'),
+        ('user', 'Can I still use it?'),
       ],
     );
+
+    // Back goes straight to the Assist tab, not to an empty new
+    // conversation, and an example question there starts another chat.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('What would you like to do today?'), findsOneWidget);
+    await tester.tap(find.text('New conversation'));
+    await tester.pumpAndSettle();
+    assistant.reply = const AssistantReply(answer: 'Every 90 days.');
+    await tester.tap(find.text(AssistNewChatScreen.suggestions.first));
+    await tester.pumpAndSettle();
+    expect(find.text('Every 90 days.'), findsOneWidget);
+    expect(find.text('My outlet sparks'), findsNothing);
+    expect(assistant.conversations.last.length, 1);
   });
 
   testWidgets('the assistant shows errors on screen and can try again', (
@@ -1383,8 +1409,7 @@ void main() {
         'Could not reach the assistant service.',
       );
     await pumpApp(tester, assistant: assistant);
-    await tester.tap(find.text('Assist'));
-    await tester.pumpAndSettle();
+    await openNewConversation(tester);
 
     await askAssistant(tester, 'Why is my sink slow?');
     expect(find.text('Could not reach the assistant service.'), findsOneWidget);
@@ -1398,6 +1423,120 @@ void main() {
     expect(assistant.conversations.last.length, 1);
   });
 
+  testWidgets('a chat can be deleted from its own screen after confirming', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await openNewConversation(tester);
+    await askAssistant(tester, 'Why is my sink slow?');
+
+    await tester.tap(find.byTooltip('Delete chat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, todaysChat()), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete chat'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('will be permanently deleted'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('What would you like to do today?'), findsOneWidget);
+
+    await tester.tap(find.text('Continue conversation'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('no saved chats yet'), findsOneWidget);
+  });
+
+  testWidgets(
+    'chats are reopened from the history and renamed or deleted in the chat',
+    (tester) async {
+      final assistant = FakeAssistantClient()
+        ..reply = const AssistantReply(answer: 'Turn off the breaker.');
+      await pumpApp(tester, assistant: assistant);
+      await openNewConversation(tester);
+
+      await askAssistant(tester, 'My outlet sparks');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await openNewConversation(tester);
+      assistant.reply = const AssistantReply(answer: 'Clean the P-trap.');
+      await askAssistant(tester, 'Why is my sink slow?');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      // Continue conversation lists the newest chat first. Both were started
+      // today, so they're numbered.
+      await tester.tap(find.text('Continue conversation'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.widgetWithText(Card, todaysChat(2))).dy,
+        lessThan(
+          tester.getTopLeft(find.widgetWithText(Card, todaysChat(1))).dy,
+        ),
+      );
+      expect(find.textContaining('deleted after 14 days'), findsOneWidget);
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+
+      // Opening an earlier chat shows it, and follow-ups continue it.
+      await tester.tap(find.widgetWithText(Card, todaysChat(1)));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, todaysChat(1)), findsOneWidget);
+      expect(find.text('Turn off the breaker.'), findsOneWidget);
+      expect(find.text('Clean the P-trap.'), findsNothing);
+      await askAssistant(tester, 'Is it safe to use?');
+      expect(
+        [for (final message in assistant.conversations.last) message.content],
+        ['My outlet sparks', 'Turn off the breaker.', 'Is it safe to use?'],
+      );
+
+      // The pencil next to the trash turns the name in the top bar into a
+      // text field.
+      final nameField = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(TextField),
+      );
+      await tester.tap(find.byTooltip('Rename chat'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(nameField).controller!.text,
+        todaysChat(1),
+      );
+      expect(find.byTooltip('Delete chat'), findsNothing);
+      await tester.enterText(nameField, 'Living room outlet');
+      await tester.tap(find.byTooltip('Save name'));
+      await tester.pumpAndSettle();
+      expect(nameField, findsNothing);
+      expect(find.widgetWithText(AppBar, 'Living room outlet'), findsOneWidget);
+
+      // Cancelling a rename keeps the name.
+      await tester.tap(find.byTooltip('Rename chat'));
+      await tester.pumpAndSettle();
+      await tester.enterText(nameField, 'Something else');
+      await tester.tap(find.byTooltip('Cancel renaming'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Living room outlet'), findsOneWidget);
+
+      // Back goes to the history the chat was opened from, with its new name.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
+      expect(find.widgetWithText(Card, 'Living room outlet'), findsOneWidget);
+
+      // Deleting it from the chat goes back to the history without it. The
+      // chat left keeps its number, even as the only one from today.
+      await tester.tap(find.widgetWithText(Card, 'Living room outlet'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Delete chat'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
+      expect(find.widgetWithText(Card, 'Living room outlet'), findsNothing);
+      expect(find.widgetWithText(Card, todaysChat(2)), findsOneWidget);
+    },
+  );
+
   testWidgets('the Assist tab explains when the assistant is not set up', (
     tester,
   ) async {
@@ -1405,27 +1544,59 @@ void main() {
     await tester.tap(find.text('Assist'));
     await tester.pumpAndSettle();
 
+    final newConversation = find.ancestor(
+      of: find.text('New conversation'),
+      matching: find.bySubtype<ButtonStyleButton>(),
+    );
+    expect(tester.widget<ButtonStyleButton>(newConversation).enabled, isFalse);
     expect(
-      find.textContaining("isn't available in this version"),
+      find.text('The assistant is currently unavailable.'),
       findsOneWidget,
     );
+
+    // A chat saved earlier can still be read, with a note in place of the
+    // text field explaining why there is nowhere to type.
+    await tester
+        .element(find.byType(HomeShell))
+        .read<AssistChatController>()
+        .startChat('Why is my sink slow?');
+    await tester.tap(find.text('Continue conversation'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Card, todaysChat()));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, todaysChat()), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
+    expect(find.text('The assistant is currently unavailable.'), findsOneWidget);
+    expect(find.text('Try again'), findsNothing);
   });
 
-  testWidgets('on phones, the Overview button does not cover the Assist box', (
+  testWidgets('the Assist tab asks what the user would like to do', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(412, 900) * 3;
-    tester.view.devicePixelRatio = 3;
-    addTearDown(tester.view.reset);
     await pumpApp(tester);
-    await tester.tap(find.byTooltip('Assist'));
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.text('What would you like to do today?'), findsOneWidget);
+
+    await tester.tap(find.text('New conversation'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ask about home maintenance'), findsOneWidget);
+    expect(find.byTooltip('Chat history'), findsNothing);
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
-    expect(
-      tester.getBottomLeft(find.byType(TextField)).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byTooltip('Overview')).dy),
-    );
+    await tester.tap(find.text('Continue conversation'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Search nearby services'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Nearby services'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('What would you like to do today?'), findsOneWidget);
   });
 
   testWidgets('on phones, the overview is a round button above the bar', (

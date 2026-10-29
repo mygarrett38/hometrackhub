@@ -291,7 +291,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        '${_monthName(selectedDay.month)} ${selectedDay.day}, '
+                        '${monthName(selectedDay.month)} ${selectedDay.day}, '
                         '${selectedDay.year}',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
@@ -356,7 +356,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
       case CalendarPeriod.year:
         return '${start.year}';
       case CalendarPeriod.month:
-        return '${_monthName(start.month)} ${start.year}';
+        return '${monthName(start.month)} ${start.year}';
       case CalendarPeriod.week:
         final last = range.lastDay;
         if (start.year != last.year) {
@@ -682,7 +682,7 @@ class _DayGrid extends StatelessWidget {
             button: true,
             selected: selected,
             label:
-                '${_monthName(day.month)} ${day.day}, $due due, '
+                '${monthName(day.month)} ${day.day}, $due due, '
                 '$done completed',
             excludeSemantics: true,
             child: InkWell(
@@ -793,7 +793,7 @@ class _YearGrid extends StatelessWidget {
 
           return Semantics(
             button: true,
-            label: '${_monthName(month.month)}, $due due, $done completed',
+            label: '${monthName(month.month)}, $due due, $done completed',
             excludeSemantics: true,
             child: Material(
               // Other months match the cards used on the other screens.
@@ -814,7 +814,7 @@ class _YearGrid extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _monthName(month.month).substring(0, 3),
+                        monthName(month.month).substring(0, 3),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: isThisMonth
                               ? _onTodayColor(theme.colorScheme)
@@ -1047,19 +1047,4 @@ DateTime _weekStart(DateTime day) =>
     DateTime(day.year, day.month, day.day - day.weekday % 7);
 
 String _shortDate(DateTime date) =>
-    '${_monthName(date.month).substring(0, 3)} ${date.day}';
-
-String _monthName(int month) => const [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-][month - 1];
+    '${monthName(date.month).substring(0, 3)} ${date.day}';

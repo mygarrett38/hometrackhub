@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'data/assist_chat_repository.dart';
 import 'data/calendar_event_repository.dart';
 import 'data/home_item_repository.dart';
 import 'data/settings_repository.dart';
@@ -10,6 +11,7 @@ import 'services/calendar_service.dart';
 import 'services/device_discovery_service.dart';
 import 'services/home_assistant_client.dart';
 import 'services/notification_service.dart';
+import 'state/assist_chat_controller.dart';
 import 'state/calendar_sync.dart';
 import 'state/home_item_controller.dart';
 import 'state/reminder_sync.dart';
@@ -21,6 +23,9 @@ Future<void> main() async {
   final preferences = await SharedPreferences.getInstance();
   final homeItemController = HomeItemController(
     HomeItemRepository(preferences),
+  );
+  final assistChatController = AssistChatController(
+    AssistChatRepository(preferences),
   );
   final settingsController = SettingsController(
     SettingsRepository(preferences),
@@ -53,6 +58,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider.value(value: homeItemController),
         ChangeNotifierProvider.value(value: settingsController),
+        ChangeNotifierProvider.value(value: assistChatController),
         Provider<NotificationService>.value(value: notificationService),
         Provider<CalendarService>.value(value: calendarService),
         Provider<DeviceDiscoveryService>.value(

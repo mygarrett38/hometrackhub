@@ -66,3 +66,32 @@ String describeNextTaskDue(DateTime dueDate, DateTime today) =>
 
 /// 365.25 days a year spread over 12 months.
 const _averageDaysPerMonth = 365.25 / 12;
+
+/// The full English name of [month], where 1 is January.
+String monthName(int month) => const [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+][month - 1];
+
+/// [date]'s month and ordinal day, for example "October 28th" or "May 1st".
+String monthDayOrdinal(DateTime date) {
+  final day = date.day;
+  final suffix = switch (day) {
+    11 || 12 || 13 => 'th',
+    _ when day % 10 == 1 => 'st',
+    _ when day % 10 == 2 => 'nd',
+    _ when day % 10 == 3 => 'rd',
+    _ => 'th',
+  };
+  return '${monthName(date.month)} $day$suffix';
+}

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../services/home_assistant_client.dart';
+import '../../../state/assist_chat_controller.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 
@@ -96,7 +97,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
             subtitle: Text(
               _deleted
                   ? 'All data was deleted'
-                  : 'Removes all home items and settings',
+                  : 'Removes all home items, chats and settings',
             ),
             onTap: _confirmDeleteAll,
           ),
@@ -113,6 +114,10 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         for (final item in context.read<HomeItemController>().homeItems)
           item.toJson(),
       ],
+      'assistChats': [
+        for (final chat in context.read<AssistChatController>().chats)
+          chat.toJson(),
+      ],
     };
     final json = const JsonEncoder.withIndent('  ').convert(export);
     await Clipboard.setData(ClipboardData(text: json));
@@ -121,6 +126,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
 
   Future<void> _confirmDeleteAll() async {
     final homeItems = context.read<HomeItemController>();
+    final assistChats = context.read<AssistChatController>();
     final settings = context.read<SettingsController>();
 
     final confirmed = await showDialog<bool>(
@@ -129,7 +135,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
         title: const Text('Delete all data?'),
         content: Text(
           'This permanently deletes all of your home items, maintenance '
-          'history, reminders and settings from this device'
+          'history, reminders, chats and settings from this device'
           '${settings.settings.calendarSyncEnabled ? ', and removes your tasks from your calendar' : ''}.',
         ),
         actions: [
@@ -147,6 +153,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
 
     if (confirmed ?? false) {
       await homeItems.deleteAll();
+      await assistChats.deleteAll();
       await settings.reset();
       if (mounted) setState(() => _deleted = true);
     }

@@ -14,7 +14,8 @@ A home maintenance app designed to track maintenance tasks, find local services,
 - Finds smart devices on the current Wi-Fi network using Bonjour/mDNS and
   UPnP/SSDP.
 - An Assist tab for asking home maintenance questions, answered by Claude
-  Haiku 5.5 through a small server in `assist/`.
+  Haiku 5.5 through a small server in `assist/`. Chats are saved on the
+  device, can be renamed, and are deleted after 14 days without new messages.
 - Settings for notifications, light/dark mode, calendar sync and privacy.
   All data is stored only on the device. Only questions typed on the Assist
   tab leave it.

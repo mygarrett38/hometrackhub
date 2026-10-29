@@ -19,11 +19,6 @@ class HomeShell extends StatefulWidget {
   /// Screens wider than this use the side navigation rail.
   static const wideLayoutBreakpoint = 640.0;
 
-  /// On phones, how far the round Overview button rises above the bottom
-  /// navigation bar, over the bottom of the current tab. Low enough that it
-  /// still covers the bar's highlight for the selected tab underneath it.
-  static const overviewButtonRise = 14.0;
-
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
@@ -243,6 +238,10 @@ class _RaisedCenterLocation extends StandardFabLocation
     with FabCenterOffsetX, FabDockedOffsetY {
   const _RaisedCenterLocation();
 
+  /// How far the button rises above the top of the bar. Low enough that it
+  /// still covers the bar's highlight for the selected tab underneath it.
+  static const _rise = 14.0;
+
   @override
   double getOffsetY(
     ScaffoldPrelayoutGeometry scaffoldGeometry,
@@ -252,6 +251,6 @@ class _RaisedCenterLocation extends StandardFabLocation
     final docked = super.getOffsetY(scaffoldGeometry, adjustment);
     return docked +
         scaffoldGeometry.floatingActionButtonSize.height / 2 -
-        HomeShell.overviewButtonRise;
+        _rise;
   }
 }

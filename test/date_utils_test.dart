@@ -47,4 +47,21 @@ void main() {
       expect(inDays(-2), 'Next task overdue by 2 days');
     });
   });
+
+  test('monthDayOrdinal gives the day with st, nd, rd or th', () {
+    String on(int month, int day) =>
+        monthDayOrdinal(DateTime(2026, month, day));
+    expect(on(10, 28), 'October 28th');
+    expect(on(5, 1), 'May 1st');
+    expect(on(6, 2), 'June 2nd');
+    expect(on(7, 3), 'July 3rd');
+    expect(on(8, 4), 'August 4th');
+    expect(on(1, 11), 'January 11th');
+    expect(on(2, 12), 'February 12th');
+    expect(on(3, 13), 'March 13th');
+    expect(on(12, 21), 'December 21st');
+    expect(on(12, 22), 'December 22nd');
+    expect(on(12, 23), 'December 23rd');
+    expect(on(12, 31), 'December 31st');
+  });
 }
