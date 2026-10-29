@@ -766,7 +766,11 @@ void main() {
     await pumpApp(tester);
     await addTasks(tester, []);
 
-    await tester.tap(find.byTooltip('Record an expense'));
+    // Expenses are recorded from this month's spending on the Overview.
+    await scrollTo(tester, find.text('Spent This Month'));
+    await tester.tap(find.text('Spent This Month'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Record an expense'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save expense'));
     await tester.pumpAndSettle();
@@ -786,7 +790,8 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'Amount'), '25');
     await tester.tap(find.text('Save expense'));
     await tester.pumpAndSettle();
-    expect(find.text('Record an expense'), findsNothing);
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('New filter'), findsOneWidget);
   });
 
   testWidgets('turning on a reminder with notifications blocked says so', (
