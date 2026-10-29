@@ -830,7 +830,7 @@ class _YearGrid extends StatelessWidget {
                               TextSpan(
                                 text: '$due due',
                                 style: TextStyle(
-                                  color: theme.colorScheme.primary,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                             if (due > 0 && done > 0)

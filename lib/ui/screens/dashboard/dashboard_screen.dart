@@ -100,7 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     'Your home at a glance',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: colors.primary,
+                      color: colors.onSurface,
                     ),
                   ),
                   const SizedBox(height: 20),
