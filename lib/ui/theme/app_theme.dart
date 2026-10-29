@@ -121,12 +121,18 @@ abstract final class AppTheme {
           inverseSurface: BrandColors.cream,
           onInverseSurface: BrandColors.navy,
         );
-    return _build(colors);
+    return _build(
+      colors,
+      // Cards stand out more from the navy background than the slight lift
+      // the containers above give them.
+      cardColor: _blend(BrandColors.navy, BrandColors.cream, 0.09),
+    );
   }
 
-  static ThemeData _build(ColorScheme colors) {
+  static ThemeData _build(ColorScheme colors, {Color? cardColor}) {
     return ThemeData(
       colorScheme: colors,
+      cardTheme: CardThemeData(color: cardColor),
       // Icons in list rows use the main text color rather than the softer one.
       listTileTheme: ListTileThemeData(iconColor: colors.onSurface),
       iconTheme: IconThemeData(color: colors.onSurface),
