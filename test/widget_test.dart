@@ -1749,6 +1749,48 @@ void main() {
     expect(find.byType(BottomAppBar), findsNothing);
   });
 
+  testWidgets('answers are formatted with Markdown, but questions are not', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantReply(
+        answer:
+            '**Turn off the power** first.\n\n'
+            '- Check the breaker\n'
+            '- Test the outlet',
+      );
+    await pumpApp(tester, assistant: assistant);
+    await openNewConversation(tester);
+    await askAssistant(tester, 'Is **this** safe?');
+
+    // The question is shown just as it was typed.
+    expect(find.text('Is **this** safe?'), findsOneWidget);
+
+    // The answer's Markdown is formatted rather than shown as symbols.
+    expect(find.textContaining('**'), findsOneWidget);
+    expect(find.text('Turn off the power first.'), findsOneWidget);
+    expect(find.text('Check the breaker'), findsOneWidget);
+    expect(find.text('Test the outlet'), findsOneWidget);
+
+    bool isBold(InlineSpan span, String text) {
+      if (span is! TextSpan) return false;
+      if (span.text == text && span.style?.fontWeight == FontWeight.bold) {
+        return true;
+      }
+      return span.children?.any((child) => isBold(child, text)) ?? false;
+    }
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            widget.textSpan != null &&
+            isBold(widget.textSpan!, 'Turn off the power'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the Assist tab explains when the assistant is not set up', (
     tester,
   ) async {

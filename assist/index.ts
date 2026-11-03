@@ -40,9 +40,11 @@ Only help with maintaining, repairing and caring for a home and the things in \
 it, vehicles included. If asked about anything else, say in one sentence that \
 you can only help with home maintenance.
 
-Write "answer" as plain text: the app does not render Markdown, so use no \
-headings, bold or tables. Short lists starting with "- " or "1. " are fine. \
-Set "recommendProfessional" to true when the user should hire a professional \
+Write "answer" in Markdown, kept simple for a phone screen: short \
+paragraphs, "- " or "1. " lists for steps, and **bold** for the one or two \
+things that matter most, such as a safety warning. Use a "### " heading only \
+to split a longer answer into parts. Don't use tables, images, links or code \
+blocks. Set "recommendProfessional" to true when the user should hire a professional \
 for this problem, and put the reason in one sentence in "professionalReason". \
 Otherwise set it to false and leave "professionalReason" empty.`;
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/assist_chat.dart';
@@ -189,7 +190,16 @@ class _MessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SelectableText(message.content, style: TextStyle(color: textColor)),
+          // The user's own words are shown as typed. The assistant's answers
+          // are formatted with Markdown, such as bold text and lists.
+          if (isUser)
+            SelectableText(message.content, style: TextStyle(color: textColor))
+          else
+            MarkdownBody(
+              data: message.content,
+              selectable: true,
+              styleSheet: _markdownStyle(Theme.of(context), textColor),
+            ),
           if (message.professionalNote case final note?) ...[
             const SizedBox(height: 12),
             Container(
@@ -221,6 +231,32 @@ class _MessageBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Markdown styles that fit in a chat bubble: the app's usual text in
+/// [textColor], with headings only a little larger than the text.
+MarkdownStyleSheet _markdownStyle(ThemeData theme, Color textColor) {
+  final text = theme.textTheme;
+  TextStyle? colored(TextStyle? style) => style?.copyWith(color: textColor);
+
+  return MarkdownStyleSheet.fromTheme(theme).copyWith(
+    p: colored(text.bodyMedium),
+    listBullet: colored(text.bodyMedium),
+    h1: colored(text.titleMedium),
+    h2: colored(text.titleMedium),
+    h3: colored(text.titleSmall),
+    h4: colored(text.titleSmall),
+    blockquote: colored(text.bodyMedium),
+    blockquoteDecoration: BoxDecoration(
+      border: Border(left: BorderSide(color: theme.colorScheme.outline)),
+    ),
+    blockquotePadding: const EdgeInsets.only(left: 12),
+    code: colored(text.bodySmall)?.copyWith(
+      fontFamily: 'monospace',
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+    ),
+    a: TextStyle(color: theme.colorScheme.primary),
+  );
 }
 
 class _ThinkingBubble extends StatelessWidget {
