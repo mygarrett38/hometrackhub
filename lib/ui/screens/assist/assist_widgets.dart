@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The text field and send button at the bottom of the Assist screens.
+/// The text field and send button at the bottom of the Assist screens, with
+/// a line above them to set them apart from the chat.
 class AssistComposer extends StatelessWidget {
   const AssistComposer({
     super.key,
@@ -14,6 +15,10 @@ class AssistComposer extends StatelessWidget {
   /// Longest question the user can type, well under the server's limit.
   static const maxQuestionLength = 2000;
 
+  /// The height of the text field with one line in it, which the send
+  /// button matches.
+  static const _lineHeight = 48.0;
+
   final TextEditingController controller;
   final bool sending;
   final ValueChanged<String> onSend;
@@ -24,51 +29,60 @@ class AssistComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keeps clear of the system navigation bar.
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                enabled: enabled,
-                minLines: 1,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(maxQuestionLength),
-                ],
-                decoration: const InputDecoration(
-                  hintText: 'Ask a maintenance question',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(24)),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Divider(height: 1),
+        // Keeps clear of the system navigation bar.
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+            child: Row(
+              // The button stays at the bottom as the question gets longer.
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: _lineHeight),
+                    child: TextField(
+                      controller: controller,
+                      enabled: enabled,
+                      minLines: 1,
+                      maxLines: 4,
+                      textCapitalization: TextCapitalization.sentences,
+                      inputFormatters: [
+                        LengthLimitingTextInputFormatter(maxQuestionLength),
+                      ],
+                      decoration: const InputDecoration(
+                        hintText: 'Ask a maintenance question',
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                // Rebuilds as the user types, so the button is only enabled
+                // when there's a question to send.
+                ValueListenableBuilder(
+                  valueListenable: controller,
+                  builder: (context, value, _) => IconButton.filled(
+                    tooltip: 'Send',
+                    style: IconButton.styleFrom(
+                      fixedSize: const Size.square(_lineHeight),
+                    ),
+                    icon: const Icon(Icons.send),
+                    onPressed: !enabled || sending || value.text.trim().isEmpty
+                        ? null
+                        : () => onSend(value.text),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            // Rebuilds as the user types, so the button is only enabled when
-            // there's a question to send.
-            ValueListenableBuilder(
-              valueListenable: controller,
-              builder: (context, value, _) => IconButton.filled(
-                tooltip: 'Send',
-                icon: const Icon(Icons.send),
-                onPressed: !enabled || sending || value.text.trim().isEmpty
-                    ? null
-                    : () => onSend(value.text),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

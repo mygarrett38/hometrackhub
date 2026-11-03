@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/app.dart';
 import 'package:hometrackhub/data/assist_chat_repository.dart';
@@ -20,6 +21,7 @@ import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:hometrackhub/ui/home_shell.dart';
 import 'package:hometrackhub/ui/screens/dashboard/dashboard_screen.dart';
 import 'package:hometrackhub/ui/screens/assist/assist_new_chat_screen.dart';
+import 'package:hometrackhub/ui/screens/assist/assist_widgets.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:hometrackhub/utils/date_utils.dart';
@@ -1400,11 +1402,95 @@ void main() {
     await tester.tap(find.text('New conversation'));
     await tester.pumpAndSettle();
     assistant.reply = const AssistantReply(answer: 'Every 90 days.');
-    await tester.tap(find.text(AssistNewChatScreen.suggestions.first));
+    final suggestion = tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byType(OutlinedButton).first,
+            matching: find.byType(Text),
+          ),
+        )
+        .data!;
+    await tester.tap(find.text(suggestion));
     await tester.pumpAndSettle();
     expect(find.text('Every 90 days.'), findsOneWidget);
     expect(find.text('My outlet sparks'), findsNothing);
-    expect(assistant.conversations.last.length, 1);
+    expect(
+      [for (final message in assistant.conversations.last) message.content],
+      [suggestion],
+    );
+  });
+
+  testWidgets('a new conversation suggests three different example questions, '
+      'shown in full', (tester) async {
+    tester.view.physicalSize = const Size(412, 900) * 3;
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await pumpApp(tester);
+    await tester.tap(find.byTooltip('Assist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New conversation'));
+    await tester.pumpAndSettle();
+
+    final texts = find.descendant(
+      of: find.byType(OutlinedButton),
+      matching: find.byType(Text),
+    );
+    final shown = [
+      for (final element in texts.evaluate()) (element.widget as Text).data!,
+    ];
+    expect(shown, hasLength(AssistNewChatScreen.suggestionCount));
+    expect(shown.toSet(), hasLength(shown.length));
+    for (final question in shown) {
+      expect(AssistNewChatScreen.questions, contains(question));
+      // Nothing is cut off, even on a narrow phone.
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.text(question),
+      );
+      expect(paragraph.didExceedMaxLines, isFalse);
+      expect(
+        tester.getSize(find.text(question)).width,
+        lessThanOrEqualTo(tester.getSize(find.byType(Scaffold).last).width),
+      );
+    }
+  });
+
+  testWidgets('the note about the assistant is behind the info button', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await openNewConversation(tester);
+    expect(find.textContaining("sent to Anthropic's Claude"), findsNothing);
+
+    await tester.tap(find.byTooltip('About the assistant'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining("sent to Anthropic's Claude"), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining("sent to Anthropic's Claude"), findsNothing);
+  });
+
+  testWidgets('the question box has a line above it instead of an outline, '
+      'and a send button as tall as it', (tester) async {
+    await pumpApp(tester);
+    await openNewConversation(tester);
+
+    final field = find.byType(TextField);
+    expect(
+      tester.widget<TextField>(field).decoration!.border,
+      InputBorder.none,
+    );
+    final line = find.descendant(
+      of: find.byType(AssistComposer),
+      matching: find.byType(Divider),
+    );
+    expect(
+      tester.getBottomLeft(line).dy,
+      lessThanOrEqualTo(tester.getTopLeft(field).dy),
+    );
+    expect(
+      tester.getSize(find.byTooltip('Send')).height,
+      tester.getSize(field).height,
+    );
   });
 
   testWidgets('the assistant shows errors on screen and can try again', (
