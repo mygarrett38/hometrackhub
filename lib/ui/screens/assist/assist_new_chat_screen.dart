@@ -170,7 +170,7 @@ class _Intro extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 configured
-                    ? 'Try these examples to get started.'
+                    ? 'Try these examples, or ask your own question.'
                     : "The assistant isn't available in this version of the "
                           'app.',
                 textAlign: TextAlign.center,

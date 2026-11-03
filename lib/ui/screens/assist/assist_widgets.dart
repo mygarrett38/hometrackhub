@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme.dart';
+
 /// The text field and send button at the bottom of the Assist screens, with
 /// a line above them to set them apart from the chat.
 class AssistComposer extends StatelessWidget {
@@ -71,6 +73,10 @@ class AssistComposer extends StatelessWidget {
                     tooltip: 'Send',
                     style: IconButton.styleFrom(
                       fixedSize: const Size.square(_lineHeight),
+                      // Cream once there's a question to send. Set here
+                      // because the app's navy icon color would otherwise
+                      // win over the button's own.
+                      foregroundColor: BrandColors.cream,
                     ),
                     icon: const Icon(Icons.send),
                     onPressed: !enabled || sending || value.text.trim().isEmpty
