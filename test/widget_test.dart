@@ -1429,119 +1429,239 @@ void main() {
     expect(assistant.conversations.last.length, 1);
   });
 
-  testWidgets('a chat can be deleted from its own screen after confirming', (
+  testWidgets('chats are reopened from the history and carry on', (
     tester,
   ) async {
-    await pumpApp(tester);
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantReply(answer: 'Turn off the breaker.');
+    await pumpApp(tester, assistant: assistant);
     await openNewConversation(tester);
+
+    await askAssistant(tester, 'My outlet sparks');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await openNewConversation(tester);
+    assistant.reply = const AssistantReply(answer: 'Clean the P-trap.');
     await askAssistant(tester, 'Why is my sink slow?');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Delete chat'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, todaysChat()), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Delete chat'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('will be permanently deleted'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-    await tester.pumpAndSettle();
-    expect(find.text('What would you like to do today?'), findsOneWidget);
-
+    // Continue conversation lists the newest chat first. Both were started
+    // today, so they're numbered. There's no help text above them.
     await tester.tap(find.text('Continue conversation'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('no saved chats yet'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.widgetWithText(ListTile, todaysChat(2))).dy,
+      lessThan(
+        tester.getTopLeft(find.widgetWithText(ListTile, todaysChat(1))).dy,
+      ),
+    );
+    expect(find.textContaining('Press and hold'), findsNothing);
+    expect(find.textContaining('deleted after'), findsNothing);
+
+    // Opening an earlier chat shows it, and follow-ups continue it. Its top
+    // bar is just its name, since chats are renamed and deleted from the
+    // history.
+    await tester.tap(find.widgetWithText(ListTile, todaysChat(1)));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, todaysChat(1)), findsOneWidget);
+    expect(find.byTooltip('Rename chat'), findsNothing);
+    expect(find.byTooltip('Delete chat'), findsNothing);
+    expect(find.text('Turn off the breaker.'), findsOneWidget);
+    expect(find.text('Clean the P-trap.'), findsNothing);
+    await askAssistant(tester, 'Is it safe to use?');
+    expect(
+      [for (final message in assistant.conversations.last) message.content],
+      ['My outlet sparks', 'Turn off the breaker.', 'Is it safe to use?'],
+    );
+
+    // Back goes to the history the chat was opened from.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
   });
 
-  testWidgets(
-    'chats are reopened from the history and renamed or deleted in the chat',
-    (tester) async {
-      final assistant = FakeAssistantClient()
-        ..reply = const AssistantReply(answer: 'Turn off the breaker.');
-      await pumpApp(tester, assistant: assistant);
+  testWidgets('chats in the history can be selected to pin, rename or '
+      'delete them', (tester) async {
+    await pumpApp(tester);
+    for (final question in ['Outlet?', 'Sink?', 'Gutters?']) {
       await openNewConversation(tester);
-
-      await askAssistant(tester, 'My outlet sparks');
+      await askAssistant(tester, question);
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await openNewConversation(tester);
-      assistant.reply = const AssistantReply(answer: 'Clean the P-trap.');
-      await askAssistant(tester, 'Why is my sink slow?');
-      await tester.pageBack();
-      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Continue conversation'));
+    await tester.pumpAndSettle();
 
-      // Continue conversation lists the newest chat first. Both were started
-      // today, so they're numbered.
-      await tester.tap(find.text('Continue conversation'));
+    Finder chat(String title) => find.widgetWithText(ListTile, title);
+    Finder inGroup(String group, String title) => find.descendant(
+      of: find.widgetWithText(Card, group),
+      matching: find.text(title),
+    );
+    double top(String title) => tester.getTopLeft(chat(title)).dy;
+    Finder button(String label) => find.descendant(
+      of: find.byType(BottomAppBar),
+      matching: find.text(label),
+    );
+    Future<void> tapAndSettle(Finder finder) async {
+      await tester.tap(finder);
       await tester.pumpAndSettle();
-      expect(
-        tester.getTopLeft(find.widgetWithText(Card, todaysChat(2))).dy,
-        lessThan(
-          tester.getTopLeft(find.widgetWithText(Card, todaysChat(1))).dy,
-        ),
-      );
-      expect(find.textContaining('deleted after 14 days'), findsOneWidget);
-      expect(find.byIcon(Icons.more_vert), findsNothing);
+    }
 
-      // Opening an earlier chat shows it, and follow-ups continue it.
-      await tester.tap(find.widgetWithText(Card, todaysChat(1)));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, todaysChat(1)), findsOneWidget);
-      expect(find.text('Turn off the breaker.'), findsOneWidget);
-      expect(find.text('Clean the P-trap.'), findsNothing);
-      await askAssistant(tester, 'Is it safe to use?');
-      expect(
-        [for (final message in assistant.conversations.last) message.content],
-        ['My outlet sparks', 'Turn off the breaker.', 'Is it safe to use?'],
-      );
+    bool enabled(String label) => tester
+        .widget<ButtonStyleButton>(
+          find.ancestor(
+            of: button(label),
+            matching: find.bySubtype<ButtonStyleButton>(),
+          ),
+        )
+        .enabled;
 
-      // The pencil next to the trash turns the name in the top bar into a
-      // text field.
-      final nameField = find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byType(TextField),
-      );
-      await tester.tap(find.byTooltip('Rename chat'));
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<TextField>(nameField).controller!.text,
-        todaysChat(1),
-      );
-      expect(find.byTooltip('Delete chat'), findsNothing);
-      await tester.enterText(nameField, 'Living room outlet');
-      await tester.tap(find.byTooltip('Save name'));
-      await tester.pumpAndSettle();
-      expect(nameField, findsNothing);
-      expect(find.widgetWithText(AppBar, 'Living room outlet'), findsOneWidget);
+    final first = todaysChat(1), second = todaysChat(2), third = todaysChat(3);
+    expect(find.byType(BottomAppBar), findsNothing);
 
-      // Cancelling a rename keeps the name.
-      await tester.tap(find.byTooltip('Rename chat'));
-      await tester.pumpAndSettle();
-      await tester.enterText(nameField, 'Something else');
-      await tester.tap(find.byTooltip('Cancel renaming'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Living room outlet'), findsOneWidget);
+    // Pressing and holding selects a chat rather than opening it, and shows
+    // four buttons in a row at the bottom, each labelled under its icon.
+    await tester.longPress(chat(first));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, '1 selected'), findsOneWidget);
+    const labels = ['Select all', 'Pin', 'Rename', 'Delete'];
+    for (final label in labels) {
+      expect(button(label), findsOneWidget);
+      expect(enabled(label), isTrue);
+    }
+    final lefts = [
+      for (final label in labels) tester.getCenter(button(label)).dx,
+    ];
+    expect(lefts, orderedEquals([...lefts]..sort()));
+    expect({
+      for (final label in labels) tester.getCenter(button(label)).dy,
+    }, hasLength(1));
+    final pinIcon = find.descendant(
+      of: find.byType(BottomAppBar),
+      matching: find.byIcon(Icons.push_pin_outlined),
+    );
+    expect(
+      tester.getCenter(pinIcon).dy,
+      lessThan(tester.getCenter(button('Pin')).dy),
+    );
+    expect(tester.getSize(pinIcon).width, 28);
 
-      // Back goes to the history the chat was opened from, with its new name.
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
-      expect(find.widgetWithText(Card, 'Living room outlet'), findsOneWidget);
+    // All the chats start in the Recent card.
+    for (final title in [first, second, third]) {
+      expect(inGroup('Recent', title), findsOneWidget);
+    }
+    expect(find.text('Pinned'), findsNothing);
 
-      // Deleting it from the chat goes back to the history without it. The
-      // chat left keeps its number, even as the only one from today.
-      await tester.tap(find.widgetWithText(Card, 'Living room outlet'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Delete chat'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
-      expect(find.widgetWithText(Card, 'Living room outlet'), findsNothing);
-      expect(find.widgetWithText(Card, todaysChat(2)), findsOneWidget);
-    },
-  );
+    // Pinning one chat moves it to a Pinned card at the top. It keeps the
+    // chat icon, and says when it was last chatted in rather than when it
+    // will be deleted.
+    await tapAndSettle(button('Pin'));
+    expect(find.byType(BottomAppBar), findsNothing);
+    expect(inGroup('Pinned', first), findsOneWidget);
+    expect(inGroup('Recent', first), findsNothing);
+    expect(top(first), lessThan(top(third)));
+    expect(
+      find.descendant(
+        of: chat(first),
+        matching: find.text('Last chatted today'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: chat(first),
+        matching: find.byIcon(Icons.chat_bubble_outline),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: chat(third),
+        matching: find.textContaining('Deleting'),
+      ),
+      findsOneWidget,
+    );
+
+    // Tapping other chats adds them to the selection. With more than one,
+    // renaming is greyed out but stays in place.
+    await tester.longPress(chat(second));
+    await tester.pumpAndSettle();
+    await tapAndSettle(chat(first));
+    expect(find.widgetWithText(AppBar, '2 selected'), findsOneWidget);
+    expect(enabled('Rename'), isFalse);
+
+    // With only some pinned, the button pins them all.
+    expect(button('Unpin'), findsNothing);
+    await tapAndSettle(button('Pin'));
+    expect(inGroup('Pinned', first), findsOneWidget);
+    expect(inGroup('Pinned', second), findsOneWidget);
+    expect(inGroup('Recent', third), findsOneWidget);
+    expect(top(second), lessThan(top(third)));
+
+    // Each card can be collapsed to its heading, which shows the count.
+    final pinnedCard = find.widgetWithText(Card, 'Pinned');
+    expect(
+      find.descendant(of: pinnedCard, matching: find.text('2')),
+      findsOneWidget,
+    );
+    await tapAndSettle(find.text('Pinned'));
+    expect(chat(first), findsNothing);
+    expect(chat(third), findsOneWidget);
+    await tapAndSettle(find.text('Pinned'));
+    expect(chat(first), findsOneWidget);
+
+    // With all of them pinned, it unpins them instead.
+    await tester.longPress(chat(first));
+    await tester.pumpAndSettle();
+    await tapAndSettle(chat(second));
+    await tapAndSettle(button('Unpin'));
+    expect(find.text('Pinned'), findsNothing);
+
+    // Select all selects every chat, and then deselects them all.
+    await tester.longPress(chat(first));
+    await tester.pumpAndSettle();
+    await tapAndSettle(button('Select all'));
+    expect(find.widgetWithText(AppBar, '3 selected'), findsOneWidget);
+    await tapAndSettle(button('Deselect all'));
+    expect(find.byType(BottomAppBar), findsNothing);
+    expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
+
+    // Tapping a selected chat deselects it, and the close button stops selecting.
+    await tester.longPress(chat(first));
+    await tester.pumpAndSettle();
+    await tapAndSettle(chat(second));
+    await tapAndSettle(chat(second));
+    expect(find.widgetWithText(AppBar, '1 selected'), findsOneWidget);
+    await tapAndSettle(find.byTooltip('Cancel selection'));
+    expect(find.widgetWithText(AppBar, 'Chat history'), findsOneWidget);
+
+    // A single chat can be renamed, which edits the name in its card.
+    await tester.longPress(chat(first));
+    await tester.pumpAndSettle();
+    await tapAndSettle(button('Rename'));
+    final nameField = find.descendant(
+      of: find.byType(Card),
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(nameField).controller!.text, first);
+    await tester.enterText(nameField, 'Outlet');
+    await tapAndSettle(find.byTooltip('Save name'));
+    expect(nameField, findsNothing);
+    expect(chat('Outlet'), findsOneWidget);
+
+    // Several chats are deleted together after asking once.
+    await tester.longPress(chat('Outlet'));
+    await tester.pumpAndSettle();
+    await tapAndSettle(chat(third));
+    await tapAndSettle(button('Delete'));
+    expect(find.text('Delete 2 chats?'), findsOneWidget);
+    await tapAndSettle(find.widgetWithText(FilledButton, 'Delete'));
+    expect(chat('Outlet'), findsNothing);
+    expect(chat(third), findsNothing);
+    expect(chat(second), findsOneWidget);
+    expect(find.byType(BottomAppBar), findsNothing);
+  });
 
   testWidgets('the Assist tab explains when the assistant is not set up', (
     tester,
@@ -1568,11 +1688,14 @@ void main() {
         .startChat('Why is my sink slow?');
     await tester.tap(find.text('Continue conversation'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(Card, todaysChat()));
+    await tester.tap(find.widgetWithText(ListTile, todaysChat()));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, todaysChat()), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
-    expect(find.text('The assistant is currently unavailable.'), findsOneWidget);
+    expect(
+      find.text('The assistant is currently unavailable.'),
+      findsOneWidget,
+    );
     expect(find.text('Try again'), findsNothing);
   });
 

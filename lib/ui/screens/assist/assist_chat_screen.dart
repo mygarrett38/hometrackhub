@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/assist_chat.dart';
@@ -8,7 +7,8 @@ import '../../../state/assist_chat_controller.dart';
 import 'assist_widgets.dart';
 
 /// One Assist chat on its own screen, named after the chat, where the user
-/// can ask follow-up questions, rename the chat in the top bar or delete it.
+/// can ask follow-up questions. Chats are renamed and deleted from the chat
+/// history.
 class AssistChatScreen extends StatefulWidget {
   const AssistChatScreen({
     super.key,
@@ -27,14 +27,7 @@ class AssistChatScreen extends StatefulWidget {
 }
 
 class _AssistChatScreenState extends State<AssistChatScreen> {
-  static const _maxNameLength = 60;
-
   final _input = TextEditingController();
-
-  /// The chat's name while it's being edited in the top bar.
-  final _name = TextEditingController();
-
-  bool _renaming = false;
 
   bool _sending = false;
 
@@ -55,7 +48,6 @@ class _AssistChatScreenState extends State<AssistChatScreen> {
   @override
   void dispose() {
     _input.dispose();
-    _name.dispose();
     super.dispose();
   }
 
@@ -83,102 +75,26 @@ class _AssistChatScreenState extends State<AssistChatScreen> {
     // A question left without an answer, for example in a chat reopened
     // from the history after the assistant couldn't be reached.
     final unanswered = !_sending && chat.isAwaitingAnswer;
-    final title = chats.titleOf(chat);
 
-    // While renaming, back cancels the rename instead of leaving the chat.
-    return PopScope(
-      canPop: !_renaming,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(() => _renaming = false);
-      },
-      child: Scaffold(
-        appBar: _renaming
-            ? _renameBar(chat, chats.titleOf(chat.copyWith(clearName: true)))
-            : AppBar(
-                title: Text(title),
-                actions: [
-                  IconButton(
-                    tooltip: 'Rename chat',
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: () => _startRenaming(title),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete chat',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _delete(chat, title),
-                  ),
-                ],
-              ),
-        body: Column(
-          children: [
-            Expanded(
-              child: _Conversation(messages: chat.messages, waiting: _sending),
+    return Scaffold(
+      appBar: AppBar(title: Text(chats.titleOf(chat))),
+      body: Column(
+        children: [
+          Expanded(
+            child: _Conversation(messages: chat.messages, waiting: _sending),
+          ),
+          if (unanswered && configured)
+            _ErrorRow(
+              message: _error ?? "This question hasn't been answered yet.",
+              onRetry: _ask,
             ),
-            if (unanswered && configured)
-              _ErrorRow(
-                message: _error ?? "This question hasn't been answered yet.",
-                onRetry: _ask,
-              ),
-            if (configured)
-              AssistComposer(
-                controller: _input,
-                sending: _sending,
-                onSend: _send,
-              )
-            else
-              const _UnavailableNote(),
-          ],
-        ),
+          if (configured)
+            AssistComposer(controller: _input, sending: _sending, onSend: _send)
+          else
+            const _UnavailableNote(),
+        ],
       ),
     );
-  }
-
-  /// The top bar while the chat is being renamed: the name as a text field,
-  /// with buttons to save or cancel. Saving it empty goes back to
-  /// [defaultName], which is shown as the hint.
-  AppBar _renameBar(AssistChat chat, String defaultName) {
-    final theme = Theme.of(context);
-    return AppBar(
-      title: TextField(
-        controller: _name,
-        autofocus: true,
-        textCapitalization: TextCapitalization.sentences,
-        textInputAction: TextInputAction.done,
-        inputFormatters: [LengthLimitingTextInputFormatter(_maxNameLength)],
-        style: theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-        decoration: InputDecoration(
-          hintText: defaultName,
-          isDense: true,
-          border: const UnderlineInputBorder(),
-        ),
-        onSubmitted: (_) => _saveName(chat),
-      ),
-      actions: [
-        IconButton(
-          tooltip: 'Cancel renaming',
-          icon: const Icon(Icons.close),
-          onPressed: () => setState(() => _renaming = false),
-        ),
-        IconButton(
-          tooltip: 'Save name',
-          icon: const Icon(Icons.check),
-          onPressed: () => _saveName(chat),
-        ),
-      ],
-    );
-  }
-
-  void _startRenaming(String title) {
-    _name.value = TextEditingValue(
-      text: title,
-      selection: TextSelection(baseOffset: 0, extentOffset: title.length),
-    );
-    setState(() => _renaming = true);
-  }
-
-  Future<void> _saveName(AssistChat chat) async {
-    setState(() => _renaming = false);
-    await context.read<AssistChatController>().rename(chat.id, _name.text);
   }
 
   Future<void> _send(String text) async {
@@ -227,31 +143,6 @@ class _AssistChatScreenState extends State<AssistChatScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
-  }
-
-  Future<void> _delete(AssistChat chat, String title) async {
-    final chats = context.read<AssistChatController>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete this chat?'),
-        content: Text('"$title" will be permanently deleted.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (!(confirmed ?? false) || !mounted) return;
-    // Leave first, so this screen doesn't show the chat as deleted.
-    Navigator.of(context).pop();
-    await chats.delete(chat.id);
   }
 }
 

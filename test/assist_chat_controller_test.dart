@@ -172,6 +172,41 @@ void main() {
     expect(title(), 'October 1st Chat 1');
   });
 
+  test('pinned chats are listed first and never expire', () async {
+    final controller = createController();
+    final older = await controller.startChat('Older');
+    now = now.add(const Duration(hours: 1));
+    final newer = await controller.startChat('Newer');
+    expect([for (final chat in controller.chats) chat.id], [newer, older]);
+
+    await controller.setPinned([older], true);
+    expect([for (final chat in controller.chats) chat.id], [older, newer]);
+
+    now = now.add(const Duration(days: 30));
+    expect([for (final chat in controller.chats) chat.id], [older]);
+
+    // Pins are saved, so they last through the next launch.
+    final reloaded = createController();
+    expect(reloaded.chatById(older)!.pinned, isTrue);
+  });
+
+  test('unpinning a chat starts its countdown again', () async {
+    final controller = createController();
+    final id = await controller.startChat('Furnace filter?');
+    await controller.setPinned([id], true);
+
+    // Long past when it would have expired, unpinning doesn't delete it.
+    now = now.add(const Duration(days: 30));
+    await controller.setPinned([id], false);
+    expect(controller.chatById(id), isNotNull);
+    expect(controller.chatById(id)!.pinned, isFalse);
+
+    now = now.add(const Duration(days: 13));
+    expect(controller.chatById(id), isNotNull);
+    now = now.add(const Duration(days: 1));
+    expect(controller.chatById(id), isNull);
+  });
+
   test('deleting chats removes them from the device', () async {
     final controller = createController();
     final kept = await controller.startChat('Keep me');

@@ -6,7 +6,8 @@ import '../utils/date_utils.dart';
 import '../utils/id_generator.dart';
 
 /// Holds the user's Assist chats, saves every change, and deletes chats that
-/// have had no new messages for [AssistChat.expiresAfter].
+/// have had no new messages for [AssistChat.expiresAfter], unless they're
+/// pinned.
 class AssistChatController extends ChangeNotifier {
   AssistChatController(this._repository, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now,
@@ -21,13 +22,18 @@ class AssistChatController extends ChangeNotifier {
   final DateTime Function() _clock;
   List<AssistChat> _chats;
 
-  /// Chats that haven't expired, most recently active first.
+  /// Chats that haven't expired: pinned chats first, then the rest, each
+  /// most recently active first.
   List<AssistChat> get chats {
     final now = _clock();
-    final active = [
-      for (final chat in _chats)
-        if (!chat.isExpiredAt(now)) chat,
-    ]..sort((a, b) => b.lastActiveAt.compareTo(a.lastActiveAt));
+    final active =
+        [
+          for (final chat in _chats)
+            if (!chat.isExpiredAt(now)) chat,
+        ]..sort((a, b) {
+          if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+          return b.lastActiveAt.compareTo(a.lastActiveAt);
+        });
     return List.unmodifiable(active);
   }
 
@@ -113,10 +119,31 @@ class AssistChatController extends ChangeNotifier {
     await _saveAndNotify();
   }
 
-  Future<void> delete(String chatId) async {
+  /// Pins or unpins the chats with [chatIds]. Pinned chats are listed first
+  /// and never expire. Unpinning gives a chat another
+  /// [AssistChat.expiresAfter] before it's deleted.
+  Future<void> setPinned(Iterable<String> chatIds, bool pinned) async {
+    final ids = chatIds.toSet();
+    final now = _clock();
     _chats = [
       for (final chat in _chats)
-        if (chat.id != chatId) chat,
+        if (!ids.contains(chat.id) || chat.pinned == pinned)
+          chat
+        else if (pinned)
+          chat.copyWith(pinned: true)
+        else
+          chat.copyWith(pinned: false, unpinnedAt: now),
+    ];
+    await _saveAndNotify();
+  }
+
+  Future<void> delete(String chatId) => deleteChats([chatId]);
+
+  Future<void> deleteChats(Iterable<String> chatIds) async {
+    final ids = chatIds.toSet();
+    _chats = [
+      for (final chat in _chats)
+        if (!ids.contains(chat.id)) chat,
     ];
     await _saveAndNotify();
   }

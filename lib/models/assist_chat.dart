@@ -45,7 +45,8 @@ class AssistChatMessage {
 }
 
 /// A conversation on the Assist tab, saved on the device so the user can
-/// come back to it. Deleted after [expiresAfter] without new messages.
+/// come back to it. Deleted after [expiresAfter] without new messages,
+/// unless it's [pinned].
 @immutable
 class AssistChat {
   const AssistChat({
@@ -55,6 +56,8 @@ class AssistChat {
     required this.lastActiveAt,
     required this.dayNumber,
     this.name,
+    this.pinned = false,
+    this.unpinnedAt,
   });
 
   /// How long a chat is kept after its last message.
@@ -85,9 +88,26 @@ class AssistChat {
   /// When the last message was added. The chat expires [expiresAfter] later.
   final DateTime lastActiveAt;
 
-  DateTime get expiresAt => lastActiveAt.add(expiresAfter);
+  /// Whether the user pinned the chat, which lists it first and keeps it
+  /// from expiring.
+  final bool pinned;
 
-  bool isExpiredAt(DateTime now) => !now.isBefore(expiresAt);
+  /// When the chat was last unpinned, if ever. Unpinning starts the
+  /// [expiresAfter] countdown again, so a chat that was pinned for a long
+  /// time isn't deleted as soon as it's unpinned.
+  final DateTime? unpinnedAt;
+
+  /// When the chat will be deleted if it gets no new messages. Doesn't apply
+  /// while it's [pinned].
+  DateTime get expiresAt {
+    final unpinned = unpinnedAt;
+    final since = unpinned != null && unpinned.isAfter(lastActiveAt)
+        ? unpinned
+        : lastActiveAt;
+    return since.add(expiresAfter);
+  }
+
+  bool isExpiredAt(DateTime now) => !pinned && !now.isBefore(expiresAt);
 
   /// Whether the last question is still waiting for an answer, for example
   /// because the assistant couldn't be reached.
@@ -117,6 +137,8 @@ class AssistChat {
     bool clearName = false,
     List<AssistChatMessage>? messages,
     DateTime? lastActiveAt,
+    bool? pinned,
+    DateTime? unpinnedAt,
   }) {
     return AssistChat(
       id: id,
@@ -125,6 +147,8 @@ class AssistChat {
       createdAt: createdAt,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       dayNumber: dayNumber,
+      pinned: pinned ?? this.pinned,
+      unpinnedAt: unpinnedAt ?? this.unpinnedAt,
     );
   }
 
@@ -135,6 +159,8 @@ class AssistChat {
     'createdAt': createdAt.toIso8601String(),
     'lastActiveAt': lastActiveAt.toIso8601String(),
     'dayNumber': dayNumber,
+    if (pinned) 'pinned': true,
+    if (unpinnedAt != null) 'unpinnedAt': unpinnedAt!.toIso8601String(),
   };
 
   factory AssistChat.fromJson(Map<String, dynamic> json) => AssistChat(
@@ -147,5 +173,10 @@ class AssistChat {
     createdAt: DateTime.parse(json['createdAt'] as String),
     lastActiveAt: DateTime.parse(json['lastActiveAt'] as String),
     dayNumber: json['dayNumber'] as int,
+    pinned: json['pinned'] as bool? ?? false,
+    unpinnedAt: switch (json['unpinnedAt']) {
+      final String unpinnedAt => DateTime.parse(unpinnedAt),
+      _ => null,
+    },
   );
 }
