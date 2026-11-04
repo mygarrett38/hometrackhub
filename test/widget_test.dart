@@ -1229,7 +1229,7 @@ void main() {
     expect(find.text('Personal'), findsNothing);
 
     // Turning sync on picks the main calendar.
-    await tester.tap(find.text('Sync tasks with my calendar'));
+    await tester.tap(find.byTooltip('Sync tasks with my calendar'));
     await tester.pumpAndSettle();
     expect(find.text('Personal'), findsOneWidget);
     expect(
@@ -1264,12 +1264,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Calendar sync'));
     await tester.pumpAndSettle();
-    const tip = 'Tip: Create a home maintenance calendar';
-    expect(find.text(tip), findsNothing);
-
-    await tester.tap(find.text('Sync tasks with my calendar'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(tip));
+    // The tip is there even before sync is turned on.
+    await tester.tap(find.text('Create a home maintenance calendar'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Create new calendar'), findsOneWidget);
     // Tests run as Android, so the iPhone and iPad sync step is left out.
@@ -1289,7 +1285,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('all-day event'), findsNothing);
 
-    await tester.tap(find.byTooltip('Help'));
+    // Help is a card on the screen rather than a button in the title bar.
+    expect(find.byTooltip('Help'), findsNothing);
+    await tester.tap(find.text('Sync help'));
     await tester.pumpAndSettle();
     expect(find.textContaining('all-day event'), findsOneWidget);
 
@@ -1308,13 +1306,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Calendar sync'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sync tasks with my calendar'));
+    await tester.tap(find.byTooltip('Sync tasks with my calendar'));
     await tester.pumpAndSettle();
 
-    expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
-      isFalse,
-    );
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
     // The problem is explained on the screen, not in a pop-up.
     expect(find.byType(SnackBar), findsNothing);
     final problem = find.widgetWithText(

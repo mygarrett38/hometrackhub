@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../services/calendar_service.dart';
 import '../../../state/settings_controller.dart';
-import '../../widgets/section_header.dart';
+import '../../widgets/screen_padding.dart';
+import '../../widgets/settings_card.dart';
 
 /// Lets the user add their maintenance tasks to a calendar on the device and
 /// choose which calendar they go in.
@@ -152,12 +153,20 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
       appBar: AppBar(
         title: const Text('Calendar sync'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            tooltip: 'Help',
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => const _CalendarSyncHelpDialog(),
+          // The switch has no label of its own on screen, so its tooltip
+          // says what it does, and screen readers read that.
+          Padding(
+            // Lines up with the cards' right edge below rather than
+            // crowding the screen's edge.
+            padding: const EdgeInsets.only(right: 16),
+            child: Tooltip(
+              message: 'Sync tasks with my calendar',
+              child: Switch(
+                value: enabled,
+                onChanged: _isTurningOn
+                    ? null
+                    : (turnOn) => turnOn ? _turnOn() : _turnOff(),
+              ),
             ),
           ),
         ],
@@ -168,16 +177,35 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          padding: screenPadding(context),
           children: [
-            SwitchListTile(
-              secondary: const Icon(Icons.event_outlined),
-              title: const Text('Sync tasks with my calendar'),
-              value: enabled,
-              onChanged: _isTurningOn
-                  ? null
-                  : (turnOn) => turnOn ? _turnOn() : _turnOff(),
+            if (!enabled && _problem != null)
+              SettingsCard(children: [_problemRow(_problem!)]),
+            // Help with syncing, and a tip for people who don't want tasks
+            // mixed in with their other events.
+            SettingsCard(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.help_outline),
+                  title: const Text('Sync help'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => const _CalendarSyncHelpDialog(),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.lightbulb_outline),
+                  title: const Text('Tip'),
+                  subtitle: const Text('Create a home maintenance calendar'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => const _SeparateCalendarDialog(),
+                  ),
+                ),
+              ],
             ),
-            if (!enabled && _problem != null) _problemRow(_problem!),
             if (enabled) ..._calendarChoices(settings.syncCalendarId),
           ],
         ),
@@ -220,88 +248,84 @@ class _CalendarSettingsScreenState extends State<CalendarSettingsScreen>
     }
     if (_hasAccess == false) {
       return [
-        ListTile(
-          leading: Icon(
-            Icons.warning_amber_rounded,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          title: const Text('Calendar access is off'),
-          subtitle: const Text(
-            'Tasks are not added or updated until you allow HomeTrackHub to '
-            'use your calendar.',
-          ),
-          trailing: TextButton(
-            onPressed: _service.openAppSettings,
-            child: const Text('Settings'),
-          ),
+        SettingsCard(
+          children: [
+            ListTile(
+              leading: Icon(
+                Icons.warning_amber_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: const Text('Calendar access is off'),
+              subtitle: const Text(
+                'Tasks are not added or updated until you allow HomeTrackHub '
+                'to use your calendar.',
+              ),
+              trailing: TextButton(
+                onPressed: _service.openAppSettings,
+                child: const Text('Settings'),
+              ),
+            ),
+          ],
         ),
       ];
     }
 
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // The calendars to choose from, under their heading.
     return [
-      const SectionHeader('Calendar'),
-      if (calendars.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'There is no calendar on this device that tasks can be added '
-            'to. Add an account in your calendar app, then come back here.',
-          ),
-        )
-      else ...[
-        if (_findCalendar(calendars, selectedId) == null)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'The calendar you chose is hidden in your calendar app or no '
-              'longer on this device. Choose another one.',
-            ),
-          ),
-        RadioGroup<String>(
-          groupValue: selectedId,
-          onChanged: (id) {
-            final calendar = _findCalendar(calendars, id);
-            if (calendar != null) _choose(calendar);
-          },
-          child: Column(
-            children: [
-              for (final calendar in calendars)
-                RadioListTile<String>(
-                  value: calendar.id,
-                  title: Text(calendar.name),
-                  subtitle:
-                      calendar.accountName == null ||
-                          calendar.accountName == calendar.name
-                      ? null
-                      : Text(calendar.accountName!),
-                  secondary: CircleAvatar(
-                    radius: 8,
-                    backgroundColor: calendar.color ?? colors.outline,
+      SettingsCard(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Calendar', style: theme.textTheme.titleMedium),
+                if (calendars.isEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'There is no calendar on this device that tasks can be '
+                    'added to. Add an account in your calendar app, then come '
+                    'back here.',
                   ),
-                ),
-            ],
-          ),
-        ),
-      ],
-      // A quiet tip rather than a main action, for people who don't want
-      // tasks mixed in with their other events.
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Center(
-          child: TextButton.icon(
-            style: TextButton.styleFrom(
-              foregroundColor: colors.onSurfaceVariant,
-              textStyle: Theme.of(context).textTheme.bodyMedium,
-            ),
-            icon: const Icon(Icons.lightbulb_outline, size: 18),
-            label: const Text('Tip: Create a home maintenance calendar'),
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => const _SeparateCalendarDialog(),
+                ] else if (_findCalendar(calendars, selectedId) == null) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'The calendar you chose is hidden in your calendar app or '
+                    'no longer on this device. Choose another one.',
+                  ),
+                ],
+              ],
             ),
           ),
-        ),
+          if (calendars.isNotEmpty)
+            RadioGroup<String>(
+              groupValue: selectedId,
+              onChanged: (id) {
+                final calendar = _findCalendar(calendars, id);
+                if (calendar != null) _choose(calendar);
+              },
+              child: Column(
+                children: [
+                  for (final calendar in calendars)
+                    RadioListTile<String>(
+                      value: calendar.id,
+                      title: Text(calendar.name),
+                      subtitle:
+                          calendar.accountName == null ||
+                              calendar.accountName == calendar.name
+                          ? null
+                          : Text(calendar.accountName!),
+                      secondary: CircleAvatar(
+                        radius: 8,
+                        backgroundColor: calendar.color ?? colors.outline,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     ];
   }
@@ -336,7 +360,7 @@ class _SeparateCalendarDialog extends StatelessWidget {
             'default, so go to calendar.google.com/calendar/syncselect, '
             'select the calendar you just created and save.',
       'Refresh this list and choose your new calendar. Tasks are '
-      'automatically transferred to it.',
+          'automatically transferred to it.',
     ];
 
     return AlertDialog(
