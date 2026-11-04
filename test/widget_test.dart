@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +14,7 @@ import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
 import 'package:hometrackhub/models/task_reminder.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
+import 'package:hometrackhub/services/data_export_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/home_assistant_client.dart';
 import 'package:hometrackhub/services/notification_service.dart';
@@ -104,6 +107,30 @@ class FakeAssistantClient implements HomeAssistantClient {
   }
 }
 
+/// Records what the app asked to save or share instead of opening the
+/// device's save dialog or share sheet.
+class FakeDataExportService implements DataExportService {
+  /// What the user does in the save dialog: true to save, false to cancel.
+  /// Set to an error to make saving fail.
+  Object saveAnswer = true;
+
+  final saved = <(String, String)>[];
+  final shared = <(String, String)>[];
+
+  @override
+  Future<bool> save(String fileName, String contents) async {
+    final answer = saveAnswer;
+    if (answer is! bool) throw answer;
+    if (answer) saved.add((fileName, contents));
+    return answer;
+  }
+
+  @override
+  Future<void> share(String fileName, String contents, {Rect? origin}) async {
+    shared.add((fileName, contents));
+  }
+}
+
 /// Starts the app with fake services and waits until the launch animation
 /// has finished. Pass [notifications] to inspect what the app asked the
 /// notification service to do.
@@ -112,12 +139,14 @@ Future<void> pumpApp(
   FakeNotificationService? notifications,
   FakeCalendarService? calendar,
   FakeAssistantClient? assistant,
+  FakeDataExportService? export,
 }) async {
   await startApp(
     tester,
     notifications: notifications,
     calendar: calendar,
     assistant: assistant,
+    export: export,
   );
   await tester.pumpAndSettle();
 }
@@ -129,6 +158,7 @@ Future<void> startApp(
   FakeNotificationService? notifications,
   FakeCalendarService? calendar,
   FakeAssistantClient? assistant,
+  FakeDataExportService? export,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final preferences = await SharedPreferences.getInstance();
@@ -155,6 +185,9 @@ Future<void> startApp(
         Provider<DeviceDiscoveryService>.value(value: FakeDiscoveryService()),
         Provider<HomeAssistantClient>.value(
           value: assistant ?? FakeAssistantClient(),
+        ),
+        Provider<DataExportService>.value(
+          value: export ?? FakeDataExportService(),
         ),
       ],
       child: const HomeTrackHubApp(),
@@ -1931,6 +1964,56 @@ void main() {
     await tester.tap(find.text('Assistant'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Assistant'), findsOneWidget);
+  });
+
+  testWidgets('your data can be saved to a file or shared', (tester) async {
+    final export = FakeDataExportService();
+    await pumpApp(tester, export: export);
+    await addTasks(tester, []);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy'));
+    await tester.pumpAndSettle();
+    final today = DateTime.now();
+    final fileName =
+        'hometrackhub-data-${today.year}-'
+        '${today.month.toString().padLeft(2, '0')}-'
+        '${today.day.toString().padLeft(2, '0')}.json';
+
+    // Cancelling the save dialog changes nothing.
+    export.saveAnswer = false;
+    await tester.tap(find.text('Save my data'));
+    await tester.pumpAndSettle();
+    expect(export.saved, isEmpty);
+    expect(find.text('Save a copy of all of your data as a file'), findsOne);
+
+    export.saveAnswer = true;
+    await tester.tap(find.text('Save my data'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your data was saved'), findsOneWidget);
+    final (savedName, savedJson) = export.saved.single;
+    expect(savedName, fileName);
+    final data = jsonDecode(savedJson) as Map<String, dynamic>;
+    expect(data.keys, containsAll(['settings', 'homeItems', 'assistChats']));
+    expect((data['homeItems'] as List).single['name'], 'House');
+
+    // Saving can fail, and says so.
+    export.saveAnswer = Exception('Disk full');
+    await tester.tap(find.text('Save my data'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not save your data. Try again.'), findsOneWidget);
+
+    // Sharing explains what it sends, and sends the same file.
+    expect(find.textContaining('Sends a copy of everything'), findsOneWidget);
+    await tester.tap(find.text('Share my data'));
+    await tester.pumpAndSettle();
+    final (sharedName, sharedJson) = export.shared.single;
+    expect(sharedName, fileName);
+    // The same data, apart from when it was exported.
+    final sharedData = jsonDecode(sharedJson) as Map<String, dynamic>;
+    expect(sharedData['homeItems'], data['homeItems']);
+    expect(sharedData['settings'], data['settings']);
   });
 
   testWidgets('dark mode can be selected in settings', (tester) async {
