@@ -5,6 +5,7 @@ import 'package:hometrackhub/app.dart';
 import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
+import 'package:hometrackhub/models/app_settings.dart';
 import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
@@ -1174,15 +1175,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
+    expect(find.text('Receive overviews?'), findsOneWidget);
     expect(find.text('Overview time'), findsNothing);
 
-    await tester.tap(find.text('Weekly'));
-    await tester.pumpAndSettle();
+    // Picks how often from the menu next to "Receive overviews?".
+    Future<void> choose(String frequency) async {
+      await tester.tap(find.byType(DropdownButton<OverviewFrequency>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(frequency).last);
+      await tester.pumpAndSettle();
+    }
+
+    await choose('Weekly');
     expect(find.text('Monday'), findsOneWidget);
     expect(find.text('Overview time'), findsOneWidget);
 
-    await tester.tap(find.text('Monthly'));
-    await tester.pumpAndSettle();
+    await choose('Monthly');
     expect(find.text('1st of each month'), findsOneWidget);
 
     // The choice is kept after leaving the screen.
