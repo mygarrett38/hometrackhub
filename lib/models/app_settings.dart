@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show ThemeMode, immutable;
 
+import 'calendar_period.dart';
 import 'task_reminder.dart';
 
 /// How often the overview notification summarizing upcoming maintenance is
@@ -26,6 +27,7 @@ class AppSettings {
     this.overviewHour = 8,
     this.overviewMinute = 0,
     this.themeMode = ThemeMode.system,
+    this.calendarPeriod = CalendarPeriod.month,
     this.networkDiscoveryEnabled = true,
     this.hideDetailsInNotifications = false,
     this.calendarSyncEnabled = false,
@@ -47,6 +49,10 @@ class AppSettings {
 
   // Appearance
   final ThemeMode themeMode;
+
+  /// What the calendar shows when the app opens, and the time the
+  /// Overview's Completed and Spent cards count: this week, month or year.
+  final CalendarPeriod calendarPeriod;
 
   // Privacy
   /// Whether the app may scan the local network for smart devices.
@@ -75,6 +81,7 @@ class AppSettings {
     int? overviewHour,
     int? overviewMinute,
     ThemeMode? themeMode,
+    CalendarPeriod? calendarPeriod,
     bool? networkDiscoveryEnabled,
     bool? hideDetailsInNotifications,
     bool? calendarSyncEnabled,
@@ -87,6 +94,7 @@ class AppSettings {
       overviewHour: overviewHour ?? this.overviewHour,
       overviewMinute: overviewMinute ?? this.overviewMinute,
       themeMode: themeMode ?? this.themeMode,
+      calendarPeriod: calendarPeriod ?? this.calendarPeriod,
       networkDiscoveryEnabled:
           networkDiscoveryEnabled ?? this.networkDiscoveryEnabled,
       hideDetailsInNotifications:
@@ -103,6 +111,7 @@ class AppSettings {
     'overviewHour': overviewHour,
     'overviewMinute': overviewMinute,
     'themeMode': themeMode.name,
+    'calendarPeriod': calendarPeriod.name,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
     'hideDetailsInNotifications': hideDetailsInNotifications,
     'calendarSyncEnabled': calendarSyncEnabled,
@@ -115,6 +124,7 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     const defaults = AppSettings();
     final themeName = json['themeMode'] as String?;
+    final periodName = json['calendarPeriod'] as String?;
     final overviewName = json['overviewFrequency'] as String?;
     return AppSettings(
       overviewFrequency: overviewName == null
@@ -127,6 +137,9 @@ class AppSettings {
       themeMode: themeName == null
           ? defaults.themeMode
           : ThemeMode.values.byName(themeName),
+      calendarPeriod: periodName == null
+          ? defaults.calendarPeriod
+          : CalendarPeriod.values.byName(periodName),
       networkDiscoveryEnabled:
           json['networkDiscoveryEnabled'] as bool? ??
           defaults.networkDiscoveryEnabled,

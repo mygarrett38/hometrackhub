@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../models/calendar_period.dart';
 import '../../../state/settings_controller.dart';
-
 import '../../widgets/screen_padding.dart';
+import '../../widgets/settings_card.dart';
+import '../../widgets/settings_dropdown_row.dart';
 
-/// Labels for each [ThemeMode], shared with the settings category list.
-const themeModeLabels = {
-  ThemeMode.system: 'System default',
-  ThemeMode.light: 'Light',
-  ThemeMode.dark: 'Dark',
-};
-
-/// Lets the user choose light mode, dark mode, or follow the device.
+/// Lets the user choose light mode, dark mode, or follow the device, and
+/// how much time the calendar and Overview show.
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
 
@@ -26,32 +22,44 @@ class AppearanceSettingsScreen extends StatelessWidget {
       body: ListView(
         padding: screenPadding(context),
         children: [
-          SegmentedButton<ThemeMode>(
-            segments: const [
-              ButtonSegment(
-                value: ThemeMode.system,
-                label: Text('System'),
-                icon: Icon(Icons.brightness_auto),
-              ),
-              ButtonSegment(
-                value: ThemeMode.light,
-                label: Text('Light'),
-                icon: Icon(Icons.light_mode),
-              ),
-              ButtonSegment(
-                value: ThemeMode.dark,
-                label: Text('Dark'),
-                icon: Icon(Icons.dark_mode),
+          SettingsCard(
+            children: [
+              SettingsDropdownRow<ThemeMode>(
+                icon: Icons.brightness_6_outlined,
+                title: 'Theme',
+                description:
+                    'System follows your device\'s light or dark mode '
+                    'setting.',
+                value: settings.themeMode,
+                choices: const {
+                  ThemeMode.system: 'System',
+                  ThemeMode.light: 'Light',
+                  ThemeMode.dark: 'Dark',
+                },
+                onChanged: (themeMode) =>
+                    controller.update(settings.copyWith(themeMode: themeMode)),
               ),
             ],
-            selected: {settings.themeMode},
-            onSelectionChanged: (selection) => controller.update(
-              settings.copyWith(themeMode: selection.single),
-            ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'System follows your device\'s light or dark mode setting.',
+          SettingsCard(
+            children: [
+              SettingsDropdownRow<CalendarPeriod>(
+                icon: Icons.calendar_month_outlined,
+                title: 'Calendar view',
+                description:
+                    'What the calendar shows when the app opens. The '
+                    'Overview\'s Completed and Spent cards also count this '
+                    'week, month or year.',
+                value: settings.calendarPeriod,
+                choices: {
+                  for (final period in CalendarPeriod.values)
+                    period: period.label,
+                },
+                onChanged: (period) => controller.update(
+                  settings.copyWith(calendarPeriod: period),
+                ),
+              ),
+            ],
           ),
         ],
       ),

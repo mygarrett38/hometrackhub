@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/models/app_settings.dart';
+import 'package:hometrackhub/models/calendar_period.dart';
 import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
@@ -105,6 +106,29 @@ void main() {
     expect(settings.themeMode, ThemeMode.dark);
     expect(settings.overviewFrequency, OverviewFrequency.off);
     expect(settings.overviewWeekday, DateTime.monday);
+    expect(settings.calendarPeriod, CalendarPeriod.month);
+  });
+
+  test('the calendar view setting survives a JSON round trip', () {
+    const settings = AppSettings(calendarPeriod: CalendarPeriod.year);
+    expect(
+      AppSettings.fromJson(settings.toJson()).calendarPeriod,
+      CalendarPeriod.year,
+    );
+  });
+
+  test('CalendarPeriod.rangeOf covers the week, month or year of a day', () {
+    // A Wednesday.
+    final day = DateTime(2026, 11, 4);
+    expect(CalendarPeriod.week.rangeOf(day), (
+      DateTime(2026, 11, 1),
+      DateTime(2026, 11, 8),
+    ));
+    expect(CalendarPeriod.month.rangeOf(day), (
+      DateTime(2026, 11),
+      DateTime(2026, 12),
+    ));
+    expect(CalendarPeriod.year.rangeOf(day), (DateTime(2026), DateTime(2027)));
   });
 
   test('tasks saved before per-task reminders keep their on or off choice', () {

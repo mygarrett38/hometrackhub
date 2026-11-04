@@ -7,6 +7,7 @@ import '../../../state/settings_controller.dart';
 import '../../widgets/notification_permission.dart';
 import '../../widgets/screen_padding.dart';
 import '../../widgets/settings_card.dart';
+import '../../widgets/settings_dropdown_row.dart';
 
 /// Weekday names for the weekly overview, keyed by [DateTime.weekday].
 const weekdayNames = {
@@ -85,8 +86,17 @@ class _NotificationSettingsScreenState
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _OverviewRow(
-                    frequency: settings.overviewFrequency,
+                  SettingsDropdownRow<OverviewFrequency>(
+                    icon: Icons.summarize_outlined,
+                    title: 'Receive overviews?',
+                    description:
+                        'A notification summarizing the maintenance coming '
+                        'up each week or month.',
+                    value: settings.overviewFrequency,
+                    choices: {
+                      for (final frequency in OverviewFrequency.values)
+                        frequency: frequency.label,
+                    },
                     onChanged: (frequency) =>
                         _setOverviewFrequency(controller, frequency),
                   ),
@@ -173,82 +183,5 @@ class _NotificationSettingsScreenState
       final allowed = await requestNotificationPermission(context);
       if (mounted) setState(() => _blocked = !allowed);
     }
-  }
-}
-
-/// Asks whether to receive overviews, with the menu in the top right and a
-/// description below that runs the full width after the icon. A [ListTile]
-/// would squeeze the description in beside the menu.
-class _OverviewRow extends StatelessWidget {
-  const _OverviewRow({required this.frequency, required this.onChanged});
-
-  final OverviewFrequency frequency;
-  final ValueChanged<OverviewFrequency> onChanged;
-
-  /// As tall as the menu, so the question lines up with it.
-  static const _menuHeight = 48.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // The same spacing and text styles as the list rows around it.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(
-            height: _menuHeight,
-            child: Icon(Icons.summarize_outlined),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // At least as tall as the menu, but taller for large text.
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: _menuHeight),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Receive overviews?',
-                          style: theme.textTheme.bodyLarge,
-                        ),
-                      ),
-                      DropdownButton<OverviewFrequency>(
-                        value: frequency,
-                        // The choice sits against the right edge, however
-                        // short it is.
-                        alignment: AlignmentDirectional.centerEnd,
-                        onChanged: (frequency) {
-                          if (frequency != null) onChanged(frequency);
-                        },
-                        items: [
-                          for (final frequency in OverviewFrequency.values)
-                            DropdownMenuItem(
-                              value: frequency,
-                              child: Text(frequency.label),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'A notification summarizing the maintenance coming up each '
-                  'week or month.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -1940,7 +1940,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Appearance'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dark'));
+    await tester.tap(find.byType(DropdownButton<ThemeMode>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark').last);
     await tester.pumpAndSettle();
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
