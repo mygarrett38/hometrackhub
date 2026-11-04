@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../models/calendar_period.dart';
 import '../../../models/home_expense.dart';
 import '../../../models/home_item.dart';
 import '../../../models/home_item_task.dart';
 import '../../../state/home_item_controller.dart';
+import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/task_tile.dart';
@@ -50,8 +52,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final controller = context.watch<HomeItemController>();
     final now = DateTime.now();
     final today = dateOnly(now);
-    final monthStart = DateTime(now.year, now.month);
-    final nextMonth = DateTime(now.year, now.month + 1);
+    // The Completed and Spent cards count this week, month or year, as
+    // chosen in Appearance settings.
+    final period = context.watch<SettingsController>().settings.calendarPeriod;
+    final (periodStart, periodEnd) = period.rangeOf(today);
     final activeTasks = controller.allTasks
         .where((task) => !controller.isListedAsDone(task))
         .toList();
@@ -62,16 +66,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final days = calendarDaysBetween(today, task.dueDate);
       return days >= 0 && days <= 30;
     }).length;
-    final completedThisMonth = controller.allTasks
+    final completedInPeriod = controller.allTasks
         .expand((task) => task.task.completionDates)
-        .where((date) => !date.isBefore(monthStart) && date.isBefore(nextMonth))
+        .where((date) => !date.isBefore(periodStart) && date.isBefore(periodEnd))
         .length;
-    final spentThisMonth = controller.homeItems
+    final spentInPeriod = controller.homeItems
         .expand((item) => item.expenses)
         .where(
           (expense) =>
-              !expense.date.isBefore(monthStart) &&
-              expense.date.isBefore(nextMonth),
+              !expense.date.isBefore(periodStart) &&
+              expense.date.isBefore(periodEnd),
         )
         .fold<double>(0, (total, expense) => total + expense.amount);
     final colors = Theme.of(context).colorScheme;
@@ -147,8 +151,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       _SummaryCard(
-                        label: 'Completed This Month',
-                        value: '$completedThisMonth',
+                        label: 'Completed This ${period.label}',
+                        value: '$completedInPeriod',
                         icon: Icons.task_alt,
                         color: colors.secondary,
                         onTap: () => Navigator.of(context).push(
@@ -158,17 +162,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       _SummaryCard(
-                        label: 'Spent This Month',
-                        value: '\$${spentThisMonth.toStringAsFixed(2)}',
+                        label: 'Spent This ${period.label}',
+                        value: '\$${spentInPeriod.toStringAsFixed(2)}',
                         icon: Icons.account_balance_wallet_outlined,
                         color: colors.tertiary,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
-                            builder: (_) => _MonthlyExpensesScreen(
-                              month: now,
-                              onRecordExpense: () =>
-                                  _recordExpense(context, controller),
-                            ),
+                            // There's no list for a single week, so a week
+                            // opens the month it's in.
+                            builder: (_) => period == CalendarPeriod.year
+                                ? _YearlyExpensesScreen(
+                                    initialYear: now.year,
+                                    onRecordExpense: () =>
+                                        _recordExpense(context, controller),
+                                  )
+                                : _MonthlyExpensesScreen(
+                                    month: now,
+                                    onRecordExpense: () =>
+                                        _recordExpense(context, controller),
+                                  ),
                           ),
                         ),
                       ),

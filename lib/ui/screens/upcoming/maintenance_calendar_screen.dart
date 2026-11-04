@@ -3,22 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../models/calendar_period.dart';
 import '../../../models/home_item_task.dart';
 import '../../../state/home_item_controller.dart';
+import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../widgets/task_tile.dart';
 import '../home_items/task_form_screen.dart';
-
-/// How much time the calendar shows at once.
-enum CalendarPeriod {
-  week('Week'),
-  month('Month'),
-  year('Year');
-
-  const CalendarPeriod(this.label);
-
-  final String label;
-}
 
 /// Calendar tab: a week, month or year of maintenance, with every task due
 /// or completed in that time listed below it. Tapping a day narrows the list
@@ -40,7 +31,10 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
   /// way.
   static const _anchorPage = 10000;
 
-  var _period = CalendarPeriod.month;
+  /// Starts as the view chosen in Appearance settings when the app opened.
+  /// Changing that setting later only takes effect the next time the app
+  /// opens.
+  late CalendarPeriod _period;
 
   /// The day the screen was opened, which pages are counted from.
   late final DateTime _anchorDay;
@@ -68,6 +62,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen> {
     _anchorDay = dateOnly(DateTime.now());
     _focusDay = _anchorDay;
     _pages = PageController(initialPage: _anchorPage);
+    _period = context.read<SettingsController>().settings.calendarPeriod;
   }
 
   @override

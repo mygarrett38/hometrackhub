@@ -8,6 +8,7 @@ import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/app_settings.dart';
+import 'package:hometrackhub/models/calendar_period.dart';
 import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
@@ -133,13 +134,15 @@ class FakeDataExportService implements DataExportService {
 
 /// Starts the app with fake services and waits until the launch animation
 /// has finished. Pass [notifications] to inspect what the app asked the
-/// notification service to do.
+/// notification service to do, and [savedData] for what the app finds
+/// already saved on the device.
 Future<void> pumpApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
   FakeCalendarService? calendar,
   FakeAssistantClient? assistant,
   FakeDataExportService? export,
+  Map<String, Object> savedData = const {},
 }) async {
   await startApp(
     tester,
@@ -147,6 +150,7 @@ Future<void> pumpApp(
     calendar: calendar,
     assistant: assistant,
     export: export,
+    savedData: savedData,
   );
   await tester.pumpAndSettle();
 }
@@ -159,8 +163,9 @@ Future<void> startApp(
   FakeCalendarService? calendar,
   FakeAssistantClient? assistant,
   FakeDataExportService? export,
+  Map<String, Object> savedData = const {},
 }) async {
-  SharedPreferences.setMockInitialValues({});
+  SharedPreferences.setMockInitialValues(savedData);
   final preferences = await SharedPreferences.getInstance();
 
   await tester.pumpWidget(
@@ -1964,6 +1969,66 @@ void main() {
     await tester.tap(find.text('Assistant'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Assistant'), findsOneWidget);
+  });
+
+  testWidgets('changing the calendar view leaves the open calendar alone', (
+    tester,
+  ) async {
+    final calendarTitle = find.descendant(
+      of: find.byTooltip('Show week, month or year'),
+      matching: find.byType(Text),
+    );
+    // A week's title names its first and last days, such as "Nov 1 – 7".
+    bool showsWeek() =>
+        tester.widget<Text>(calendarTitle.first).data!.contains(' – ');
+
+    await pumpApp(tester);
+    expect(find.text('Completed This Month'), findsOneWidget);
+    expect(find.text('Spent This Month'), findsOneWidget);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButton<CalendarPeriod>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Week').last);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // The Overview counts this week straight away.
+    await tester.tap(find.byTooltip('Overview'));
+    await tester.pumpAndSettle();
+    expect(find.text('Completed This Week'), findsOneWidget);
+    expect(find.text('Spent This Week'), findsOneWidget);
+
+    // The calendar that's already open keeps showing a month.
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    expect(showsWeek(), isFalse);
+  });
+
+  testWidgets('the calendar starts on the view saved in settings', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      savedData: {
+        'settings_v1': jsonEncode(
+          const AppSettings(calendarPeriod: CalendarPeriod.week).toJson(),
+        ),
+      },
+    );
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+
+    // A week's title names its first and last days, such as "Nov 1 – 7".
+    final calendarTitle = find.descendant(
+      of: find.byTooltip('Show week, month or year'),
+      matching: find.byType(Text),
+    );
+    expect(tester.widget<Text>(calendarTitle.first).data, contains(' – '));
   });
 
   testWidgets('your data can be saved to a file or shared', (tester) async {
