@@ -1172,7 +1172,6 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Overview off'), findsOneWidget);
     await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
     expect(find.text('Overview time'), findsNothing);
@@ -1186,10 +1185,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1st of each month'), findsOneWidget);
 
-    // The settings list summarizes the choice.
+    // The choice is kept after leaving the screen.
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.textContaining('Monthly overview on the 1st'), findsOneWidget);
+    await tester.tap(find.text('Notifications'));
+    await tester.pumpAndSettle();
+    expect(find.text('1st of each month'), findsOneWidget);
   });
 
   testWidgets('notification settings can open the device settings', (
@@ -1233,10 +1234,17 @@ void main() {
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();
 
-    // The settings list summarizes the choice.
+    // The choice is kept after leaving the screen.
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Adding tasks to Work'), findsOneWidget);
+    await tester.tap(find.text('Calendar sync'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<RadioGroup<String>>(find.byType(RadioGroup<String>))
+          .groupValue,
+      'work',
+    );
   });
 
   testWidgets('the calendar list explains how to add a separate calendar', (
@@ -1880,6 +1888,46 @@ void main() {
     await tester.tapAt(tester.getTopLeft(button) + const Offset(32, 4));
     await tester.pumpAndSettle();
     expect(tester.widget<NavigationBar>(bar).selectedIndex, 2);
+  });
+
+  testWidgets('settings are listed in one card, with Assistant above Privacy', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    final titles = [
+      'Notifications',
+      'Calendar sync',
+      'Appearance',
+      'Assistant',
+      'Privacy',
+    ];
+    final tops = [
+      for (final title in titles)
+        tester
+            .getTopLeft(
+              find.descendant(
+                of: find.byType(Card),
+                matching: find.text(title),
+              ),
+            )
+            .dy,
+    ];
+    expect(tops, orderedEquals([...tops]..sort()));
+    expect(find.byType(Card), findsOneWidget);
+    // Just the category names, without a summary under each.
+    for (final title in titles) {
+      expect(
+        tester.widget<ListTile>(find.widgetWithText(ListTile, title)).subtitle,
+        isNull,
+      );
+    }
+
+    await tester.tap(find.text('Assistant'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Assistant'), findsOneWidget);
   });
 
   testWidgets('dark mode can be selected in settings', (tester) async {

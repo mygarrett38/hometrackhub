@@ -1,81 +1,68 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../../models/app_settings.dart';
-import '../../../state/settings_controller.dart';
+import '../../widgets/screen_padding.dart';
+import '../../widgets/settings_card.dart';
 import 'appearance_settings_screen.dart';
+import 'assistant_settings_screen.dart';
 import 'calendar_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'privacy_settings_screen.dart';
 
-/// Settings tab: one row per category of settings, each opening its own
-/// screen. Each row's subtitle summarizes the current choices.
+/// Settings tab: a card listing each category of settings, each opening its
+/// own screen.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  void _open(BuildContext context, Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
-  }
+  static const _categories = [
+    (
+      icon: Icons.notifications_outlined,
+      title: 'Notifications',
+      screen: NotificationSettingsScreen(),
+    ),
+    (
+      icon: Icons.event_outlined,
+      title: 'Calendar sync',
+      screen: CalendarSettingsScreen(),
+    ),
+    (
+      icon: Icons.palette_outlined,
+      title: 'Appearance',
+      screen: AppearanceSettingsScreen(),
+    ),
+    (
+      icon: Icons.forum_outlined,
+      title: 'Assistant',
+      screen: AssistantSettingsScreen(),
+    ),
+    (
+      icon: Icons.lock_outline,
+      title: 'Privacy',
+      screen: PrivacySettingsScreen(),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsController>().settings;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        padding: screenPadding(context),
         children: [
-          ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: const Text('Notifications'),
-            subtitle: Text(_describeOverview(context, settings)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(context, const NotificationSettingsScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.event_outlined),
-            title: const Text('Calendar sync'),
-            subtitle: Text(
-              settings.calendarSyncEnabled && settings.syncCalendarName != null
-                  ? 'Adding tasks to ${settings.syncCalendarName}'
-                  : 'Off',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(context, const CalendarSettingsScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('Appearance'),
-            subtitle: Text(themeModeLabels[settings.themeMode]!),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(context, const AppearanceSettingsScreen()),
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock_outline),
-            title: const Text('Privacy'),
-            subtitle: const Text(
-              'Network scanning, notification details and your data',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(context, const PrivacySettingsScreen()),
+          SettingsCard(
+            children: [
+              for (final category in _categories)
+                ListTile(
+                  leading: Icon(category.icon),
+                  title: Text(category.title),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => category.screen),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
     );
-  }
-
-  /// For example "Weekly overview on Monday at 8:00 AM".
-  String _describeOverview(BuildContext context, AppSettings settings) {
-    final time = TimeOfDay(
-      hour: settings.overviewHour,
-      minute: settings.overviewMinute,
-    ).format(context);
-    return switch (settings.overviewFrequency) {
-      OverviewFrequency.off => 'Overview off',
-      OverviewFrequency.weekly =>
-        'Weekly overview on ${weekdayNames[settings.overviewWeekday]} '
-            'at $time',
-      OverviewFrequency.monthly => 'Monthly overview on the 1st at $time',
-    };
   }
 }
