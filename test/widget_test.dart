@@ -8,12 +8,14 @@ import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/app_settings.dart';
+import 'package:hometrackhub/models/assist_chat.dart';
 import 'package:hometrackhub/models/calendar_period.dart';
 import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
 import 'package:hometrackhub/models/task_reminder.dart';
+import 'package:hometrackhub/models/technical_level.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
 import 'package:hometrackhub/services/data_export_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
@@ -28,6 +30,7 @@ import 'package:hometrackhub/ui/screens/dashboard/dashboard_screen.dart';
 import 'package:hometrackhub/ui/screens/assist/assist_new_chat_screen.dart';
 import 'package:hometrackhub/ui/screens/assist/assist_widgets.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
+import 'package:hometrackhub/ui/screens/settings/assistant_settings_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:hometrackhub/utils/date_utils.dart';
 import 'package:provider/provider.dart';
@@ -99,9 +102,16 @@ class FakeAssistantClient implements HomeAssistantClient {
   /// The conversation sent with each question, oldest first.
   final conversations = <List<AssistantMessage>>[];
 
+  /// The technical level each question was asked at, oldest first.
+  final technicalLevels = <TechnicalLevel>[];
+
   @override
-  Future<AssistantReply> ask(List<AssistantMessage> conversation) async {
+  Future<AssistantReply> ask(
+    List<AssistantMessage> conversation, {
+    TechnicalLevel technicalLevel = TechnicalLevel.someExperience,
+  }) async {
     conversations.add(List.of(conversation));
+    technicalLevels.add(technicalLevel);
     final reply = this.reply;
     if (reply is AssistantReply) return reply;
     throw reply;
@@ -143,6 +153,7 @@ Future<void> pumpApp(
   FakeAssistantClient? assistant,
   FakeDataExportService? export,
   Map<String, Object> savedData = const {},
+  bool firstLaunch = false,
 }) async {
   await startApp(
     tester,
@@ -151,12 +162,17 @@ Future<void> pumpApp(
     assistant: assistant,
     export: export,
     savedData: savedData,
+    firstLaunch: firstLaunch,
   );
   await tester.pumpAndSettle();
 }
 
 /// Starts the app with fake services, leaving the launch animation at its
 /// first frame.
+///
+/// Unless [firstLaunch] is true, the app starts as if the user had already
+/// been asked about the AI assistant, so that question doesn't get in the
+/// way of other tests.
 Future<void> startApp(
   WidgetTester tester, {
   FakeNotificationService? notifications,
@@ -164,8 +180,20 @@ Future<void> startApp(
   FakeAssistantClient? assistant,
   FakeDataExportService? export,
   Map<String, Object> savedData = const {},
+  bool firstLaunch = false,
 }) async {
-  SharedPreferences.setMockInitialValues(savedData);
+  final data = {...savedData};
+  if (!firstLaunch) {
+    final settings = switch (data['settings_v1']) {
+      final String json => jsonDecode(json) as Map<String, dynamic>,
+      _ => const AppSettings().toJson(),
+    };
+    data['settings_v1'] = jsonEncode({
+      ...settings,
+      'askedAboutAssistant': true,
+    });
+  }
+  SharedPreferences.setMockInitialValues(data);
   final preferences = await SharedPreferences.getInstance();
 
   await tester.pumpWidget(
@@ -178,8 +206,10 @@ Future<void> startApp(
           create: (_) => SettingsController(SettingsRepository(preferences)),
         ),
         ChangeNotifierProvider(
-          create: (_) =>
-              AssistChatController(AssistChatRepository(preferences)),
+          create: (context) => AssistChatController(
+            AssistChatRepository(preferences),
+            context.read<SettingsController>(),
+          ),
         ),
         Provider<NotificationService>.value(
           value: notifications ?? FakeNotificationService(),
@@ -1837,6 +1867,243 @@ void main() {
             isBold(widget.textSpan!, 'Turn off the power'),
       ),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('the first time the app opens, it asks about the assistant, '
+      'and turning it off leaves only nearby services', (tester) async {
+    await pumpApp(tester, firstLaunch: true);
+    expect(find.text('Use the AI assistant?'), findsOneWidget);
+
+    await tester.tap(find.text('Turn it off'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use the AI assistant?'), findsNothing);
+    final settings = tester
+        .element(find.byType(HomeShell))
+        .read<SettingsController>()
+        .settings;
+    expect(settings.assistantEnabled, isFalse);
+    expect(settings.askedAboutAssistant, isTrue);
+
+    // The Overview no longer points to the assistant, and the Assist tab is
+    // just the nearby services search.
+    expect(find.textContaining('Ask AI Assist'), findsNothing);
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Nearby services'), findsOneWidget);
+    expect(find.text('What would you like to do today?'), findsNothing);
+  });
+
+  testWidgets('keeping the assistant on at first launch keeps the Assist tab', (
+    tester,
+  ) async {
+    await pumpApp(tester, firstLaunch: true);
+    await tester.tap(find.text('Keep it on'));
+    await tester.pumpAndSettle();
+
+    final settings = tester
+        .element(find.byType(HomeShell))
+        .read<SettingsController>()
+        .settings;
+    expect(settings.assistantEnabled, isTrue);
+    expect(settings.askedAboutAssistant, isTrue);
+    expect(find.textContaining('Ask AI Assist'), findsOneWidget);
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.text('What would you like to do today?'), findsOneWidget);
+  });
+
+  testWidgets('the app only asks about the assistant once', (tester) async {
+    await pumpApp(tester);
+    expect(find.text('Use the AI assistant?'), findsNothing);
+  });
+
+  testWidgets('the app does not ask about an assistant it does not have', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      firstLaunch: true,
+      assistant: FakeAssistantClient(isConfigured: false),
+    );
+    expect(find.text('Use the AI assistant?'), findsNothing);
+  });
+
+  testWidgets('the switch in the Assistant settings turns the assistant on '
+      'and off', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assistant'));
+    await tester.pumpAndSettle();
+
+    final toggle = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(find.byTooltip('Use the AI assistant'), findsOneWidget);
+    // There's only a message about the assistant while it's off.
+    expect(find.text('The assistant is on'), findsNothing);
+    expect(find.text('The assistant is off'), findsNothing);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(find.text('The assistant is off'), findsOneWidget);
+    // Its other settings are hidden while it's off.
+    expect(find.text('Technical level'), findsNothing);
+    expect(find.text('Keep chats for'), findsNothing);
+    expect(find.text('Delete chats'), findsNothing);
+
+    // The Assist tab follows the switch.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Nearby services'), findsOneWidget);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assistant'));
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.text('What would you like to do today?'), findsOneWidget);
+  });
+
+  /// Opens Settings, then the Assistant settings page.
+  Future<void> openAssistantSettings(WidgetTester tester) async {
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assistant'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('questions are asked at the technical level from settings', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient();
+    await pumpApp(tester, assistant: assistant);
+    await openAssistantSettings(tester);
+
+    await tester.tap(find.byType(DropdownButton<TechnicalLevel>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Handy').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .element(find.byType(AssistantSettingsScreen))
+          .read<SettingsController>()
+          .settings
+          .technicalLevel,
+      TechnicalLevel.handy,
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await openNewConversation(tester);
+    await askAssistant(tester, 'How do I replace a faucet cartridge?');
+    expect(assistant.technicalLevels, [TechnicalLevel.handy]);
+  });
+
+  testWidgets('shortening how long chats are kept asks before deleting any', (
+    tester,
+  ) async {
+    final tenDaysAgo = DateTime.now().subtract(const Duration(days: 10));
+    await pumpApp(
+      tester,
+      savedData: {
+        'assist_chats_v1': jsonEncode([
+          AssistChat(
+            id: 'old',
+            messages: const [AssistChatMessage.user('Old question')],
+            createdAt: tenDaysAgo,
+            lastActiveAt: tenDaysAgo,
+            dayNumber: 1,
+          ).toJson(),
+        ]),
+      },
+    );
+    final chats = tester
+        .element(find.byType(HomeShell))
+        .read<AssistChatController>();
+    await chats.startChat('Recent question');
+    await openAssistantSettings(tester);
+    int keepChatsDays() => tester
+        .element(find.byType(AssistantSettingsScreen))
+        .read<SettingsController>()
+        .settings
+        .keepChatsDays;
+
+    Future<void> choose(String days) async {
+      await tester.tap(find.byType(DropdownButton<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(days).last);
+      await tester.pumpAndSettle();
+    }
+
+    // Keeping chats for longer deletes nothing, so nothing is asked.
+    await choose('30 days');
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(keepChatsDays(), 30);
+
+    // Keeping them for less than the old chat's age asks first.
+    await choose('7 days');
+    expect(find.text('Keep chats for 7 days?'), findsOneWidget);
+    expect(
+      find.textContaining('1 chat hasn\'t had a new message'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(keepChatsDays(), 30);
+    expect(chats.chats, hasLength(2));
+
+    await choose('7 days');
+    await tester.tap(find.text('Delete and change'));
+    await tester.pumpAndSettle();
+    expect(keepChatsDays(), 7);
+    expect(chats.chatById('old'), isNull);
+    expect(chats.chats, hasLength(1));
+  });
+
+  testWidgets('all chats can be deleted from the Assistant settings', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    final chats = tester
+        .element(find.byType(HomeShell))
+        .read<AssistChatController>();
+    final pinned = await chats.startChat('Pinned question');
+    await chats.setPinned([pinned], true);
+    await chats.startChat('Other question');
+    await openAssistantSettings(tester);
+
+    expect(find.text('Technical level'), findsOneWidget);
+    await tester.tap(find.text('Delete chats'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('including pinned ones'), findsOneWidget);
+
+    // Cancelling keeps them.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(chats.chats, hasLength(2));
+
+    await tester.tap(find.text('Delete chats'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete chats'));
+    await tester.pumpAndSettle();
+    expect(chats.chats, isEmpty);
+    expect(
+      tester
+          .widget<ListTile>(find.widgetWithText(ListTile, 'Delete chats'))
+          .enabled,
+      isFalse,
     );
   });
 

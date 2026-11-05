@@ -1,26 +1,67 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/assist_chat_repository.dart';
+import '../models/app_settings.dart';
 import '../models/assist_chat.dart';
 import '../utils/date_utils.dart';
 import '../utils/id_generator.dart';
+import 'settings_controller.dart';
 
 /// Holds the user's Assist chats, saves every change, and deletes chats that
-/// have had no new messages for [AssistChat.expiresAfter], unless they're
+/// have had no new messages for [keepFor], unless they're
 /// pinned.
 class AssistChatController extends ChangeNotifier {
-  AssistChatController(this._repository, {DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now,
-      _chats = _repository.load() {
+  AssistChatController(
+    this._repository,
+    this._settings, {
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now,
+       _chats = _repository.load(),
+       _keepFor = _keepForIn(_settings.settings) {
+    _settings.addListener(_onSettingsChanged);
     // Chats that expired while the app was closed are deleted on startup.
-    if (_chats.any((chat) => chat.isExpiredAt(_clock()))) {
+    if (_chats.any((chat) => chat.isExpiredAt(_clock(), _keepFor))) {
       _saveAndNotify();
     }
   }
 
   final AssistChatRepository _repository;
+  final SettingsController _settings;
   final DateTime Function() _clock;
   List<AssistChat> _chats;
+  Duration _keepFor;
+
+  static Duration _keepForIn(AppSettings settings) =>
+      Duration(days: settings.keepChatsDays);
+
+  /// How long chats are kept after their last message, as chosen in
+  /// Assistant settings. Pinned chats are kept however long it's been.
+  Duration get keepFor => _keepFor;
+
+  /// When [chat] will be deleted if it gets no new messages.
+  DateTime expiresAt(AssistChat chat) => chat.expiresAt(_keepFor);
+
+  /// How many chats would be deleted straight away if chats were only kept
+  /// for [keepFor].
+  int countExpiredIfKeptFor(Duration keepFor) {
+    final now = _clock();
+    return chats.where((chat) => chat.isExpiredAt(now, keepFor)).length;
+  }
+
+  /// Deletes chats right away when the user shortens how long they're kept,
+  /// and updates when the rest will be deleted.
+  void _onSettingsChanged() {
+    final keepFor = _keepForIn(_settings.settings);
+    if (keepFor == _keepFor) return;
+    _keepFor = keepFor;
+    _saveAndNotify();
+  }
+
+  @override
+  void dispose() {
+    _settings.removeListener(_onSettingsChanged);
+    super.dispose();
+  }
 
   /// Chats that haven't expired: pinned chats first, then the rest, each
   /// most recently active first.
@@ -29,7 +70,7 @@ class AssistChatController extends ChangeNotifier {
     final active =
         [
           for (final chat in _chats)
-            if (!chat.isExpiredAt(now)) chat,
+            if (!chat.isExpiredAt(now, _keepFor)) chat,
         ]..sort((a, b) {
           if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
           return b.lastActiveAt.compareTo(a.lastActiveAt);
@@ -89,7 +130,7 @@ class AssistChatController extends ChangeNotifier {
   }
 
   /// Adds [message] to the end of a chat, which keeps it from expiring for
-  /// another [AssistChat.expiresAfter]. Does nothing if the chat is gone,
+  /// another [keepFor]. Does nothing if the chat is gone,
   /// for example because it was deleted while waiting for an answer.
   Future<void> addMessage(String chatId, AssistChatMessage message) async {
     final chat = chatById(chatId);
@@ -121,7 +162,7 @@ class AssistChatController extends ChangeNotifier {
 
   /// Pins or unpins the chats with [chatIds]. Pinned chats are listed first
   /// and never expire. Unpinning gives a chat another
-  /// [AssistChat.expiresAfter] before it's deleted.
+  /// [keepFor] before it's deleted.
   Future<void> setPinned(Iterable<String> chatIds, bool pinned) async {
     final ids = chatIds.toSet();
     final now = _clock();
@@ -167,7 +208,7 @@ class AssistChatController extends ChangeNotifier {
     final now = _clock();
     _chats = [
       for (final chat in _chats)
-        if (!chat.isExpiredAt(now)) chat,
+        if (!chat.isExpiredAt(now, _keepFor)) chat,
     ];
     notifyListeners();
     await _repository.save(_chats);

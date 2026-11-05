@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/data/assist_chat_repository.dart';
+import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/assist_chat.dart';
 import 'package:hometrackhub/state/assist_chat_controller.dart';
+import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -14,8 +16,11 @@ void main() {
     now = DateTime(2026, 10, 1, 9);
   });
 
-  AssistChatController createController() =>
-      AssistChatController(AssistChatRepository(preferences), clock: () => now);
+  AssistChatController createController() => AssistChatController(
+    AssistChatRepository(preferences),
+    SettingsController(SettingsRepository(preferences)),
+    clock: () => now,
+  );
 
   test('saved chats are loaded again on the next launch', () async {
     final controller = createController();
@@ -205,6 +210,38 @@ void main() {
     expect(controller.chatById(id), isNotNull);
     now = now.add(const Duration(days: 1));
     expect(controller.chatById(id), isNull);
+  });
+
+  test('chats are kept for as long as the setting says', () async {
+    final settings = SettingsController(SettingsRepository(preferences));
+    final controller = AssistChatController(
+      AssistChatRepository(preferences),
+      settings,
+      clock: () => now,
+    );
+    final old = await controller.startChat('Old question');
+    now = now.add(const Duration(days: 10));
+    final recent = await controller.startChat('Recent question');
+    now = now.add(const Duration(days: 1));
+    expect(controller.keepFor, const Duration(days: 14));
+
+    // Keeping chats for longer gives them more time.
+    await settings.update(settings.settings.copyWith(keepChatsDays: 30));
+    now = now.add(const Duration(days: 10));
+    expect([for (final chat in controller.chats) chat.id], [recent, old]);
+
+    // Shortening it deletes the chats that are now too old straight away,
+    // from the device too.
+    expect(controller.countExpiredIfKeptFor(const Duration(days: 7)), 2);
+    await controller.setPinned([recent], true);
+    expect(controller.countExpiredIfKeptFor(const Duration(days: 7)), 1);
+    await settings.update(settings.settings.copyWith(keepChatsDays: 7));
+    await Future<void>.delayed(Duration.zero);
+    expect([for (final chat in controller.chats) chat.id], [recent]);
+    expect(
+      [for (final chat in AssistChatRepository(preferences).load()) chat.id],
+      [recent],
+    );
   });
 
   test('deleting chats removes them from the device', () async {

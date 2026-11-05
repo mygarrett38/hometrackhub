@@ -20,10 +20,9 @@ import 'assist_chat_screen.dart';
 class AssistHistoryScreen extends StatefulWidget {
   const AssistHistoryScreen({super.key});
 
-  static final _expiryNote =
+  static String _expiryNote(Duration keepFor) =>
       'Chats are saved only on this device and are deleted after '
-      '${AssistChat.expiresAfter.inDays} days without new messages, unless '
-      'they are pinned.';
+      '${keepFor.inDays} days without new messages, unless they are pinned.';
 
   @override
   State<AssistHistoryScreen> createState() => _AssistHistoryScreenState();
@@ -147,7 +146,7 @@ class _AssistHistoryScreenState extends State<AssistHistoryScreen> {
                   padding: const EdgeInsets.all(32),
                   child: Text(
                     'You have no saved chats yet.\n\n'
-                    '${AssistHistoryScreen._expiryNote}',
+                    '${AssistHistoryScreen._expiryNote(controller.keepFor)}',
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -213,7 +212,12 @@ class _AssistHistoryScreenState extends State<AssistHistoryScreen> {
         ),
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text(
-          chat.pinned ? _describeLastChat(chat, now) : _describe(chat, now),
+          chat.pinned
+              ? _describeLastChat(chat, now)
+              : _describe(
+                  context.read<AssistChatController>().expiresAt(chat),
+                  now,
+                ),
         ),
         trailing: _selecting ? null : const Icon(Icons.chevron_right),
         onTap: _selecting
@@ -339,8 +343,8 @@ class _AssistHistoryScreenState extends State<AssistHistoryScreen> {
   }
 
   /// When the chat will be deleted, for example "Deleting in 11 days".
-  static String _describe(AssistChat chat, DateTime now) {
-    final daysLeft = calendarDaysBetween(now, chat.expiresAt);
+  static String _describe(DateTime expiresAt, DateTime now) {
+    final daysLeft = calendarDaysBetween(now, expiresAt);
     return switch (daysLeft) {
       <= 0 => 'Deleting today',
       1 => 'Deleting tomorrow',

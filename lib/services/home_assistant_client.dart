@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../models/technical_level.dart';
+
 /// A conversation turn sent to and returned from the Home Assistant service.
 class AssistantMessage {
   const AssistantMessage({required this.role, required this.content});
@@ -55,7 +57,12 @@ class HomeAssistantClient {
 
   bool get isConfigured => _endpoint.isNotEmpty && _token.isNotEmpty;
 
-  Future<AssistantReply> ask(List<AssistantMessage> conversation) async {
+  /// Asks the assistant to answer the last question in [conversation],
+  /// pitched at the user's [technicalLevel].
+  Future<AssistantReply> ask(
+    List<AssistantMessage> conversation, {
+    TechnicalLevel technicalLevel = TechnicalLevel.someExperience,
+  }) async {
     if (!isConfigured) {
       throw const AssistantConnectionException(
         'The secure AI service has not been configured yet.',
@@ -80,6 +87,7 @@ class HomeAssistantClient {
       request.write(
         jsonEncode({
           'messages': [for (final message in conversation) message.toJson()],
+          'technicalLevel': technicalLevel.name,
         }),
       );
       final response = await request.close().timeout(

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../models/assist_chat.dart';
 import '../../../services/home_assistant_client.dart';
 import '../../../state/assist_chat_controller.dart';
+import '../../../state/settings_controller.dart';
 import 'assist_widgets.dart';
 
 /// One Assist chat on its own screen, named after the chat, where the user
@@ -126,7 +127,13 @@ class _AssistChatScreenState extends State<AssistChatScreen> {
       _error = null;
     });
     try {
-      final reply = await client.ask(chat.recentMessages());
+      final reply = await client.ask(
+        chat.recentMessages(),
+        technicalLevel: context
+            .read<SettingsController>()
+            .settings
+            .technicalLevel,
+      );
       final reason = reply.professionalReason?.trim() ?? '';
       // Saved even if the user has left this screen, so it's there when
       // they come back to the chat.

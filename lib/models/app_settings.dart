@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' show ThemeMode, immutable;
 
 import 'calendar_period.dart';
 import 'task_reminder.dart';
+import 'technical_level.dart';
 
 /// How often the overview notification summarizing upcoming maintenance is
 /// sent.
@@ -33,7 +34,14 @@ class AppSettings {
     this.calendarSyncEnabled = false,
     this.syncCalendarId,
     this.syncCalendarName,
+    this.assistantEnabled = true,
+    this.askedAboutAssistant = false,
+    this.technicalLevel = TechnicalLevel.someExperience,
+    this.keepChatsDays = 14,
   });
+
+  /// The choices for [keepChatsDays].
+  static const keepChatsDayChoices = [7, 14, 30];
 
   // Notifications
   /// Whether to send a weekly or monthly overview of upcoming maintenance.
@@ -75,6 +83,22 @@ class AppSettings {
   /// The name of [syncCalendarId], shown on the settings list.
   final String? syncCalendarName;
 
+  // Assistant
+  /// Whether the Assist tab offers the AI assistant. When it's off, the tab
+  /// only searches for nearby services.
+  final bool assistantEnabled;
+
+  /// Whether the user has been asked, when they first opened the app, if
+  /// they want to use the AI assistant.
+  final bool askedAboutAssistant;
+
+  /// How much the assistant explains in its answers.
+  final TechnicalLevel technicalLevel;
+
+  /// How many days a chat is kept after its last message, unless it's
+  /// pinned. One of [keepChatsDayChoices].
+  final int keepChatsDays;
+
   AppSettings copyWith({
     OverviewFrequency? overviewFrequency,
     int? overviewWeekday,
@@ -87,6 +111,10 @@ class AppSettings {
     bool? calendarSyncEnabled,
     String? syncCalendarId,
     String? syncCalendarName,
+    bool? assistantEnabled,
+    bool? askedAboutAssistant,
+    TechnicalLevel? technicalLevel,
+    int? keepChatsDays,
   }) {
     return AppSettings(
       overviewFrequency: overviewFrequency ?? this.overviewFrequency,
@@ -102,6 +130,10 @@ class AppSettings {
       calendarSyncEnabled: calendarSyncEnabled ?? this.calendarSyncEnabled,
       syncCalendarId: syncCalendarId ?? this.syncCalendarId,
       syncCalendarName: syncCalendarName ?? this.syncCalendarName,
+      assistantEnabled: assistantEnabled ?? this.assistantEnabled,
+      askedAboutAssistant: askedAboutAssistant ?? this.askedAboutAssistant,
+      technicalLevel: technicalLevel ?? this.technicalLevel,
+      keepChatsDays: keepChatsDays ?? this.keepChatsDays,
     );
   }
 
@@ -117,6 +149,10 @@ class AppSettings {
     'calendarSyncEnabled': calendarSyncEnabled,
     'syncCalendarId': syncCalendarId,
     'syncCalendarName': syncCalendarName,
+    'assistantEnabled': assistantEnabled,
+    'askedAboutAssistant': askedAboutAssistant,
+    'technicalLevel': technicalLevel.name,
+    'keepChatsDays': keepChatsDays,
   };
 
   /// Reads settings saved by [toJson]. Missing values fall back to the
@@ -126,6 +162,8 @@ class AppSettings {
     final themeName = json['themeMode'] as String?;
     final periodName = json['calendarPeriod'] as String?;
     final overviewName = json['overviewFrequency'] as String?;
+    final levelName = json['technicalLevel'] as String?;
+    final keepChatsDays = json['keepChatsDays'] as int?;
     return AppSettings(
       overviewFrequency: overviewName == null
           ? defaults.overviewFrequency
@@ -150,6 +188,16 @@ class AppSettings {
           json['calendarSyncEnabled'] as bool? ?? defaults.calendarSyncEnabled,
       syncCalendarId: json['syncCalendarId'] as String?,
       syncCalendarName: json['syncCalendarName'] as String?,
+      assistantEnabled:
+          json['assistantEnabled'] as bool? ?? defaults.assistantEnabled,
+      askedAboutAssistant:
+          json['askedAboutAssistant'] as bool? ?? defaults.askedAboutAssistant,
+      technicalLevel: levelName == null
+          ? defaults.technicalLevel
+          : TechnicalLevel.values.byName(levelName),
+      keepChatsDays: keepChatsDayChoices.contains(keepChatsDays)
+          ? keepChatsDays!
+          : defaults.keepChatsDays,
     );
   }
 }

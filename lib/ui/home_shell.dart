@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_settings.dart';
+import '../services/home_assistant_client.dart';
 import '../services/notification_service.dart';
 import '../state/home_item_controller.dart';
 import '../state/settings_controller.dart';
 import 'screens/assist/assist_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/home_items/home_item_list_screen.dart';
+import 'screens/launch/launch_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/upcoming/maintenance_calendar_screen.dart';
 
@@ -56,7 +58,54 @@ class _HomeShellState extends State<HomeShell> {
           settings.overviewFrequency != OverviewFrequency.off) {
         context.read<NotificationService>().requestPermission();
       }
+      _askAboutAssistant();
     });
+  }
+
+  /// The first time the app opens, asks whether the user wants the AI
+  /// assistant, once the launch animation is out of the way. Not asked when
+  /// this version of the app has no assistant to offer.
+  Future<void> _askAboutAssistant() async {
+    final controller = context.read<SettingsController>();
+    if (controller.settings.askedAboutAssistant ||
+        !context.read<HomeAssistantClient>().isConfigured) {
+      return;
+    }
+    await LaunchScreen.whenFinished(context);
+    if (!mounted) return;
+
+    final keep = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.forum_outlined),
+        title: const Text('Use the AI assistant?'),
+        content: const Text(
+          'The Assist tab can answer home maintenance questions using '
+          "Anthropic's Claude AI. Your questions are sent to Anthropic to "
+          'answer them.\n\n'
+          'If you turn it off, the Assist tab only searches for nearby '
+          'services. You can change this anytime in Settings under '
+          'Assistant.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Turn it off'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Keep it on'),
+          ),
+        ],
+      ),
+    );
+    await controller.update(
+      controller.settings.copyWith(
+        assistantEnabled: keep ?? true,
+        askedAboutAssistant: true,
+      ),
+    );
   }
 
   void _select(int index) => setState(() => _selectedIndex = index);

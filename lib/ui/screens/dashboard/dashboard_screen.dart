@@ -54,7 +54,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final today = dateOnly(now);
     // The Completed and Spent cards count this week, month or year, as
     // chosen in Appearance settings.
-    final period = context.watch<SettingsController>().settings.calendarPeriod;
+    final settings = context.watch<SettingsController>().settings;
+    final period = settings.calendarPeriod;
     final (periodStart, periodEnd) = period.rangeOf(today);
     final activeTasks = controller.allTasks
         .where((task) => !controller.isListedAsDone(task))
@@ -186,21 +187,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: widget.onAssistPressed,
-                      icon: const Icon(Icons.forum_outlined),
-                      label: const Text('Have a home question? Ask AI Assist'),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  // Hidden when the assistant is turned off in settings.
+                  if (settings.assistantEnabled) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: widget.onAssistPressed,
+                        icon: const Icon(Icons.forum_outlined),
+                        label: const Text('Have a home question? Ask AI Assist'),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             );

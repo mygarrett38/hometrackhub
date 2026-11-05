@@ -25,11 +25,12 @@ Future<void> main() async {
   final homeItemController = HomeItemController(
     HomeItemRepository(preferences),
   );
-  final assistChatController = AssistChatController(
-    AssistChatRepository(preferences),
-  );
   final settingsController = SettingsController(
     SettingsRepository(preferences),
+  );
+  final assistChatController = AssistChatController(
+    AssistChatRepository(preferences),
+    settingsController,
   );
 
   final notificationService = LocalNotificationService();

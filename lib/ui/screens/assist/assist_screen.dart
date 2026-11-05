@@ -2,17 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../services/home_assistant_client.dart';
+import '../../../state/settings_controller.dart';
 import 'assist_history_screen.dart';
 import 'assist_new_chat_screen.dart';
 import 'nearby_services_screen.dart';
 
 /// Assist tab: asks what the user would like to do, and opens a new chat
 /// with the AI assistant, an earlier chat, or the nearby services search.
+/// When the assistant is turned off in settings, the tab is just the nearby
+/// services search.
 class AssistScreen extends StatelessWidget {
   const AssistScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final assistantEnabled = context.select<SettingsController, bool>(
+      (controller) => controller.settings.assistantEnabled,
+    );
+    if (!assistantEnabled) return const NearbyServicesScreen();
+
     final theme = Theme.of(context);
     final configured = context.read<HomeAssistantClient>().isConfigured;
 

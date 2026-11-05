@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,6 +30,14 @@ class LaunchScreen extends StatefulWidget {
   /// The logo's size on screen, matching the native launch screen, which
   /// draws the 4x image at a quarter of its pixel width.
   static const logoSize = 298.0;
+
+  /// Completes once the launch animation above [context] has finished, so
+  /// [child] can wait to show a dialog until it's fully on screen. Completes
+  /// straight away if there's no launch screen.
+  static Future<void> whenFinished(BuildContext context) {
+    final state = context.findAncestorStateOfType<_LaunchScreenState>();
+    return state?._finishedCompleter.future ?? Future.value();
+  }
 
   @override
   State<LaunchScreen> createState() => _LaunchScreenState();
@@ -96,6 +106,7 @@ class _LaunchScreenState extends State<LaunchScreen>
   bool _started = false;
   bool _reduceMotion = false;
   bool _finished = false;
+  final _finishedCompleter = Completer<void>();
 
   @override
   void initState() {
@@ -106,6 +117,7 @@ class _LaunchScreenState extends State<LaunchScreen>
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         setState(() => _finished = true);
+        _finishedCompleter.complete();
       }
     });
   }

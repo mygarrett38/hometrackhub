@@ -48,6 +48,30 @@ blocks. Set "recommendProfessional" to true when the user should hire a professi
 for this problem, and put the reason in one sentence in "professionalReason". \
 Otherwise set it to false and leave "professionalReason" empty.`;
 
+// What to tell Claude for each technical level the app can send. Anything
+// else is ignored in favour of the middle level, so the instructions can't
+// be replaced from the app.
+const TECHNICAL_LEVELS = {
+  beginner: `The user is new to home maintenance. Explain each step simply \
+and in order, say what any technical terms mean, list the tools needed, and \
+suggest a professional sooner when a job is fiddly or risky.`,
+  someExperience: `The user has done some basic home maintenance. Give clear \
+steps without explaining the basics they're likely to know.`,
+  handy: `The user is experienced with tools and home repairs. Be concise and \
+skip basic explanations, but still give safety warnings and still recommend a \
+professional for gas, electrical wiring, refrigerant or structural work.`,
+} as const;
+
+type TechnicalLevel = keyof typeof TECHNICAL_LEVELS;
+
+function technicalLevelOf(body: unknown): TechnicalLevel {
+  const level = (body as { technicalLevel?: unknown } | null)?.technicalLevel;
+  // Object.hasOwn, so built-in names like "constructor" don't count.
+  return typeof level === "string" && Object.hasOwn(TECHNICAL_LEVELS, level)
+    ? (level as TechnicalLevel)
+    : "someExperience";
+}
+
 const REPLY_SCHEMA = {
   type: "object",
   properties: {
@@ -109,7 +133,7 @@ export default {
           effort: "low",
           format: { type: "json_schema", schema: REPLY_SCHEMA },
         },
-        system: SYSTEM_PROMPT,
+        system: `${SYSTEM_PROMPT}\n\n${TECHNICAL_LEVELS[technicalLevelOf(body)]}`,
         messages,
       });
 

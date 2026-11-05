@@ -45,8 +45,8 @@ class AssistChatMessage {
 }
 
 /// A conversation on the Assist tab, saved on the device so the user can
-/// come back to it. Deleted after [expiresAfter] without new messages,
-/// unless it's [pinned].
+/// come back to it. Deleted once it has gone without new messages for as
+/// long as the user keeps chats, unless it's [pinned].
 @immutable
 class AssistChat {
   const AssistChat({
@@ -59,9 +59,6 @@ class AssistChat {
     this.pinned = false,
     this.unpinnedAt,
   });
-
-  /// How long a chat is kept after its last message.
-  static const expiresAfter = Duration(days: 14);
 
   /// The most messages sent to the assistant with each question. Older ones
   /// are left out so long chats stay under the server's limits.
@@ -85,7 +82,8 @@ class AssistChat {
   /// name, and never changes once given.
   final int dayNumber;
 
-  /// When the last message was added. The chat expires [expiresAfter] later.
+  /// When the last message was added, which the time until the chat
+  /// expires counts from.
   final DateTime lastActiveAt;
 
   /// Whether the user pinned the chat, which lists it first and keeps it
@@ -93,21 +91,22 @@ class AssistChat {
   final bool pinned;
 
   /// When the chat was last unpinned, if ever. Unpinning starts the
-  /// [expiresAfter] countdown again, so a chat that was pinned for a long
+  /// countdown to its expiry again, so a chat that was pinned for a long
   /// time isn't deleted as soon as it's unpinned.
   final DateTime? unpinnedAt;
 
-  /// When the chat will be deleted if it gets no new messages. Doesn't apply
-  /// while it's [pinned].
-  DateTime get expiresAt {
+  /// When the chat will be deleted if it gets no new messages and chats are
+  /// kept for [keepFor]. Doesn't apply while it's [pinned].
+  DateTime expiresAt(Duration keepFor) {
     final unpinned = unpinnedAt;
     final since = unpinned != null && unpinned.isAfter(lastActiveAt)
         ? unpinned
         : lastActiveAt;
-    return since.add(expiresAfter);
+    return since.add(keepFor);
   }
 
-  bool isExpiredAt(DateTime now) => !pinned && !now.isBefore(expiresAt);
+  bool isExpiredAt(DateTime now, Duration keepFor) =>
+      !pinned && !now.isBefore(expiresAt(keepFor));
 
   /// Whether the last question is still waiting for an answer, for example
   /// because the assistant couldn't be reached.
