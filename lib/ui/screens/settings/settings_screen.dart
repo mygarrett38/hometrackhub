@@ -5,6 +5,7 @@ import '../../widgets/settings_card.dart';
 import 'appearance_settings_screen.dart';
 import 'assistant_settings_screen.dart';
 import 'calendar_settings_screen.dart';
+import 'nearby_services_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'privacy_settings_screen.dart';
 
@@ -33,6 +34,11 @@ class SettingsScreen extends StatelessWidget {
       icon: Icons.forum_outlined,
       title: 'Assistant',
       screen: AssistantSettingsScreen(),
+    ),
+    (
+      icon: Icons.location_on_outlined,
+      title: 'Nearby services',
+      screen: NearbyServicesSettingsScreen(),
     ),
     (
       icon: Icons.lock_outline,

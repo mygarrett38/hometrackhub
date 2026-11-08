@@ -44,19 +44,30 @@ available. Once the server is deployed:
    you gave the Worker.
 3. Run the app via this command: `flutter run -dart-define-from-file=assist_config.json`, or select the Run and Debug option in VS Code.
 
+### Nearby services
+
+The Nearby services screen shows made-up sample businesses until it's
+connected to Google Places through the same server. Once the server has a
+Google API key (see "Nearby services" in [`assist/README.md`](assist/README.md)),
+add `NEARBY_SERVICES_API_URL` to `assist_config.json`: the Worker's address
+ending in `/places`. It uses the same token as the Assist tab.
+
+Where to search (the device's location or a ZIP code) and the order results
+start in are chosen in Settings > Nearby services.
+
 ## Project structure
 
 | Folder | Contents |
 | --- | --- |
 | `lib/models/` | Plain data classes: home items, maintenance tasks, intervals, settings. |
 | `lib/data/` | The built-in home item catalog and repositories that save data with `shared_preferences`. |
-| `lib/services/` | Notification scheduling, reminder planning, nearby device discovery over Wi-Fi and Bluetooth, and the Assist tab's connection to `assist/`. |
+| `lib/services/` | Notification scheduling, reminder planning, nearby device discovery over Wi-Fi and Bluetooth, the device's location, and the connections to `assist/` for the Assist tab and nearby services. |
 | `lib/state/` | `ChangeNotifier` controllers the UI listens to, plus `ReminderSync`, which reschedules notifications after every change. |
 | `lib/ui/screens/` | Screens, grouped by the tab they belong to: `dashboard/`, `upcoming/` (the maintenance calendar), `home_items/`, `assist/` and `settings/`. |
 | `lib/ui/widgets/` | Small widgets shared by several screens. |
 | `lib/ui/theme/` | The light and dark color themes, built from the logo's navy, sage and beige. |
 | `test/` | Unit tests for the models, planner and catalog, plus widget tests. |
-| `assist/` | The Cloudflare Worker that answers Assist questions with Claude. See its README to deploy it. |
+| `assist/` | The Cloudflare Worker that answers Assist questions with Claude and searches Google Places for nearby services. See its README to deploy it. |
 
 State is shared with the [provider](https://pub.dev/packages/provider)
 package. `lib/main.dart` creates the controllers and services and provides

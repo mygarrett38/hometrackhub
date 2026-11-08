@@ -54,3 +54,48 @@ between deploys.
   the Claude API.
 - The Anthropic Console's Usage page shows tokens and cost. Set a monthly
   spend limit there so a mistake can't run up a large bill.
+
+## Nearby services
+
+The same Worker searches Google Places for the app's Nearby services
+screen, so the Google API key also stays out of the app:
+
+- `POST /places` takes `{ "textQuery": "plumber", "location": ... }`, where
+  `location` is `{ "latitude": 39.8, "longitude": -89.6 }` or
+  `{ "zipCode": "62701" }`. It returns `{ "origin": ..., "places": [...] }`:
+  the point searched around and Google's places. The app works out each
+  business's city, hours and distance from them.
+- `GET /places/photo?name=places/.../photos/...` returns one business photo.
+
+Both need the same `Authorization: Bearer <APP_TOKEN>` as `/chat`. Each IP
+address can search 30 times a minute and load 120 photos a minute.
+
+### Setting up Google
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create
+   a project and link a billing account to it.
+2. Under **APIs & Services > Library**, enable **Places API (New)** (not the
+   older "Places API") and **Geocoding API**, which finds the middle of a
+   ZIP code.
+3. Under **APIs & Services > Credentials**, create an API key. Edit it and
+   set **API restrictions** to those two APIs. Leave application
+   restrictions off: the Worker calls Google, not the phone.
+4. Set a daily limit under each API's **Quotas** page, and a budget alert
+   under **Billing > Budgets & alerts**, so a mistake can't run up a bill.
+5. From this folder:
+
+   ```sh
+   npx wrangler secret put GOOGLE_PLACES_API_KEY   # paste the key
+   npm run deploy
+   ```
+
+Each search is billed as Text Search Enterprise, since it asks for ratings,
+opening hours, phone numbers and websites. Google gives 1,000 of those free
+each month. Each photo shown is a separate Place Photos request, and each ZIP
+code search also makes one Geocoding request. Check Google's
+[pricing list](https://developers.google.com/maps/billing-and-pricing/pricing)
+for current prices.
+
+`npx wrangler tail` shows Google's error messages. `REQUEST_DENIED` from the
+Geocoding API usually means it isn't enabled, or the key's restrictions
+leave it out.

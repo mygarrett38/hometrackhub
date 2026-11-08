@@ -10,7 +10,10 @@ import 'data/settings_repository.dart';
 import 'services/calendar_service.dart';
 import 'services/data_export_service.dart';
 import 'services/device_discovery_service.dart';
+import 'services/google_places_client.dart';
 import 'services/home_assistant_client.dart';
+import 'services/location_service.dart';
+import 'services/nearby_services_client.dart';
 import 'services/notification_service.dart';
 import 'state/assist_chat_controller.dart';
 import 'state/calendar_sync.dart';
@@ -55,6 +58,8 @@ Future<void> main() async {
     repository: CalendarEventRepository(preferences),
   ).start();
 
+  final googlePlaces = GooglePlacesClient();
+
   runApp(
     MultiProvider(
       providers: [
@@ -67,6 +72,14 @@ Future<void> main() async {
           value: NearbyDeviceDiscoveryService(),
         ),
         Provider<HomeAssistantClient>.value(value: HomeAssistantClient()),
+        // Real businesses from Google once its address is configured, and
+        // made-up ones until then.
+        Provider<NearbyServicesClient>.value(
+          value: googlePlaces.isConfigured
+              ? googlePlaces
+              : SampleNearbyServicesClient(),
+        ),
+        Provider<LocationService>.value(value: DeviceLocationService()),
         Provider<DataExportService>.value(value: DeviceDataExportService()),
       ],
       child: const HomeTrackHubApp(),

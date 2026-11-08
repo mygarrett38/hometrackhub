@@ -20,6 +20,8 @@ import 'package:hometrackhub/services/calendar_service.dart';
 import 'package:hometrackhub/services/data_export_service.dart';
 import 'package:hometrackhub/services/device_discovery_service.dart';
 import 'package:hometrackhub/services/home_assistant_client.dart';
+import 'package:hometrackhub/services/location_service.dart';
+import 'package:hometrackhub/services/nearby_services_client.dart';
 import 'package:hometrackhub/services/notification_service.dart';
 import 'package:hometrackhub/services/reminder_planner.dart';
 import 'package:hometrackhub/state/assist_chat_controller.dart';
@@ -37,6 +39,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'calendar_sync_test.dart' show FakeCalendarService;
+import 'nearby_services_test.dart' show FakeLocationService;
 
 class FakeNotificationService implements NotificationService {
   @override
@@ -224,6 +227,10 @@ Future<void> startApp(
         Provider<DataExportService>.value(
           value: export ?? FakeDataExportService(),
         ),
+        Provider<NearbyServicesClient>.value(
+          value: SampleNearbyServicesClient(delay: Duration.zero),
+        ),
+        Provider<LocationService>.value(value: FakeLocationService()),
       ],
       child: const HomeTrackHubApp(),
     ),
@@ -1890,7 +1897,10 @@ void main() {
     expect(find.textContaining('Ask AI Assist'), findsNothing);
     await tester.tap(find.text('Assist'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Nearby services'), findsOneWidget);
+    expect(
+      find.widgetWithText(AppBar, 'Search nearby services'),
+      findsOneWidget,
+    );
     expect(find.text('What would you like to do today?'), findsNothing);
   });
 
@@ -1961,7 +1971,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Assist'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Nearby services'), findsOneWidget);
+    expect(
+      find.widgetWithText(AppBar, 'Search nearby services'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -2166,7 +2179,10 @@ void main() {
 
     await tester.tap(find.text('Search nearby services'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(AppBar, 'Nearby services'), findsOneWidget);
+    expect(
+      find.widgetWithText(AppBar, 'Search nearby services'),
+      findsOneWidget,
+    );
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('What would you like to do today?'), findsOneWidget);

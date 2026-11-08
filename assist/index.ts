@@ -1,10 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+import { error, json, tokenMatches } from "./http";
+import { handlePlacePhoto, handlePlaces, type PlacesEnv } from "./places";
+
 // The Assist tab's backend. The app sends the conversation here, and this
 // Worker asks Claude for the next answer. The Anthropic API key stays in
-// this Worker's secrets so it never ships inside the app.
+// this Worker's secrets so it never ships inside the app. The Nearby services
+// screen's routes are in places.ts.
 
-interface Env {
+interface Env extends PlacesEnv {
   ANTHROPIC_API_KEY: string;
   /** Shared with the app so random visitors can't use the endpoint. */
   APP_TOKEN: string;
@@ -86,6 +90,10 @@ const REPLY_SCHEMA = {
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/places") return handlePlaces(request, env);
+    if (url.pathname === "/places/photo") {
+      return handlePlacePhoto(request, env, url);
+    }
     if (url.pathname !== "/chat") return error(404, "Not found.");
     if (request.method !== "POST") return error(405, "Use POST.");
 
@@ -235,24 +243,4 @@ function parseMessages(body: unknown): Anthropic.MessageParam[] | string {
     return "The conversation must start and end with the user's message.";
   }
   return messages;
-}
-
-/**
- * Compares the "Bearer <token>" header with the expected token in constant
- * time, so the token can't be guessed from how long a check takes.
- */
-function tokenMatches(header: string | null, expected: string): boolean {
-  const encoder = new TextEncoder();
-  const given = encoder.encode(header ?? "");
-  const wanted = encoder.encode(`Bearer ${expected}`);
-  if (given.byteLength !== wanted.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(given, wanted);
-}
-
-function json(data: unknown, status = 200): Response {
-  return Response.json(data, { status });
-}
-
-function error(status: number, message: string): Response {
-  return json({ error: message }, status);
 }

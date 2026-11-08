@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' show ThemeMode, immutable;
 
 import 'calendar_period.dart';
+import 'service_sort.dart';
 import 'task_reminder.dart';
 import 'technical_level.dart';
 
@@ -12,6 +13,16 @@ enum OverviewFrequency {
   monthly('Monthly');
 
   const OverviewFrequency(this.label);
+
+  final String label;
+}
+
+/// Where the Nearby services screen searches around.
+enum NearbyLocationSource {
+  device('My location'),
+  zipCode('ZIP code');
+
+  const NearbyLocationSource(this.label);
 
   final String label;
 }
@@ -38,6 +49,9 @@ class AppSettings {
     this.askedAboutAssistant = false,
     this.technicalLevel = TechnicalLevel.someExperience,
     this.keepChatsDays = 14,
+    this.nearbyLocationSource = NearbyLocationSource.device,
+    this.nearbyZipCode,
+    this.nearbySort = ServiceSort.rating,
   });
 
   /// The choices for [keepChatsDays].
@@ -99,6 +113,23 @@ class AppSettings {
   /// pinned. One of [keepChatsDayChoices].
   final int keepChatsDays;
 
+  // Nearby services
+  /// Whether nearby services are searched for around the device's location
+  /// or around [nearbyZipCode].
+  final NearbyLocationSource nearbyLocationSource;
+
+  /// The five-digit US ZIP code to search around. Kept when the user
+  /// switches to their location, so it's still there if they switch back.
+  final String? nearbyZipCode;
+
+  /// The order businesses are listed in when the Nearby services screen
+  /// opens. The user can still change it on the screen.
+  final ServiceSort nearbySort;
+
+  /// Whether [zipCode] is a five-digit US ZIP code.
+  static bool isValidZipCode(String zipCode) =>
+      RegExp(r'^\d{5}$').hasMatch(zipCode);
+
   AppSettings copyWith({
     OverviewFrequency? overviewFrequency,
     int? overviewWeekday,
@@ -115,6 +146,10 @@ class AppSettings {
     bool? askedAboutAssistant,
     TechnicalLevel? technicalLevel,
     int? keepChatsDays,
+    NearbyLocationSource? nearbyLocationSource,
+    String? nearbyZipCode,
+    bool clearNearbyZipCode = false,
+    ServiceSort? nearbySort,
   }) {
     return AppSettings(
       overviewFrequency: overviewFrequency ?? this.overviewFrequency,
@@ -134,6 +169,11 @@ class AppSettings {
       askedAboutAssistant: askedAboutAssistant ?? this.askedAboutAssistant,
       technicalLevel: technicalLevel ?? this.technicalLevel,
       keepChatsDays: keepChatsDays ?? this.keepChatsDays,
+      nearbyLocationSource: nearbyLocationSource ?? this.nearbyLocationSource,
+      nearbyZipCode: clearNearbyZipCode
+          ? null
+          : nearbyZipCode ?? this.nearbyZipCode,
+      nearbySort: nearbySort ?? this.nearbySort,
     );
   }
 
@@ -153,6 +193,9 @@ class AppSettings {
     'askedAboutAssistant': askedAboutAssistant,
     'technicalLevel': technicalLevel.name,
     'keepChatsDays': keepChatsDays,
+    'nearbyLocationSource': nearbyLocationSource.name,
+    'nearbyZipCode': nearbyZipCode,
+    'nearbySort': nearbySort.name,
   };
 
   /// Reads settings saved by [toJson]. Missing values fall back to the
@@ -164,6 +207,9 @@ class AppSettings {
     final overviewName = json['overviewFrequency'] as String?;
     final levelName = json['technicalLevel'] as String?;
     final keepChatsDays = json['keepChatsDays'] as int?;
+    final locationSourceName = json['nearbyLocationSource'] as String?;
+    final zipCode = json['nearbyZipCode'] as String?;
+    final sortName = json['nearbySort'] as String?;
     return AppSettings(
       overviewFrequency: overviewName == null
           ? defaults.overviewFrequency
@@ -198,6 +244,15 @@ class AppSettings {
       keepChatsDays: keepChatsDayChoices.contains(keepChatsDays)
           ? keepChatsDays!
           : defaults.keepChatsDays,
+      nearbyLocationSource: locationSourceName == null
+          ? defaults.nearbyLocationSource
+          : NearbyLocationSource.values.byName(locationSourceName),
+      nearbyZipCode: zipCode != null && isValidZipCode(zipCode)
+          ? zipCode
+          : null,
+      nearbySort: sortName == null
+          ? defaults.nearbySort
+          : ServiceSort.values.byName(sortName),
     );
   }
 }

@@ -1,4 +1,5 @@
 {
   "HOME_ASSISTANT_API_URL": "https://capstone-assist.your-subdomain.workers.dev/chat",
-  "HOME_ASSISTANT_API_TOKEN": "the same value as the Worker's APP_TOKEN"
+  "HOME_ASSISTANT_API_TOKEN": "the same value as the Worker's APP_TOKEN",
+  "NEARBY_SERVICES_API_URL": "https://capstone-assist.your-subdomain.workers.dev/places"
 }

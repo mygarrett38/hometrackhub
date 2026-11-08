@@ -12,6 +12,25 @@ namespace_id = "1001"
   limit = 10
   period = 60
 
+# Each IP address may search nearby services 30 times a minute.
+[[ratelimits]]
+name = "PLACES_RATE_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+# Each search shows up to 20 business photos, so photos get more room.
+[[ratelimits]]
+name = "PHOTO_RATE_LIMITER"
+namespace_id = "1003"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
 # Secrets are not kept in this file. Set them with:
 #   npx wrangler secret put ANTHROPIC_API_KEY
 #   npx wrangler secret put APP_TOKEN
+#   npx wrangler secret put GOOGLE_PLACES_API_KEY

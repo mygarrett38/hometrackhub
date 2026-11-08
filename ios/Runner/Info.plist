@@ -72,6 +72,8 @@
 	<string>HomeTrackHub adds your maintenance tasks to the calendar you choose and keeps them up to date.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>HomeTrackHub looks for smart devices nearby over Bluetooth so you can track their maintenance.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>HomeTrackHub uses your approximate location to find home maintenance services near you.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>HomeTrackHub scans your home network to find smart devices you may want to track maintenance for.</string>
 	<key>NSBonjourServices</key>
