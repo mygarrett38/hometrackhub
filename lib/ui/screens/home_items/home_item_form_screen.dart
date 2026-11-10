@@ -352,6 +352,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
                       InlineTextRow(
                         label: isVehicle ? 'VIN' : 'Serial #',
                         controller: _serialNumber,
+                        obscureText: true,
                       ),
                     ],
                   ),

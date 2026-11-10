@@ -26,7 +26,7 @@ Future<DateTime?> pickPastDate(BuildContext context, {DateTime? initialDate}) {
 ///
 /// If [choices] are given, a menu button at the end of the row fills the
 /// field with one of them. The user can still type their own value.
-class InlineTextRow extends StatelessWidget {
+class InlineTextRow extends StatefulWidget {
   const InlineTextRow({
     super.key,
     required this.label,
@@ -34,6 +34,7 @@ class InlineTextRow extends StatelessWidget {
     this.hint = 'Unknown',
     this.validator,
     this.choices = const [],
+    this.obscureText = false,
   });
 
   final String label;
@@ -41,34 +42,50 @@ class InlineTextRow extends StatelessWidget {
   final String hint;
   final FormFieldValidator<String>? validator;
   final List<String> choices;
+  final bool obscureText;
+
+  @override
+  State<InlineTextRow> createState() => _InlineTextRowState();
+}
+
+class _InlineTextRowState extends State<InlineTextRow> {
+  late bool _obscureText = widget.obscureText;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: choices.isEmpty ? 16 : 4),
+      padding: EdgeInsets.only(left: 16, right: widget.choices.isEmpty && !widget.obscureText ? 16 : 4),
       child: Row(
         children: [
-          Text(label, style: Theme.of(context).textTheme.bodyLarge),
+          Text(widget.label, style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(width: 16),
           Expanded(
             child: TextFormField(
-              controller: controller,
-              validator: validator,
+              controller: widget.controller,
+              validator: widget.validator,
               textAlign: TextAlign.end,
               textCapitalization: TextCapitalization.sentences,
+              obscureText: _obscureText,
               decoration: InputDecoration(
-                hintText: hint,
+                hintText: widget.hint,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
-          if (choices.isNotEmpty)
+          if (widget.obscureText)
+            IconButton(
+              tooltip: _obscureText ? 'Show ${widget.label}' : 'Hide ${widget.label}',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(_obscureText ? Icons.visibility : Icons.visibility_off),
+              onPressed: () => setState(() => _obscureText = !_obscureText),
+            ),
+          if (widget.choices.isNotEmpty)
             PopupMenuButton<String>(
-              tooltip: 'Choose ${label.toLowerCase()}',
-              onSelected: (choice) => controller.text = choice,
+              tooltip: 'Choose ${widget.label.toLowerCase()}',
+              onSelected: (choice) => widget.controller.text = choice,
               itemBuilder: (context) => [
-                for (final choice in choices)
+                for (final choice in widget.choices)
                   PopupMenuItem(value: choice, child: Text(choice)),
               ],
               // Spaced like the arrow of a [ChoiceMenuButton].
