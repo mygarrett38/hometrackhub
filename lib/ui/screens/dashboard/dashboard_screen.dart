@@ -554,14 +554,18 @@ class _TaskListScreen extends StatelessWidget {
       body: items.isEmpty
           ? Center(child: Text(emptyMessage))
           : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: items.length,
               itemBuilder: (context, index) {
                 final item = items[index];
-                return TaskTile(
-                  item: item,
-                  showArrow: true,
-                  onTap: () => _openTask(context, item),
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  child: TaskTile(
+                    item: item,
+                    showArrow: true,
+                    onTap: () => _openTask(context, item),
+                  ),
                 );
               },
             ),
