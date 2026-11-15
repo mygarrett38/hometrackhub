@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -14,19 +16,24 @@ import '../../widgets/screen_padding.dart';
 
 /// Form for adding a maintenance task or changing an existing one,
 /// including how often it repeats and when the user is reminded about it.
+///
+/// Changes to an existing task are saved as they're made, with no Save
+/// button. A new task is only created when the user taps Add; going back
+/// without tapping it discards it.
 class TaskFormScreen extends StatefulWidget {
   const TaskFormScreen({
     super.key,
     required this.homeItemId,
     required this.homeItemName,
     this.existing,
-  });
+  }) : onSaved = null;
 
-  /// Edits a task for a home item that hasn't been saved yet. Saving pops
-  /// this screen with the task instead of storing it.
+  /// Edits a task for a home item that hasn't been saved yet. Instead of
+  /// being stored, the task is handed to [onSaved] whenever it's saved.
   const TaskFormScreen.unsaved({
     super.key,
     required this.homeItemName,
+    required ValueChanged<MaintenanceTask> this.onSaved,
     this.existing,
   }) : homeItemId = null;
 
@@ -40,9 +47,24 @@ class TaskFormScreen extends StatefulWidget {
   /// The task being edited, or `null` when adding a new task.
   final MaintenanceTask? existing;
 
+  /// Receives the task each time it's saved, for a home item that hasn't
+  /// been saved yet.
+  final ValueChanged<MaintenanceTask>? onSaved;
+
   @override
   State<TaskFormScreen> createState() => _TaskFormScreenState();
 }
+
+/// The values of a task's fields, to tell whether they've changed since
+/// they were last saved.
+typedef _TaskFields = ({
+  String title,
+  String description,
+  String amount,
+  IntervalUnit unit,
+  DateTime? lastCompleted,
+  TaskReminder reminder,
+});
 
 class _TaskFormScreenState extends State<TaskFormScreen> {
   /// The reminder choice for not being reminded at all.
@@ -74,11 +96,21 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   /// turned on, so it won't arrive.
   bool _notificationsBlocked = false;
 
+  late final HomeItemController _homeItems;
+
+  /// Saves typed changes once the user pauses.
+  Timer? _saveTimer;
+
+  /// The fields as they were last saved, for an existing task.
+  _TaskFields? _savedFields;
+
   MaintenanceTask? get _existing => widget.existing;
+  bool get _isNew => _existing == null;
 
   @override
   void initState() {
     super.initState();
+    _homeItems = context.read<HomeItemController>();
     final existing = _existing;
     if (existing != null) {
       _title.text = existing.title;
@@ -86,11 +118,56 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       _setInterval(existing.interval);
       _lastCompleted = existing.lastCompleted;
       _reminder = existing.reminder;
+      _savedFields = _fields;
+      for (final controller in [_title, _description, _amount]) {
+        controller.addListener(_scheduleSave);
+      }
+    }
+  }
+
+  _TaskFields get _fields => (
+    title: _title.text.trim(),
+    description: _description.text.trim(),
+    amount: _amount.text.trim(),
+    unit: _unit,
+    lastCompleted: _lastCompleted,
+    reminder: _reminder,
+  );
+
+  /// Saves the typed changes to an existing task once the user pauses.
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(autosaveDelay, _saveChanges);
+  }
+
+  /// Saves any changes to an existing task. Nothing is saved while the task
+  /// has no name or a repeat that isn't valid; the form shows why instead.
+  void _saveChanges() {
+    _saveTimer?.cancel();
+    if (_isNew) return;
+    final fields = _fields;
+    final task = _buildTask();
+    if (fields == _savedFields || fields.title.isEmpty || task == null) {
+      return;
+    }
+    _savedFields = fields;
+    _store(task);
+  }
+
+  /// Stores [task] on its home item, or hands it to [TaskFormScreen.onSaved]
+  /// for a home item that hasn't been saved yet.
+  Future<void> _store(MaintenanceTask task) async {
+    final homeItemId = widget.homeItemId;
+    if (homeItemId == null) {
+      widget.onSaved!(task);
+    } else {
+      await _homeItems.saveTask(homeItemId, task);
     }
   }
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
     _title.dispose();
     _description.dispose();
     _amount.dispose();
@@ -160,23 +237,19 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           ? _reminder.copyWith(enabled: false)
           : _reminder.copyWith(enabled: true, daysBefore: choice),
     );
+    _saveChanges();
     if (!wasEnabled && _reminder.enabled) {
       final allowed = await requestNotificationPermission(context);
       if (mounted) setState(() => _notificationsBlocked = !allowed);
     }
   }
 
-  Future<void> _save() async {
+  /// Creates the new task, if the form is filled in correctly.
+  Future<void> _add() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final task = _buildTask()!;
     final navigator = Navigator.of(context);
-    final homeItemId = widget.homeItemId;
-    if (homeItemId == null) {
-      navigator.pop(task);
-      return;
-    }
-    await context.read<HomeItemController>().saveTask(homeItemId, task);
+    await _store(_buildTask()!);
     navigator.pop();
   }
 
@@ -185,98 +258,121 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     final recommended = _existing?.recommendedInterval;
     final interval = _interval;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_existing == null ? 'Add task' : 'Edit task'),
-        actions: [TextButton(onPressed: _save, child: const Text('Save'))],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: screenPadding(context),
-          children: [
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  InlineTextRow(
-                    label: 'Task',
-                    controller: _title,
-                    hint: 'Required',
-                    validator: (value) =>
-                        (value == null || value.trim().isEmpty)
-                        ? 'Please describe the task'
-                        : null,
-                  ),
-                  formRowDivider,
-                  InlineValueRow(label: 'For', value: widget.homeItemName),
-                  formRowDivider,
-                  InlineNotesRow(
-                    controller: _description,
-                    label: 'Instructions',
-                    hint: 'Add instructions or notes',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _RepeatRow(
-                    amount: _amount,
-                    unit: _unit,
-                    // Rebuild so the next due date updates.
-                    onAmountChanged: () => setState(() {}),
-                    onUnitChanged: (unit) => setState(() => _unit = unit),
-                    validator: (_) =>
-                        _interval == null ? 'Enter 1 or more' : null,
-                  ),
-                  if (recommended != null)
-                    _RecommendationRow(
-                      recommended: recommended,
-                      isFollowing: interval == recommended,
-                      onReset: () => setState(() => _setInterval(recommended)),
-                    ),
-                  formRowDivider,
-                  InlineDateRow(
-                    label: 'Last done',
-                    value: _lastCompleted,
-                    emptyText: 'Never / not sure',
-                    onChanged: (date) => setState(() => _lastCompleted = date),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (interval != null) ...[
-                    InlineValueRow(
-                      label: 'Next due',
-                      value: MaterialLocalizations.of(context).formatMediumDate(
-                        interval.addTo(_lastCompleted ?? _startDate),
-                      ),
+    return PopScope(
+      // Saves changes still waiting for the user to pause typing.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _saveChanges();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_isNew ? 'Add task' : 'Edit task'),
+          actions: [
+            if (_isNew) TextButton(onPressed: _add, child: const Text('Add')),
+          ],
+        ),
+        body: Form(
+          key: _formKey,
+          // There's no Save button to check the fields, so problems show as
+          // the user edits.
+          autovalidateMode: _isNew
+              ? AutovalidateMode.disabled
+              : AutovalidateMode.onUserInteraction,
+          child: ListView(
+            padding: screenPadding(context),
+            children: [
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    InlineTextRow(
+                      label: 'Task',
+                      controller: _title,
+                      hint: 'Required',
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Please describe the task'
+                          : null,
                     ),
                     formRowDivider,
+                    InlineValueRow(label: 'For', value: widget.homeItemName),
+                    formRowDivider,
+                    InlineNotesRow(
+                      controller: _description,
+                      label: 'Instructions',
+                      hint: 'Add instructions or notes',
+                    ),
                   ],
-                  InlineChoiceRow<int>(
-                    label: 'Notify me',
-                    value: _reminderChoice,
-                    choices: _reminderOptions,
-                    onChanged: _setReminderChoice,
-                  ),
-                  if (_reminder.enabled && _notificationsBlocked)
-                    const NotificationsBlockedNotice(),
-                ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _RepeatRow(
+                      amount: _amount,
+                      unit: _unit,
+                      // Rebuild so the next due date updates.
+                      onAmountChanged: () => setState(() {}),
+                      onUnitChanged: (unit) {
+                        setState(() => _unit = unit);
+                        _saveChanges();
+                      },
+                      validator: (_) =>
+                          _interval == null ? 'Enter 1 or more' : null,
+                    ),
+                    if (recommended != null)
+                      _RecommendationRow(
+                        recommended: recommended,
+                        isFollowing: interval == recommended,
+                        onReset: () {
+                          setState(() => _setInterval(recommended));
+                          _saveChanges();
+                        },
+                      ),
+                    formRowDivider,
+                    InlineDateRow(
+                      label: 'Last done',
+                      value: _lastCompleted,
+                      emptyText: 'Never / not sure',
+                      onChanged: (date) {
+                        setState(() => _lastCompleted = date);
+                        _saveChanges();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (interval != null) ...[
+                      InlineValueRow(
+                        label: 'Next due',
+                        value: MaterialLocalizations.of(context)
+                            .formatMediumDate(
+                              interval.addTo(_lastCompleted ?? _startDate),
+                            ),
+                      ),
+                      formRowDivider,
+                    ],
+                    InlineChoiceRow<int>(
+                      label: 'Notify me',
+                      value: _reminderChoice,
+                      choices: _reminderOptions,
+                      onChanged: _setReminderChoice,
+                    ),
+                    if (_reminder.enabled && _notificationsBlocked)
+                      const NotificationsBlockedNotice(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

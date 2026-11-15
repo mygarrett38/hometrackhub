@@ -350,7 +350,7 @@ void main() {
     await tester.tap(find.text('Add recommended tasks'));
     await tester.pumpAndSettle();
     expect(find.text('Add recommended tasks'), findsNothing);
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
     // Saving skips the pickers and returns to the list of home items.
@@ -722,7 +722,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add recommended tasks'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
     // Saving returns to the scan results so more devices can be added.
@@ -756,7 +756,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Refrigerator'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     await openHomeItem(tester, 'Refrigerator');
 
@@ -973,7 +973,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Refrigerator'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
     await openHomeItem(tester, 'Refrigerator');
@@ -984,6 +984,132 @@ void main() {
 
     expect(find.text('Refrigerator'), findsNothing);
     expect(find.textContaining('not tracking any home items'), findsOneWidget);
+  });
+
+  group('saving as you edit', () {
+    /// The text field of the form row labelled [label].
+    Finder field(String label) => find.descendant(
+      of: find.widgetWithText(InlineTextRow, label),
+      matching: find.byType(TextFormField),
+    );
+
+    HomeItemController homeItemsOf(WidgetTester tester) =>
+        tester.element(find.byType(MaterialApp)).read<HomeItemController>();
+
+    /// Adds a refrigerator with its recommended tasks from the catalog.
+    Future<void> addRefrigerator(WidgetTester tester) async {
+      await tester.tap(find.text('My Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add home item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Appliances'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Refrigerator'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add recommended tasks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a new home item is only created when Add is tapped', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await tester.tap(find.text('My Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add home item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Appliances'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Refrigerator'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Save'), findsNothing);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(homeItemsOf(tester).homeItems, isEmpty);
+    });
+
+    testWidgets('changes to a home item are saved without a Save button', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await addRefrigerator(tester);
+      await tester.tap(find.text('Refrigerator'));
+      await tester.pumpAndSettle();
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Add'), findsNothing);
+
+      // Saved once the user pauses typing.
+      await tester.enterText(field('Name'), 'Kitchen fridge');
+      await tester.pump(autosaveDelay);
+      expect(homeItemsOf(tester).homeItems.single.name, 'Kitchen fridge');
+
+      // An empty name isn't saved, and the form says why.
+      await tester.enterText(field('Name'), '');
+      await tester.pump(autosaveDelay);
+      expect(find.text('Please enter a name'), findsOneWidget);
+      expect(homeItemsOf(tester).homeItems.single.name, 'Kitchen fridge');
+
+      // Leaving straight after typing still saves.
+      await tester.enterText(field('Name'), 'Garage fridge');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(homeItemsOf(tester).homeItems.single.name, 'Garage fridge');
+      expect(find.text('Garage fridge'), findsOneWidget);
+    });
+
+    testWidgets('changes to a task are saved without a Save button', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await addRefrigerator(tester);
+      await openHomeItem(tester, 'Refrigerator');
+      await tester.ensureVisible(find.text('Replace water filter'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Replace water filter'));
+      await tester.pumpAndSettle();
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Add'), findsNothing);
+
+      await tester.enterText(field('Task'), 'Replace filter cartridge');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      final tasks = homeItemsOf(tester).homeItems.single.tasks;
+      expect(
+        tasks.map((task) => task.title),
+        contains('Replace filter cartridge'),
+      );
+      expect(find.text('Replace filter cartridge'), findsOneWidget);
+    });
+
+    testWidgets('a new task is only created when Add is tapped', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await addRefrigerator(tester);
+      await openHomeItem(tester, 'Refrigerator');
+      final taskCount = homeItemsOf(tester).homeItems.single.tasks.length;
+
+      await tester.tap(find.byTooltip('Add task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Task'), 'Check door seal');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(homeItemsOf(tester).homeItems.single.tasks, hasLength(taskCount));
+
+      await tester.tap(find.byTooltip('Add task'));
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Task'), 'Check door seal');
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+      expect(
+        homeItemsOf(tester).homeItems.single.tasks,
+        hasLength(taskCount + 1),
+      );
+    });
   });
 
   testWidgets('tasks are deleted, not marked done, from the edit screen', (
@@ -1177,14 +1303,15 @@ void main() {
     );
     // The fields are the task, its instructions, then how often it repeats.
     await tester.enterText(find.byType(TextFormField).at(2), '3');
-    await tester.tap(find.text('Save'));
+    // Changes are saved as they're made, so just go back.
+    await tester.pageBack();
     await tester.pumpAndSettle();
     expect(
       find.text('Every 3 months (recommended: every 6 months)'),
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     await openHomeItem(tester, 'Refrigerator');
 
@@ -1214,7 +1341,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add recommended tasks'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
     await openHomeItem(tester, 'Refrigerator');
 
@@ -1248,7 +1375,8 @@ void main() {
     await tester.tap(find.text('Never'));
     await tester.pumpAndSettle();
     expect(find.text('Never'), findsOneWidget);
-    await tester.tap(find.text('Save'));
+    // Changes are saved as they're made, so just go back.
+    await tester.pageBack();
     await tester.pumpAndSettle();
 
     // Only the task that was changed has its reminder off.
@@ -2507,7 +2635,7 @@ void main() {
     expect(field().readOnly, isFalse);
     expect(find.byTooltip('Show Serial #'), findsNothing);
     await tester.enterText(serialField, 'SN123');
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
     // Once saved, it can't be changed. A help button says why.

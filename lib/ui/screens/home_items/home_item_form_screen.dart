@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,6 +21,10 @@ import 'task_form_screen.dart';
 
 /// Form for adding a new home item or editing an existing one. When editing,
 /// it also shows the item's maintenance schedule and can delete the item.
+///
+/// Changes to an existing home item are saved as they're made, with no Save
+/// button. A new home item is only created when the user taps Add; going
+/// back without tapping it discards it.
 ///
 /// A new home item can start from a catalog type ([initialType]), from a
 /// device found on the network ([discoveredDevice]), or from scratch within
@@ -45,8 +51,30 @@ class HomeItemFormScreen extends StatefulWidget {
   State<HomeItemFormScreen> createState() => _HomeItemFormScreenState();
 }
 
+/// The values of a home item's fields, to tell whether they've changed
+/// since they were last saved.
+typedef _HomeItemFields = ({
+  String name,
+  String manufacturer,
+  String modelNumber,
+  String serialNumber,
+  String location,
+  String notes,
+  DateTime? purchaseDate,
+});
+
 class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  late final HomeItemController _homeItems;
+
+  /// Saves typed changes once the user pauses.
+  Timer? _saveTimer;
+
+  /// The fields as they were last saved, for an existing home item.
+  _HomeItemFields? _savedFields;
+
+  /// Set once the home item is deleted, so nothing saves it again.
+  bool _deleted = false;
   final _name = TextEditingController();
   final _manufacturer = TextEditingController();
   final _modelNumber = TextEditingController();
@@ -86,6 +114,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   @override
   void initState() {
     super.initState();
+    _homeItems = context.read<HomeItemController>();
     _hideSerialNumber = context
         .read<SettingsController>()
         .settings
@@ -122,11 +151,53 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     if (existing == null) {
       _recommendedTasks =
           _template?.createTasks(startDate: dateOnly(DateTime.now())) ?? [];
+    } else {
+      _savedFields = _fields;
+      for (final controller in _textControllers) {
+        controller.addListener(_scheduleSave);
+      }
     }
+  }
+
+  List<TextEditingController> get _textControllers => [
+    _name,
+    _manufacturer,
+    _modelNumber,
+    _serialNumber,
+    _location,
+    _notes,
+  ];
+
+  _HomeItemFields get _fields => (
+    name: _name.text.trim(),
+    manufacturer: _manufacturer.text.trim(),
+    modelNumber: _modelNumber.text.trim(),
+    serialNumber: _serialNumber.text.trim(),
+    location: _location.text.trim(),
+    notes: _notes.text.trim(),
+    purchaseDate: _purchaseDate,
+  );
+
+  /// Saves the typed changes to an existing home item once the user pauses.
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(autosaveDelay, _saveChanges);
+  }
+
+  /// Saves any changes to an existing home item. Nothing is saved while the
+  /// name is empty; the form shows why instead.
+  void _saveChanges() {
+    _saveTimer?.cancel();
+    if (!_isEditing || _deleted) return;
+    final fields = _fields;
+    if (fields == _savedFields || fields.name.isEmpty) return;
+    _savedFields = fields;
+    _homeItems.updateHomeItem(_buildHomeItem());
   }
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
     for (final controller in [
       _name,
       _manufacturer,
@@ -140,11 +211,9 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final controller = context.read<HomeItemController>();
-    final navigator = Navigator.of(context);
+  /// The home item as entered on the form.
+  HomeItem _buildHomeItem() {
+    final controller = _homeItems;
     final existing = widget.existing;
 
     // Tasks on an existing home item are saved as soon as they're changed,
@@ -156,7 +225,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
         ? null
         : controller.findById(existing.id)?.expenses ?? existing.expenses;
 
-    final homeItem = HomeItem(
+    return HomeItem(
       id: existing?.id ?? generateId(),
       name: _name.text.trim(),
       category: _category,
@@ -171,19 +240,20 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       tasks: existingTasks ?? _newTasks,
       expenses: existingExpenses ?? const [],
     );
+  }
 
-    if (existing != null) {
-      await controller.updateHomeItem(homeItem);
+  /// Creates the new home item, if the form is filled in correctly.
+  Future<void> _add() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final navigator = Navigator.of(context);
+    await _homeItems.addHomeItem(_buildHomeItem());
+    if (widget.discoveredDevice != null) {
+      // Return to the scan results so the user can add more devices.
       navigator.pop();
     } else {
-      await controller.addHomeItem(homeItem);
-      if (widget.discoveredDevice != null) {
-        // Return to the scan results so the user can add more devices.
-        navigator.pop();
-      } else {
-        // Skip the category and type pickers and return to the main screen.
-        navigator.popUntil((route) => route.isFirst);
-      }
+      // Skip the category and type pickers and return to the main screen.
+      navigator.popUntil((route) => route.isFirst);
     }
   }
 
@@ -213,6 +283,7 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     );
 
     if (confirmed ?? false) {
+      _deleted = true;
       navigator.pop();
       await controller.deleteHomeItem(homeItem.id);
     }
@@ -226,8 +297,6 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     return widget.existing?.name ?? 'New ${_category.itemName}';
   }
 
-  /// Opens the task form for one of the new tasks, or for a new custom task
-  /// when [task] is `null`, and keeps the result if the user saves it.
   /// Explains why the VIN or serial number is hidden and how to change it.
   void _showSerialNumberHelp(bool isVehicle) {
     final name = isVehicle ? 'VIN' : 'serial number';
@@ -253,20 +322,30 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
     );
   }
 
+  /// Opens the task form for one of the new tasks, or for a new custom task
+  /// when [task] is `null`. Changes to a task are kept as they're made, and
+  /// a new one once the user taps Add.
   Future<void> _editNewTask([MaintenanceTask? task]) async {
-    final edited = await Navigator.of(context).push<MaintenanceTask>(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) =>
-            TaskFormScreen.unsaved(homeItemName: _currentName, existing: task),
+        builder: (_) => TaskFormScreen.unsaved(
+          homeItemName: _currentName,
+          existing: task,
+          onSaved: _keepNewTask,
+        ),
       ),
     );
-    if (edited == null) return;
+  }
+
+  /// Adds [task] to the new tasks, or replaces the one with the same id.
+  void _keepNewTask(MaintenanceTask task) {
+    if (!mounted) return;
     setState(() {
-      final index = _newTasks.indexWhere((t) => t.id == edited.id);
+      final index = _newTasks.indexWhere((t) => t.id == task.id);
       if (index == -1) {
-        _newTasks = [..._newTasks, edited];
+        _newTasks = [..._newTasks, task];
       } else {
-        _newTasks = [..._newTasks]..[index] = edited;
+        _newTasks = [..._newTasks]..[index] = task;
       }
     });
   }
@@ -323,112 +402,127 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
       _serialNumber,
     ].any((controller) => controller.text.isNotEmpty);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('${_isEditing ? 'Edit' : 'Add'} ${_category.itemName}'),
-        actions: [
-          if (_isEditing)
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete home item',
-              onPressed: _confirmDelete,
-            ),
-          TextButton(onPressed: _save, child: const Text('Save')),
-        ],
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: screenPadding(context),
-          children: [
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  InlineTextRow(
-                    label: 'Name',
-                    controller: _name,
-                    validator: (value) =>
-                        (value == null || value.trim().isEmpty)
-                        ? 'Please enter a name'
-                        : null,
-                  ),
-                  divider,
-                  InlineTextRow(
-                    label: 'Location',
-                    controller: _location,
-                    choices: _locationChoices(),
-                  ),
-                  divider,
-                  InlineDateRow(
-                    label: 'Purchase date',
-                    value: _purchaseDate,
-                    onChanged: (date) => setState(() => _purchaseDate = date),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  ExpansionTile(
-                    title: const Text('Details'),
-                    // Start open when there is something to show, such as
-                    // when editing or adding a device found by scanning.
-                    initiallyExpanded: hasDetails,
-                    // The card already draws the outline, so the tile
-                    // shouldn't add its own borders when expanded.
-                    shape: const Border(),
-                    collapsedShape: const Border(),
-                    children: [
-                      divider,
-                      InlineTextRow(
-                        label: isVehicle ? 'Make' : 'Manufacturer',
-                        controller: _manufacturer,
-                      ),
-                      divider,
-                      InlineTextRow(label: 'Model', controller: _modelNumber),
-                      divider,
-                      InlineTextRow(
-                        label: isVehicle ? 'VIN' : 'Serial #',
-                        controller: _serialNumber,
-                        obscureText: _serialNumberObscured,
-                        // No eye when the setting always hides it.
-                        onObscureTextChanged: _hideSerialNumber
-                            ? null
-                            : (obscured) => setState(
-                                () => _serialNumberObscured = obscured,
-                              ),
-                        readOnly: _serialNumberReadOnly,
-                        // Without the eye, explain why it can't be shown.
-                        onHelp: _hideSerialNumber
-                            ? () => _showSerialNumberHelp(isVehicle)
-                            : null,
-                      ),
-                    ],
-                  ),
-                  divider,
-                  InlineNotesRow(controller: _notes),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (widget.existing case final existing?)
-              _SavedTaskList(
-                homeItemId: existing.id,
-                homeItemName: () => _currentName,
+    return PopScope(
+      // Saves changes still waiting for the user to pause typing.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _saveChanges();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('${_isEditing ? 'Edit' : 'Add'} ${_category.itemName}'),
+          actions: [
+            if (_isEditing)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete home item',
+                onPressed: _confirmDelete,
               )
             else
-              _NewTaskList(
-                tasks: _newTasks,
-                onUseRecommended: _canUseRecommended ? _useRecommended : null,
-                onRemove: _removeNewTask,
-                onEdit: _editNewTask,
-                onAdd: _editNewTask,
-              ),
+              TextButton(onPressed: _add, child: const Text('Add')),
           ],
+        ),
+        body: Form(
+          key: _formKey,
+          // There's no Save button to check the fields, so problems show as
+          // the user edits.
+          autovalidateMode: _isEditing
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
+          child: ListView(
+            padding: screenPadding(context),
+            children: [
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    InlineTextRow(
+                      label: 'Name',
+                      controller: _name,
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Please enter a name'
+                          : null,
+                    ),
+                    divider,
+                    InlineTextRow(
+                      label: 'Location',
+                      controller: _location,
+                      choices: _locationChoices(),
+                    ),
+                    divider,
+                    InlineDateRow(
+                      label: 'Purchase date',
+                      value: _purchaseDate,
+                      onChanged: (date) {
+                        setState(() => _purchaseDate = date);
+                        _saveChanges();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    ExpansionTile(
+                      title: const Text('Details'),
+                      // Start open when there is something to show, such as
+                      // when editing or adding a device found by scanning.
+                      initiallyExpanded: hasDetails,
+                      // The card already draws the outline, so the tile
+                      // shouldn't add its own borders when expanded.
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      children: [
+                        divider,
+                        InlineTextRow(
+                          label: isVehicle ? 'Make' : 'Manufacturer',
+                          controller: _manufacturer,
+                        ),
+                        divider,
+                        InlineTextRow(label: 'Model', controller: _modelNumber),
+                        divider,
+                        InlineTextRow(
+                          label: isVehicle ? 'VIN' : 'Serial #',
+                          controller: _serialNumber,
+                          obscureText: _serialNumberObscured,
+                          // No eye when the setting always hides it.
+                          onObscureTextChanged: _hideSerialNumber
+                              ? null
+                              : (obscured) => setState(
+                                  () => _serialNumberObscured = obscured,
+                                ),
+                          readOnly: _serialNumberReadOnly,
+                          // Without the eye, explain why it can't be shown.
+                          onHelp: _hideSerialNumber
+                              ? () => _showSerialNumberHelp(isVehicle)
+                              : null,
+                        ),
+                      ],
+                    ),
+                    divider,
+                    InlineNotesRow(controller: _notes),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (widget.existing case final existing?)
+                _SavedTaskList(
+                  homeItemId: existing.id,
+                  homeItemName: () => _currentName,
+                )
+              else
+                _NewTaskList(
+                  tasks: _newTasks,
+                  onUseRecommended: _canUseRecommended ? _useRecommended : null,
+                  onRemove: _removeNewTask,
+                  onEdit: _editNewTask,
+                  onAdd: _editNewTask,
+                ),
+            ],
+          ),
         ),
       ),
     );

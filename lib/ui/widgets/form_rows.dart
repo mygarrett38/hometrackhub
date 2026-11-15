@@ -10,6 +10,11 @@ const formRowHeight = 56.0;
 /// The divider placed between rows in a form card.
 const formRowDivider = Divider(height: 1);
 
+/// How long after the user stops typing a form saves their changes, on forms
+/// that save as they're edited. Other changes, such as picking a date, are
+/// saved straight away.
+const autosaveDelay = Duration(milliseconds: 500);
+
 /// Shows a date picker limited to past dates and today. Returns `null` if
 /// the user cancels.
 Future<DateTime?> pickPastDate(BuildContext context, {DateTime? initialDate}) {
