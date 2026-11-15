@@ -12,7 +12,7 @@ HomeItem homeItemDueOn(
   DateTime dueDate, {
   String name = 'Furnace',
   String taskTitle = 'Replace filter',
-  TaskReminder reminder = const TaskReminder(hour: 9, minute: 30),
+  TaskReminder reminder = const TaskReminder(),
 }) {
   return HomeItem(
     id: name,
@@ -31,16 +31,32 @@ HomeItem homeItemDueOn(
   );
 }
 
+/// The one task of [homeItemDueOn].
+MaintenanceTask taskDueOn(
+  DateTime dueDate, {
+  TaskReminder reminder = const TaskReminder(),
+}) => homeItemDueOn(dueDate, reminder: reminder).tasks.single;
+
 void main() {
   // Wednesday, June 10, 2026 at noon.
   final now = DateTime(2026, 6, 10, 12, 0);
-  const settings = AppSettings();
+  // Each kind of notification at its own time, so they're easy to tell
+  // apart: upcoming at 9:30, overdue at 6:00 PM and overviews at 8:00.
+  const settings = AppSettings(
+    upcomingHour: 9,
+    upcomingMinute: 30,
+    overdueHour: 18,
+    overdueMinute: 0,
+    overviewHour: 8,
+    overviewMinute: 0,
+  );
+  final upcomingOnly = settings.copyWith(overdueEnabled: false);
 
-  group('task reminders', () {
-    test('remind on the due date at the task\'s time', () {
+  group('upcoming task notifications', () {
+    test('are sent on the due date at the upcoming time', () {
       final reminders = planReminders(
         homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
-        settings: settings,
+        settings: upcomingOnly,
         now: now,
       );
 
@@ -50,116 +66,154 @@ void main() {
       expect(reminders.single.body, contains('due today'));
     });
 
-    test('each task uses its own schedule', () {
-      final reminders = planReminders(
-        homeItems: [
-          homeItemDueOn(
-            DateTime(2026, 6, 20),
-            name: 'Furnace',
-            reminder: const TaskReminder(daysBefore: 3, hour: 7, minute: 15),
-          ),
-          homeItemDueOn(
-            DateTime(2026, 6, 20),
-            name: 'Dryer',
-            reminder: const TaskReminder(daysBefore: 0, hour: 18, minute: 0),
-          ),
-        ],
-        settings: settings,
-        now: now,
+    test('start on the task\'s day and repeat until the due date', () {
+      final times = taskReminderTimes(
+        taskDueOn(
+          DateTime(2026, 6, 20),
+          reminder: const TaskReminder(daysBefore: 7),
+        ),
+        upcomingOnly.copyWith(upcomingReminderDays: 3),
+        now,
       );
 
-      expect(reminders.map((reminder) => reminder.time), [
-        DateTime(2026, 6, 17, 7, 15),
-        DateTime(2026, 6, 20, 18, 0),
+      // 7, 4 and 1 days before, then on the due date.
+      expect(times, [
+        DateTime(2026, 6, 13, 9, 30),
+        DateTime(2026, 6, 16, 9, 30),
+        DateTime(2026, 6, 19, 9, 30),
+        DateTime(2026, 6, 20, 9, 30),
       ]);
-      expect(reminders.first.body, contains('due in 3 days'));
     });
 
-    test('overdue tasks are reminded at the task\'s next reminder time', () {
-      // It is already past 9:30 today, so the reminder moves to tomorrow.
-      final reminders = planReminders(
-        homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
-        settings: settings,
-        now: now,
+    test('skip days that have already passed', () {
+      // Starting a week early would have been June 5; 9:30 today has
+      // passed too.
+      final times = taskReminderTimes(
+        taskDueOn(
+          DateTime(2026, 6, 12),
+          reminder: const TaskReminder(daysBefore: 7),
+        ),
+        upcomingOnly,
+        now,
       );
 
-      expect(reminders.single.time, DateTime(2026, 6, 11, 9, 30));
-      expect(reminders.single.body, contains('overdue'));
+      expect(times, [
+        DateTime(2026, 6, 11, 9, 30),
+        DateTime(2026, 6, 12, 9, 30),
+      ]);
     });
 
-    test('overdue reminders repeat as often as the settings say', () {
-      // Due June 1. Every 3 days from then: June 4, 7, 10 at 9:30 (already
-      // passed), then June 13.
-      final reminders = planReminders(
-        homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
-        settings: settings.copyWith(overdueReminderDays: 3),
-        now: now,
-      );
-      expect(reminders.single.time, DateTime(2026, 6, 13, 9, 30));
-
-      // Every week: June 8, then June 15.
-      final weekly = planReminders(
-        homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
-        settings: settings.copyWith(overdueReminderDays: 7),
-        now: now,
-      );
-      expect(weekly.single.time, DateTime(2026, 6, 15, 9, 30));
-    });
-
-    test('an overdue repeat later today is kept', () {
-      // Due June 4; every 3 days lands on June 10, still ahead at 8:00.
-      final reminders = planReminders(
-        homeItems: [homeItemDueOn(DateTime(2026, 6, 4))],
-        settings: settings.copyWith(overdueReminderDays: 3),
-        now: DateTime(2026, 6, 10, 8, 0),
-      );
-      expect(reminders.single.time, DateTime(2026, 6, 10, 9, 30));
-    });
-
-    test('tasks reminded at the same moment are combined', () {
+    test('for tasks due the same day are sent separately, together', () {
       final reminders = planReminders(
         homeItems: [
           homeItemDueOn(DateTime(2026, 6, 20), name: 'Furnace'),
           homeItemDueOn(DateTime(2026, 6, 20), name: 'Dryer'),
         ],
-        settings: settings,
+        settings: upcomingOnly,
         now: now,
       );
 
-      expect(reminders, hasLength(1));
-      expect(reminders.single.title, '2 maintenance tasks need attention');
-      expect(reminders.single.body, contains('Furnace'));
-      expect(reminders.single.body, contains('Dryer'));
-    });
-
-    test('tasks with their reminder off are skipped', () {
-      final reminders = planReminders(
-        homeItems: [
-          homeItemDueOn(
-            DateTime(2026, 6, 20),
-            reminder: const TaskReminder.off(),
-          ),
-        ],
-        settings: settings,
-        now: now,
+      expect(reminders.map((reminder) => reminder.title), [
+        'Dryer: Replace filter',
+        'Furnace: Replace filter',
+      ]);
+      expect(
+        reminders.map((reminder) => reminder.time),
+        everyElement(DateTime(2026, 6, 20, 9, 30)),
       );
-
-      expect(reminders, isEmpty);
-    });
-
-    test('home item names are hidden when the privacy setting is on', () {
-      final reminders = planReminders(
-        homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
-        settings: settings.copyWith(hideDetailsInNotifications: true),
-        now: now,
-      );
-
-      expect(reminders.single.title, isNot(contains('Furnace')));
-      expect(reminders.single.body, isNot(contains('Furnace')));
     });
   });
 
+  group('overdue task notifications', () {
+    test('start the day after the due date, at the overdue time', () {
+      final times = taskReminderTimes(
+        taskDueOn(DateTime(2026, 6, 20)),
+        settings,
+        now,
+      );
+
+      expect(times.take(3), [
+        DateTime(2026, 6, 20, 9, 30),
+        DateTime(2026, 6, 21, 18),
+        DateTime(2026, 6, 22, 18),
+      ]);
+    });
+
+    test('repeat as often as the settings say', () {
+      // Due June 1. Every 3 days from June 2: June 5, 8, 11, 14.
+      final times = taskReminderTimes(
+        taskDueOn(DateTime(2026, 6, 1)),
+        settings.copyWith(overdueReminderDays: 3),
+        now,
+      );
+
+      expect(times.take(2), [
+        DateTime(2026, 6, 11, 18),
+        DateTime(2026, 6, 14, 18),
+      ]);
+    });
+
+    test('keep a repeat later today', () {
+      final times = taskReminderTimes(
+        taskDueOn(DateTime(2026, 6, 1)),
+        settings,
+        now,
+      );
+
+      expect(times.first, DateTime(2026, 6, 10, 18));
+    });
+
+    test('are not sent when turned off', () {
+      final times = taskReminderTimes(
+        taskDueOn(DateTime(2026, 6, 1)),
+        settings.copyWith(overdueEnabled: false),
+        now,
+      );
+
+      expect(times, isEmpty);
+    });
+
+    test('only the next few are scheduled for each task', () {
+      final reminders = planReminders(
+        homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
+        settings: settings,
+        now: now,
+      );
+
+      expect(reminders, hasLength(taskRemindersScheduledAhead));
+      expect(reminders.first.body, contains('overdue'));
+    });
+  });
+
+  test('tasks with their reminder off are skipped', () {
+    final reminders = planReminders(
+      homeItems: [
+        homeItemDueOn(
+          DateTime(2026, 6, 20),
+          reminder: const TaskReminder.off(),
+        ),
+      ],
+      settings: settings,
+      now: now,
+    );
+
+    expect(reminders, isEmpty);
+  });
+
+  test('home item names are hidden when the privacy setting is on', () {
+    final reminders = planReminders(
+      homeItems: [homeItemDueOn(DateTime(2026, 6, 20))],
+      settings: upcomingOnly.copyWith(hideDetailsInNotifications: true),
+      now: now,
+    );
+
+    expect(reminders.single.title, isNot(contains('Furnace')));
+    expect(reminders.single.body, isNot(contains('Furnace')));
+  });
+
   group('overview notifications', () {
+    final overviews = settings.copyWith(overviewEnabled: true);
+
     test('are not sent unless the user opts in', () {
       final reminders = planReminders(
         homeItems: [
@@ -189,16 +243,16 @@ void main() {
             reminder: const TaskReminder.off(),
           ),
         ],
-        settings: settings.copyWith(
+        settings: overviews.copyWith(
           overviewFrequency: OverviewFrequency.weekly,
           overviewWeekday: DateTime.monday,
-          overviewHour: 8,
         ),
         now: now,
       );
 
-      // Mondays June 15, 22 and 29. Nothing is due the week of June 22, but
-      // the Furnace is still overdue then, so that overview is sent too.
+      // Mondays June 15, 22 and 29 at the overview time. Nothing is due the
+      // week of June 22, but the Furnace is still overdue then, so that
+      // overview is sent too.
       expect(reminders.map((reminder) => reminder.time), [
         DateTime(2026, 6, 15, 8),
         DateTime(2026, 6, 22, 8),
@@ -223,7 +277,7 @@ void main() {
             reminder: const TaskReminder.off(),
           ),
         ],
-        settings: settings.copyWith(
+        settings: overviews.copyWith(
           overviewFrequency: OverviewFrequency.monthly,
         ),
         now: now,
@@ -248,31 +302,44 @@ void main() {
             reminder: const TaskReminder.off(),
           ),
         ],
-        settings: settings.copyWith(
-          overviewFrequency: OverviewFrequency.weekly,
-        ),
+        settings: overviews,
         now: now,
       );
 
       expect(reminders, isEmpty);
     });
 
-    test('include tasks whose own reminder is on, alongside that reminder', () {
+    test('arrive at their own time, apart from task notifications', () {
+      // Due Monday, June 15, the same day as the first weekly overview.
       final reminders = planReminders(
-        homeItems: [homeItemDueOn(DateTime(2026, 6, 16))],
-        settings: settings.copyWith(
-          overviewFrequency: OverviewFrequency.weekly,
-          overviewWeekday: DateTime.monday,
+        homeItems: [homeItemDueOn(DateTime(2026, 6, 15))],
+        settings: overviews.copyWith(overdueEnabled: false),
+        now: now,
+      );
+
+      expect(reminders.map((reminder) => (reminder.kind, reminder.time)), [
+        (ReminderKind.overview, DateTime(2026, 6, 15, 8)),
+        (ReminderKind.task, DateTime(2026, 6, 15, 9, 30)),
+        (ReminderKind.overview, DateTime(2026, 6, 22, 8)),
+        (ReminderKind.overview, DateTime(2026, 6, 29, 8)),
+      ]);
+    });
+
+    test('come first when sent at the same time as a task notification', () {
+      final reminders = planReminders(
+        homeItems: [homeItemDueOn(DateTime(2026, 6, 15))],
+        settings: overviews.copyWith(
+          overdueEnabled: false,
+          overviewHour: 9,
+          overviewMinute: 30,
         ),
         now: now,
       );
 
-      expect(reminders.map((reminder) => reminder.kind), [
-        ReminderKind.overview,
-        ReminderKind.task,
-        ReminderKind.overview,
-        ReminderKind.overview,
-      ]);
+      final (overview, task) = (reminders[0], reminders[1]);
+      expect(overview.kind, ReminderKind.overview);
+      expect(task.kind, ReminderKind.task);
+      expect(task.time, overview.time);
     });
   });
 

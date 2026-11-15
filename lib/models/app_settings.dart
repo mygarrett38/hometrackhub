@@ -6,11 +6,11 @@ import 'task_reminder.dart';
 import 'technical_level.dart';
 
 /// How often the overview notification summarizing upcoming maintenance is
-/// sent.
+/// sent, when it's turned on (see [AppSettings.overviewEnabled]). The
+/// [label] follows the time it's sent, as in "8:00 AM every week".
 enum OverviewFrequency {
-  off('Off'),
-  weekly('Weekly'),
-  monthly('Monthly');
+  weekly('every week'),
+  monthly('every month');
 
   const OverviewFrequency(this.label);
 
@@ -29,16 +29,25 @@ enum NearbyLocationSource {
 
 /// Every preference the user can change on the settings screen.
 ///
-/// Reminders for individual tasks are set on each task (see
-/// [TaskReminder]). The only app-wide notification is the optional overview.
+/// There are three kinds of notification, each timed here: upcoming tasks,
+/// which are always sent, and overdue tasks and overviews, which can be
+/// turned off. Each task also picks how far
+/// ahead it's first notified about, or not at all (see [TaskReminder]).
 @immutable
 class AppSettings {
   const AppSettings({
-    this.overviewFrequency = OverviewFrequency.off,
-    this.overviewWeekday = DateTime.monday,
-    this.overviewHour = 8,
-    this.overviewMinute = 0,
+    this.upcomingHour = 9,
+    this.upcomingMinute = 0,
+    this.upcomingReminderDays = 1,
+    this.overdueEnabled = true,
+    this.overdueHour = 9,
+    this.overdueMinute = 0,
     this.overdueReminderDays = 1,
+    this.overviewEnabled = false,
+    this.overviewFrequency = OverviewFrequency.weekly,
+    this.overviewWeekday = DateTime.monday,
+    this.overviewHour = 9,
+    this.overviewMinute = 0,
     this.themeMode = ThemeMode.system,
     this.calendarPeriod = CalendarPeriod.month,
     this.networkDiscoveryEnabled = true,
@@ -56,28 +65,52 @@ class AppSettings {
     this.nearbySort = ServiceSort.rating,
   });
 
-  /// The choices for [overdueReminderDays], from every day to every two
-  /// weeks.
-  static const overdueReminderDayChoices = [1, 2, 3, 7, 14];
+  /// The choices for [upcomingReminderDays] and [overdueReminderDays], from
+  /// every day to every two weeks.
+  static const reminderDayChoices = [1, 2, 3, 7, 14];
 
   /// The choices for [keepChatsDays].
   static const keepChatsDayChoices = [7, 14, 30];
 
-  // Notifications
-  /// Whether to send a weekly or monthly overview of upcoming maintenance.
+  // Notifications. Times of day use a 24 hour clock.
+  // Tasks are always notified about before they're due, as long as the
+  // device allows it: starting on the day each task's reminder picks (see
+  // [TaskReminder.daysBefore]), every [upcomingReminderDays] days, and on
+  // the due date.
+
+  /// The time of day upcoming task notifications are sent.
+  final int upcomingHour;
+  final int upcomingMinute;
+
+  /// How many days apart upcoming task notifications are. One of
+  /// [reminderDayChoices].
+  final int upcomingReminderDays;
+
+  /// Whether tasks are notified about once they're overdue: starting the day
+  /// after they were due, then every [overdueReminderDays] days until
+  /// they're done.
+  final bool overdueEnabled;
+
+  /// The time of day overdue task notifications are sent.
+  final int overdueHour;
+  final int overdueMinute;
+
+  /// How many days apart overdue task notifications are. One of
+  /// [reminderDayChoices].
+  final int overdueReminderDays;
+
+  /// Whether to send an overview of the maintenance coming up, every week or
+  /// month as [overviewFrequency] says.
+  final bool overviewEnabled;
   final OverviewFrequency overviewFrequency;
 
   /// The day weekly overviews are sent, from [DateTime.monday] (1) to
   /// [DateTime.sunday] (7). Monthly overviews are sent on the 1st.
   final int overviewWeekday;
 
-  /// The time of day (24 hour clock) overviews are sent.
+  /// The time of day overviews are sent.
   final int overviewHour;
   final int overviewMinute;
-
-  /// How many days apart a task's reminder repeats once the task is overdue.
-  /// One of [overdueReminderDayChoices].
-  final int overdueReminderDays;
 
   // Appearance
   final ThemeMode themeMode;
@@ -147,11 +180,18 @@ class AppSettings {
       RegExp(r'^\d{5}$').hasMatch(zipCode);
 
   AppSettings copyWith({
+    int? upcomingHour,
+    int? upcomingMinute,
+    int? upcomingReminderDays,
+    bool? overdueEnabled,
+    int? overdueHour,
+    int? overdueMinute,
+    int? overdueReminderDays,
+    bool? overviewEnabled,
     OverviewFrequency? overviewFrequency,
     int? overviewWeekday,
     int? overviewHour,
     int? overviewMinute,
-    int? overdueReminderDays,
     ThemeMode? themeMode,
     CalendarPeriod? calendarPeriod,
     bool? networkDiscoveryEnabled,
@@ -170,11 +210,18 @@ class AppSettings {
     ServiceSort? nearbySort,
   }) {
     return AppSettings(
+      upcomingHour: upcomingHour ?? this.upcomingHour,
+      upcomingMinute: upcomingMinute ?? this.upcomingMinute,
+      upcomingReminderDays: upcomingReminderDays ?? this.upcomingReminderDays,
+      overdueEnabled: overdueEnabled ?? this.overdueEnabled,
+      overdueHour: overdueHour ?? this.overdueHour,
+      overdueMinute: overdueMinute ?? this.overdueMinute,
+      overdueReminderDays: overdueReminderDays ?? this.overdueReminderDays,
+      overviewEnabled: overviewEnabled ?? this.overviewEnabled,
       overviewFrequency: overviewFrequency ?? this.overviewFrequency,
       overviewWeekday: overviewWeekday ?? this.overviewWeekday,
       overviewHour: overviewHour ?? this.overviewHour,
       overviewMinute: overviewMinute ?? this.overviewMinute,
-      overdueReminderDays: overdueReminderDays ?? this.overdueReminderDays,
       themeMode: themeMode ?? this.themeMode,
       calendarPeriod: calendarPeriod ?? this.calendarPeriod,
       networkDiscoveryEnabled:
@@ -198,11 +245,18 @@ class AppSettings {
   }
 
   Map<String, dynamic> toJson() => {
+    'upcomingHour': upcomingHour,
+    'upcomingMinute': upcomingMinute,
+    'upcomingReminderDays': upcomingReminderDays,
+    'overdueEnabled': overdueEnabled,
+    'overdueHour': overdueHour,
+    'overdueMinute': overdueMinute,
+    'overdueReminderDays': overdueReminderDays,
+    'overviewEnabled': overviewEnabled,
     'overviewFrequency': overviewFrequency.name,
     'overviewWeekday': overviewWeekday,
     'overviewHour': overviewHour,
     'overviewMinute': overviewMinute,
-    'overdueReminderDays': overdueReminderDays,
     'themeMode': themeMode.name,
     'calendarPeriod': calendarPeriod.name,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
@@ -229,22 +283,36 @@ class AppSettings {
     final overviewName = json['overviewFrequency'] as String?;
     final levelName = json['technicalLevel'] as String?;
     final keepChatsDays = json['keepChatsDays'] as int?;
+    final upcomingReminderDays = json['upcomingReminderDays'] as int?;
     final overdueReminderDays = json['overdueReminderDays'] as int?;
     final locationSourceName = json['nearbyLocationSource'] as String?;
     final zipCode = json['nearbyZipCode'] as String?;
     final sortName = json['nearbySort'] as String?;
     return AppSettings(
-      overviewFrequency: overviewName == null
-          ? defaults.overviewFrequency
-          : OverviewFrequency.values.byName(overviewName),
+      upcomingHour: json['upcomingHour'] as int? ?? defaults.upcomingHour,
+      upcomingMinute: json['upcomingMinute'] as int? ?? defaults.upcomingMinute,
+      upcomingReminderDays: reminderDayChoices.contains(upcomingReminderDays)
+          ? upcomingReminderDays!
+          : defaults.upcomingReminderDays,
+      overdueEnabled:
+          json['overdueEnabled'] as bool? ?? defaults.overdueEnabled,
+      overdueHour: json['overdueHour'] as int? ?? defaults.overdueHour,
+      overdueMinute: json['overdueMinute'] as int? ?? defaults.overdueMinute,
+      overdueReminderDays: reminderDayChoices.contains(overdueReminderDays)
+          ? overdueReminderDays!
+          : defaults.overdueReminderDays,
+      // Overviews used to be turned off by choosing "off" as how often
+      // they're sent.
+      overviewEnabled:
+          json['overviewEnabled'] as bool? ??
+          (overviewName != null && overviewName != 'off'),
+      overviewFrequency:
+          OverviewFrequency.values.asNameMap()[overviewName] ??
+          defaults.overviewFrequency,
       overviewWeekday:
           json['overviewWeekday'] as int? ?? defaults.overviewWeekday,
       overviewHour: json['overviewHour'] as int? ?? defaults.overviewHour,
       overviewMinute: json['overviewMinute'] as int? ?? defaults.overviewMinute,
-      overdueReminderDays:
-          overdueReminderDayChoices.contains(overdueReminderDays)
-          ? overdueReminderDays!
-          : defaults.overdueReminderDays,
       themeMode: themeName == null
           ? defaults.themeMode
           : ThemeMode.values.byName(themeName),

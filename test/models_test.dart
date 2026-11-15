@@ -90,7 +90,7 @@ void main() {
           recommendedInterval: const MaintenanceInterval.months(6),
           startDate: DateTime(2026, 1, 1),
           lastCompleted: DateTime(2026, 2, 1),
-          reminder: const TaskReminder(daysBefore: 7, hour: 18),
+          reminder: const TaskReminder(daysBefore: 7),
         ),
       ],
     );
@@ -104,21 +104,46 @@ void main() {
     final settings = AppSettings.fromJson({'themeMode': 'dark'});
 
     expect(settings.themeMode, ThemeMode.dark);
-    expect(settings.overviewFrequency, OverviewFrequency.off);
+    expect(settings.overdueEnabled, isTrue);
+    expect(settings.overviewEnabled, isFalse);
     expect(settings.overviewWeekday, DateTime.monday);
     expect(settings.calendarPeriod, CalendarPeriod.month);
     expect(settings.hideSerialNumbers, isTrue);
+    expect(settings.upcomingReminderDays, 1);
     expect(settings.overdueReminderDays, 1);
   });
 
-  test('the overdue reminder setting survives a JSON round trip', () {
-    const settings = AppSettings(overdueReminderDays: 7);
-    expect(AppSettings.fromJson(settings.toJson()).overdueReminderDays, 7);
-    // A value that isn't one of the choices falls back to every day.
+  test('notification settings survive a JSON round trip', () {
+    const settings = AppSettings(
+      upcomingHour: 7,
+      upcomingMinute: 15,
+      upcomingReminderDays: 2,
+      overdueHour: 18,
+      overdueReminderDays: 7,
+      overviewEnabled: true,
+      overviewFrequency: OverviewFrequency.monthly,
+      overviewHour: 8,
+    );
+    expect(AppSettings.fromJson(settings.toJson()).toJson(), settings.toJson());
+    // A repeat that isn't one of the choices falls back to every day.
     expect(
       AppSettings.fromJson({'overdueReminderDays': 5}).overdueReminderDays,
       1,
     );
+  });
+
+  test('overviews saved as "off" or as how often still load', () {
+    final off = AppSettings.fromJson({'overviewFrequency': 'off'});
+    expect(off.overviewEnabled, isFalse);
+    expect(off.overviewFrequency, OverviewFrequency.weekly);
+
+    final monthly = AppSettings.fromJson({
+      'overviewFrequency': 'monthly',
+      'overviewHour': 7,
+    });
+    expect(monthly.overviewEnabled, isTrue);
+    expect(monthly.overviewFrequency, OverviewFrequency.monthly);
+    expect(monthly.overviewHour, 7);
   });
 
   test('the hide serial numbers setting survives a JSON round trip', () {
@@ -161,12 +186,14 @@ void main() {
     expect(task.reminder.daysBefore, 0);
   });
 
-  test('a task reminder fires the chosen number of days early', () {
-    const reminder = TaskReminder(daysBefore: 3, hour: 18, minute: 45);
+  test('reminders saved with their own time still load', () {
+    final reminder = TaskReminder.fromJson({
+      'enabled': true,
+      'daysBefore': 7,
+      'hour': 18,
+      'minute': 30,
+    });
 
-    expect(
-      reminder.timeFor(DateTime(2026, 3, 2)),
-      DateTime(2026, 2, 27, 18, 45),
-    );
+    expect(reminder, const TaskReminder(daysBefore: 7));
   });
 }

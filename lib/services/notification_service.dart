@@ -36,6 +36,15 @@ class LocalNotificationService implements NotificationService {
 
   static const _testNotificationId = 999999;
 
+  /// Notifications sent at the same time are grouped under this key on
+  /// Android and this thread on iOS, so they're stacked together.
+  static const _groupKey = 'com.hometrackhub.maintenance';
+
+  /// Android only shows a group as a stack when it has a summary, so one is
+  /// added for each time several notifications are sent. Their ids start
+  /// here, past the reminders' own ids.
+  static const _firstSummaryId = 100000;
+
   /// Used for reminders about individual tasks.
   static const _taskDetails = NotificationDetails(
     android: AndroidNotificationDetails(
@@ -46,8 +55,9 @@ class LocalNotificationService implements NotificationService {
       importance: Importance.defaultImportance,
       priority: Priority.low,
       styleInformation: BigTextStyleInformation(''),
+      groupKey: _groupKey,
     ),
-    iOS: DarwinNotificationDetails(),
+    iOS: DarwinNotificationDetails(threadIdentifier: _groupKey),
   );
 
   /// Used for the weekly or monthly overview. A separate Android channel lets
@@ -63,8 +73,24 @@ class LocalNotificationService implements NotificationService {
       importance: Importance.defaultImportance,
       priority: Priority.low,
       styleInformation: BigTextStyleInformation(''),
+      groupKey: _groupKey,
     ),
-    iOS: DarwinNotificationDetails(),
+    iOS: DarwinNotificationDetails(threadIdentifier: _groupKey),
+  );
+
+  /// The Android summary for a group of notifications sent together. iOS
+  /// groups notifications by their thread without one.
+  static const _summaryDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'maintenance_reminders',
+      'Maintenance Reminders',
+      channelDescription: 'Reminders when home maintenance is due.',
+      category: AndroidNotificationCategory.reminder,
+      importance: Importance.defaultImportance,
+      priority: Priority.low,
+      groupKey: _groupKey,
+      setAsGroupSummary: true,
+    ),
   );
 
   @override
@@ -144,6 +170,28 @@ class LocalNotificationService implements NotificationService {
         // Inexact scheduling avoids needing the "Alarms & reminders"
         // permission. The reminder may arrive a few minutes late, which is
         // fine for home maintenance.
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
+
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final countsByTime = <DateTime, int>{};
+    for (final reminder in reminders) {
+      countsByTime.update(
+        reminder.time,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    var summaryId = _firstSummaryId;
+    for (final MapEntry(key: time, value: count) in countsByTime.entries) {
+      if (count < 2) continue;
+      await _plugin.zonedSchedule(
+        id: summaryId++,
+        title: 'Home maintenance',
+        body: '$count maintenance notifications',
+        scheduledDate: tz.TZDateTime.from(time, tz.local),
+        notificationDetails: _summaryDetails,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
     }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../models/app_settings.dart';
 import '../services/home_assistant_client.dart';
 import '../services/notification_service.dart';
 import '../state/home_item_controller.dart';
@@ -47,15 +46,14 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     // Ask for notification permission once the first screen is visible, if
-    // any task reminder or the overview notification is turned on.
+    // any notification would be sent.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final settings = context.read<SettingsController>().settings;
       final anyTaskReminders = context.read<HomeItemController>().allTasks.any(
         (item) => item.task.reminder.enabled,
       );
-      if (anyTaskReminders ||
-          settings.overviewFrequency != OverviewFrequency.off) {
+      if (anyTaskReminders || settings.overviewEnabled) {
         context.read<NotificationService>().requestPermission();
       }
       _askAboutAssistant();

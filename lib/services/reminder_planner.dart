@@ -11,6 +11,11 @@ import '../utils/date_utils.dart';
 /// changes or the app starts, so later reminders get scheduled over time.
 const int maxScheduledReminders = 60;
 
+/// How many of each task's notifications are scheduled ahead of time.
+/// Scheduling a few means they keep arriving even if the app isn't opened
+/// for a while.
+const int taskRemindersScheduledAhead = 3;
+
 /// How many upcoming overview notifications are scheduled ahead of time.
 /// Scheduling a few means overviews keep arriving even if the app isn't
 /// opened for a while.
@@ -45,42 +50,49 @@ class PlannedReminder {
 
 /// Works out which notifications to schedule.
 ///
-/// Every task with its reminder turned on gets one reminder, using the
-/// task's own schedule (see [MaintenanceTask.reminder]). Reminders at the same
-/// moment are combined into one notification.
+/// Each task with its reminder turned on gets its own notifications: before
+/// it's due and once it's overdue, if those are turned on (see
+/// [taskReminderTimes]). Each kind of notification arrives at its own time
+/// of day, so notifications of the same kind come together, one per task.
 ///
 /// If the user opted in, overview notifications summarizing the coming week
-/// or month are added as well (see [AppSettings.overviewFrequency]).
+/// or month are added as well (see [AppSettings.overviewEnabled]).
 List<PlannedReminder> planReminders({
   required List<HomeItem> homeItems,
   required AppSettings settings,
   required DateTime now,
 }) {
-  final hideDetails = settings.hideDetailsInNotifications;
+  final tasks = [
+    for (final item in homeItems)
+      for (final task in item.tasks)
+        if (task.reminder.enabled) HomeItemTask(item, task),
+  ]..sort(_byDueDate);
 
-  // Group task reminders by the moment they should appear.
-  final tasksByTime = <DateTime, List<HomeItemTask>>{};
-  for (final item in homeItems) {
-    for (final task in item.tasks) {
-      if (!task.reminder.enabled) continue;
-      final time = nextReminderTime(
-        task,
-        now,
-        overdueEveryDays: settings.overdueReminderDays,
-      );
-      tasksByTime.putIfAbsent(time, () => []).add(HomeItemTask(item, task));
-    }
-  }
-
-  final unnumbered = <PlannedReminder>[
-    for (final MapEntry(key: time, value: tasks) in tasksByTime.entries)
-      _taskReminder(time: time, tasks: tasks, hideDetails: hideDetails),
-    ..._overviews(homeItems: homeItems, settings: settings, now: now),
-  ]..sort((a, b) => a.time.compareTo(b.time));
+  // Overviews come before task reminders sent at the same time, and those
+  // keep the order of their due dates. Dart's sort isn't stable, so each
+  // notification's place in this list breaks ties.
+  final unnumbered =
+      [
+        ..._overviews(homeItems: homeItems, settings: settings, now: now),
+        for (final item in tasks)
+          for (final time in taskReminderTimes(
+            item.task,
+            settings,
+            now,
+          ).take(taskRemindersScheduledAhead))
+            _taskReminder(
+              time: time,
+              item: item,
+              hideDetails: settings.hideDetailsInNotifications,
+            ),
+      ].indexed.toList()..sort((a, b) {
+        final byTime = a.$2.time.compareTo(b.$2.time);
+        return byTime != 0 ? byTime : a.$1.compareTo(b.$1);
+      });
 
   // Keep the soonest notifications and number them in order.
   return [
-    for (final (index, reminder)
+    for (final (index, (_, reminder))
         in unnumbered.take(maxScheduledReminders).indexed)
       PlannedReminder(
         id: index,
@@ -92,40 +104,64 @@ List<PlannedReminder> planReminders({
   ];
 }
 
-/// When the reminder for [task] will next appear.
+/// Soonest due first, then by home item name and task title.
+int _byDueDate(HomeItemTask a, HomeItemTask b) {
+  final byDate = a.dueDate.compareTo(b.dueDate);
+  if (byDate != 0) return byDate;
+  final byName = a.homeItem.name.compareTo(b.homeItem.name);
+  return byName != 0 ? byName : a.task.title.compareTo(b.task.title);
+}
+
+/// When [task]'s notifications will appear after [now], soonest first.
 ///
-/// This is normally the time set on the task's reminder. If that time has
-/// already passed, for example because the task is overdue, the reminder
-/// repeats every [overdueEveryDays] days after it, at the reminder's time of
-/// day (see [AppSettings.overdueReminderDays]). Counting from the original
-/// time keeps the repeats on the same days however often the app is opened.
-DateTime nextReminderTime(
+/// Upcoming notifications start on the day the task's reminder picks (see
+/// [TaskReminder.daysBefore]) and repeat every
+/// [AppSettings.upcomingReminderDays] days before the due date, with one on
+/// the due date itself. Overdue notifications start the day after the due
+/// date and repeat every [AppSettings.overdueReminderDays] days for as long
+/// as the task stays overdue, so this never ends when they're turned on.
+///
+/// Counting from the due date keeps the repeats on the same days however
+/// often the app is opened.
+Iterable<DateTime> taskReminderTimes(
   MaintenanceTask task,
-  DateTime now, {
-  int overdueEveryDays = 1,
-}) {
-  assert(overdueEveryDays > 0, 'overdueEveryDays must be positive.');
-  final reminder = task.reminder;
-  final idealTime = reminder.timeFor(task.nextDueDate);
-  if (idealTime.isAfter(now)) return idealTime;
+  AppSettings settings,
+  DateTime now,
+) sync* {
+  if (!task.reminder.enabled) return;
+  final due = task.nextDueDate;
+  DateTime daysFromDue(int days, int hour, int minute) =>
+      DateTime(due.year, due.month, due.day + days, hour, minute);
 
-  DateTime daysAfterIdeal(int days) => DateTime(
-    idealTime.year,
-    idealTime.month,
-    idealTime.day + days,
-    reminder.hour,
-    reminder.minute,
-  );
+  final everyUpcoming = settings.upcomingReminderDays;
+  for (final days in {
+    for (var days = -task.reminder.daysBefore; days < 0; days += everyUpcoming)
+      days,
+    0,
+  }) {
+    final time = daysFromDue(
+      days,
+      settings.upcomingHour,
+      settings.upcomingMinute,
+    );
+    if (time.isAfter(now)) yield time;
+  }
 
-  // The latest repeat on or before today, then the one after it if that
-  // has already passed.
-  final daysSince = calendarDaysBetween(idealTime, now);
-  final repeat = daysAfterIdeal(daysSince - daysSince % overdueEveryDays);
-  return repeat.isAfter(now)
-      ? repeat
-      : daysAfterIdeal(
-          daysSince - daysSince % overdueEveryDays + overdueEveryDays,
-        );
+  if (settings.overdueEnabled) {
+    final every = settings.overdueReminderDays;
+    // Skip ahead to the latest repeat on or before today.
+    final daysOverdue = calendarDaysBetween(due, now);
+    var days = daysOverdue <= 1 ? 1 : daysOverdue - (daysOverdue - 1) % every;
+    while (true) {
+      final time = daysFromDue(
+        days,
+        settings.overdueHour,
+        settings.overdueMinute,
+      );
+      if (time.isAfter(now)) yield time;
+      days += every;
+    }
+  }
 }
 
 /// One line per task, such as "Replace filter (Furnace) - due in 3 days".
@@ -137,40 +173,27 @@ String _taskLines(List<HomeItemTask> tasks, DateTime time) {
   ].join('\n');
 }
 
+/// The notification for one task.
 PlannedReminder _taskReminder({
   required DateTime time,
-  required List<HomeItemTask> tasks,
+  required HomeItemTask item,
   required bool hideDetails,
 }) {
-  tasks.sort((a, b) => a.dueDate.compareTo(b.dueDate));
-
   if (hideDetails) {
     return PlannedReminder(
       id: 0,
       time: time,
       title: 'Home maintenance reminder',
-      body: tasks.length == 1
-          ? 'You have a maintenance task due.'
-          : 'You have ${tasks.length} maintenance tasks due.',
+      body: 'You have a maintenance task due.',
     );
   }
 
-  if (tasks.length == 1) {
-    final item = tasks.single;
-    final due = describeDueDate(item.dueDate, time).toLowerCase();
-    return PlannedReminder(
-      id: 0,
-      time: time,
-      title: '${item.homeItem.name}: ${item.task.title}',
-      body: 'This maintenance task is $due.',
-    );
-  }
-
+  final due = describeDueDate(item.dueDate, time).toLowerCase();
   return PlannedReminder(
     id: 0,
     time: time,
-    title: '${tasks.length} maintenance tasks need attention',
-    body: _taskLines(tasks, time),
+    title: '${item.homeItem.name}: ${item.task.title}',
+    body: 'This maintenance task is $due.',
   );
 }
 
@@ -184,8 +207,8 @@ List<PlannedReminder> _overviews({
   required AppSettings settings,
   required DateTime now,
 }) {
+  if (!settings.overviewEnabled) return [];
   final frequency = settings.overviewFrequency;
-  if (frequency == OverviewFrequency.off) return [];
 
   final allTasks = [
     for (final item in homeItems)
@@ -238,7 +261,6 @@ DateTime _firstOverviewTime(AppSettings settings, DateTime now) {
           ? candidate
           : _nextOverviewTime(candidate, OverviewFrequency.weekly);
     case OverviewFrequency.monthly:
-    case OverviewFrequency.off:
       final candidate = atOverviewTime(now.year, now.month, 1);
       return candidate.isAfter(now)
           ? candidate

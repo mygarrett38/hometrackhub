@@ -5,9 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../models/maintenance_interval.dart';
 import '../../../models/maintenance_task.dart';
 import '../../../models/task_reminder.dart';
-import '../../../services/reminder_planner.dart';
 import '../../../state/home_item_controller.dart';
-import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/form_rows.dart';
@@ -168,21 +166,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     }
   }
 
-  Future<void> _pickReminderTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: _reminder.hour, minute: _reminder.minute),
-    );
-    if (picked != null) {
-      setState(
-        () => _reminder = _reminder.copyWith(
-          hour: picked.hour,
-          minute: picked.minute,
-        ),
-      );
-    }
-  }
-
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -264,15 +247,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                     emptyText: 'Never / not sure',
                     onChanged: (date) => setState(() => _lastCompleted = date),
                   ),
-                  if (interval != null) ...[
-                    formRowDivider,
-                    InlineValueRow(
-                      label: 'Next due',
-                      value: MaterialLocalizations.of(context).formatMediumDate(
-                        interval.addTo(_lastCompleted ?? _startDate),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -282,33 +256,23 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (interval != null) ...[
+                    InlineValueRow(
+                      label: 'Next due',
+                      value: MaterialLocalizations.of(context).formatMediumDate(
+                        interval.addTo(_lastCompleted ?? _startDate),
+                      ),
+                    ),
+                    formRowDivider,
+                  ],
                   InlineChoiceRow<int>(
-                    label: 'Remind me',
+                    label: 'Notify me',
                     value: _reminderChoice,
                     choices: _reminderOptions,
                     onChanged: _setReminderChoice,
                   ),
-                  if (_reminder.enabled) ...[
-                    formRowDivider,
-                    InlineValueRow(
-                      label: 'Time',
-                      value: TimeOfDay(
-                        hour: _reminder.hour,
-                        minute: _reminder.minute,
-                      ).format(context),
-                      onTap: _pickReminderTime,
-                    ),
-                    if (_buildTask() case final task?)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Text(
-                          _describeNextReminder(context, task),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                    if (_notificationsBlocked)
-                      const NotificationsBlockedNotice(),
-                  ],
+                  if (_reminder.enabled && _notificationsBlocked)
+                    const NotificationsBlockedNotice(),
                 ],
               ),
             ),
@@ -317,21 +281,6 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       ),
     );
   }
-}
-
-/// For example "Next reminder: Monday, October 5, 2026 at 9:00 AM".
-String _describeNextReminder(BuildContext context, MaintenanceTask task) {
-  final time = nextReminderTime(
-    task,
-    DateTime.now(),
-    overdueEveryDays: context.select<SettingsController, int>(
-      (controller) => controller.settings.overdueReminderDays,
-    ),
-  );
-  final localizations = MaterialLocalizations.of(context);
-  final date = localizations.formatFullDate(time);
-  final timeOfDay = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(time));
-  return 'Next reminder: $date at $timeOfDay';
 }
 
 /// Shows the manufacturer's recommended interval with a button to go back

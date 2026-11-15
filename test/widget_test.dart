@@ -1224,18 +1224,30 @@ void main() {
     await tester.pumpAndSettle();
     // The form's list is the outermost scrollable; text fields have their own.
     await tester.scrollUntilVisible(
-      find.textContaining('Next reminder'),
+      find.text('Notify me'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('On the due date'), findsOneWidget);
+    // The next due date leads the card with the notification choice.
+    final notifyCard = find.ancestor(
+      of: find.text('Notify me'),
+      matching: find.byType(Card),
+    );
+    expect(
+      find.descendant(of: notifyCard, matching: find.text('Next due')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.text('Next due')).dy,
+      lessThan(tester.getTopLeft(find.text('Notify me')).dy),
+    );
 
     await tester.tap(find.text('On the due date'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Never'));
     await tester.pumpAndSettle();
     expect(find.text('Never'), findsOneWidget);
-    expect(find.textContaining('Next reminder'), findsNothing);
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -1243,62 +1255,131 @@ void main() {
     expect(find.textContaining('Reminder off'), findsOneWidget);
   });
 
-  testWidgets('a weekly or monthly overview can be turned on', (tester) async {
-    await pumpApp(tester);
+  group('notification settings', () {
+    /// [finder] within the "Receive at" row of the kind of notification
+    /// named [kind]: upcoming, overdue or overview.
+    Finder receiveAt(String kind, Finder finder) => find.descendant(
+      of: find.byKey(Key('${kind}ReceiveAt')),
+      matching: finder,
+    );
 
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Notifications'));
-    await tester.pumpAndSettle();
-    expect(find.text('Receive overviews?'), findsOneWidget);
-    expect(find.text('Overview time'), findsNothing);
-
-    // Picks how often from the menu next to "Receive overviews?".
-    Future<void> choose(String frequency) async {
-      await tester.tap(find.byType(DropdownButton<OverviewFrequency>));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(frequency).last);
-      await tester.pumpAndSettle();
-    }
-
-    await choose('Weekly');
-    expect(find.text('Monday'), findsOneWidget);
-    expect(find.text('Overview time'), findsOneWidget);
-
-    await choose('Monthly');
-    expect(find.text('1st of each month'), findsOneWidget);
-
-    // The choice is kept after leaving the screen.
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Notifications'));
-    await tester.pumpAndSettle();
-    expect(find.text('1st of each month'), findsOneWidget);
-  });
-
-  testWidgets('how often overdue reminders repeat can be changed', (
-    tester,
-  ) async {
-    await pumpApp(tester);
-
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Notifications'));
-    await tester.pumpAndSettle();
-    expect(find.text('Overdue reminders'), findsOneWidget);
-    expect(find.text('Every day'), findsOneWidget);
-
-    await tester.tap(find.byType(DropdownButton<int>).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Every week').last);
-    await tester.pumpAndSettle();
-
-    final settings = tester
+    AppSettings settingsOf(WidgetTester tester) => tester
         .element(find.byType(MaterialApp))
         .read<SettingsController>()
         .settings;
-    expect(settings.overdueReminderDays, 7);
-    expect(find.text('Every week'), findsOneWidget);
+
+    Future<void> openNotifications(WidgetTester tester) async {
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Notifications'));
+      await tester.pumpAndSettle();
+    }
+
+    /// Scrolls until [finder] is on screen.
+    Future<void> scrollTo(WidgetTester tester, Finder finder) async {
+      await tester.scrollUntilVisible(
+        finder,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('overdue and overview notifications have switches that show '
+        'their settings', (tester) async {
+      await pumpApp(tester);
+      await openNotifications(tester);
+
+      // Upcoming tasks are always notified about, so have no switch.
+      // The device's settings, then the kinds of notification.
+      expect(find.byType(Card), findsNWidgets(2));
+      expect(find.byType(SwitchListTile), findsNWidgets(2));
+
+      // Upcoming tasks are always notified about, so have no switch. Their
+      // settings fold open with an arrow instead.
+      expect(
+        find.widgetWithText(SwitchListTile, 'Upcoming tasks'),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('upcomingReceiveAt')), findsNothing);
+      await tester.tap(find.text('Upcoming tasks'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('upcomingReceiveAt')), findsOneWidget);
+      await tester.tap(find.text('Upcoming tasks'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('upcomingReceiveAt')), findsNothing);
+
+      // Overdue notifications start on, overviews off.
+      await scrollTo(tester, find.byKey(const Key('overdueReceiveAt')));
+      await scrollTo(tester, find.text('Overviews'));
+      expect(find.byKey(const Key('overviewReceiveAt')), findsNothing);
+
+      await tester.tap(find.text('Overviews'));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.text('Day'));
+      expect(find.text('Monday'), findsOneWidget);
+
+      await tester.tap(receiveAt('overview', find.text('every week')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('every month').last);
+      await tester.pumpAndSettle();
+      expect(find.text('1st of each month'), findsOneWidget);
+
+      await scrollTo(tester, find.text('Overdue tasks'));
+      await tester.tap(find.text('Overdue tasks'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('overdueReceiveAt')), findsNothing);
+
+      final settings = settingsOf(tester);
+      expect(settings.overdueEnabled, isFalse);
+      expect(settings.overviewEnabled, isTrue);
+      expect(settings.overviewFrequency, OverviewFrequency.monthly);
+    });
+
+    testWidgets('each kind of notification is received at its own time and '
+        'repeat', (tester) async {
+      await pumpApp(tester);
+      await openNotifications(tester);
+      await tester.tap(find.text('Upcoming tasks'));
+      await tester.pumpAndSettle();
+
+      // Read as one phrase: the time, then how often.
+      final upcoming = find.byKey(const Key('upcomingReceiveAt'));
+      expect(
+        find.descendant(of: upcoming, matching: find.text('Receive at')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getCenter(receiveAt('upcoming', find.text('9:00 AM'))).dx,
+        lessThan(
+          tester.getCenter(receiveAt('upcoming', find.text('every day'))).dx,
+        ),
+      );
+
+      // The time picker opens on 9:00 AM; switching to PM makes it 9:00 PM.
+      await tester.tap(receiveAt('upcoming', find.text('9:00 AM')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('PM'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(receiveAt('upcoming', find.text('9:00 PM')), findsOneWidget);
+
+      final overdueRepeat = receiveAt('overdue', find.text('every day'));
+      await scrollTo(tester, overdueRepeat);
+      await tester.tap(overdueRepeat);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('every week').last);
+      await tester.pumpAndSettle();
+      expect(receiveAt('overdue', find.text('every week')), findsOneWidget);
+      expect(receiveAt('overdue', find.text('9:00 AM')), findsOneWidget);
+
+      final settings = settingsOf(tester);
+      expect((settings.upcomingHour, settings.upcomingMinute), (21, 0));
+      expect(settings.upcomingReminderDays, 1);
+      expect((settings.overdueHour, settings.overdueMinute), (9, 0));
+      expect(settings.overdueReminderDays, 7);
+    });
   });
 
   testWidgets('notification settings can open the device settings', (
