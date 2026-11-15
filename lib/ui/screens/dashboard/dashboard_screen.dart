@@ -11,23 +11,85 @@ import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
-import '../../widgets/task_tile.dart';
-import '../home_items/task_form_screen.dart';
+import '../../widgets/task_section_card.dart';
 import 'dashboard_setup_card.dart';
 
-/// The first tab: a live summary of saved maintenance and expense data.
+/// The tasks listed on the Overview below its cards, each in its own card
+/// like the calendar's. Tapping a summary card lists only its tasks.
+enum _TaskSection { overdue, upcoming, completed }
+
+/// The first tab: a live summary of saved maintenance and expense data,
+/// with the overdue, upcoming and completed tasks below it.
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, required this.onAssistPressed});
+  const DashboardScreen({
+    super.key,
+    required this.onAssistPressed,
+    this.isShown = true,
+  });
 
   final VoidCallback onAssistPressed;
+
+  /// Whether this is the tab being shown. Leaving it lists all the tasks
+  /// again, rather than only those of the summary card that was tapped.
+  final bool isShown;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with TaskDoneChangeUndo {
   late String _greeting;
   Timer? _greetingTimer;
+
+  /// The section whose summary card was tapped to list only its tasks, or
+  /// `null` to list them all.
+  _TaskSection? _shownSection;
+
+  /// Lists only [section]'s tasks, or all of them again if it already was.
+  void _toggleSection(_TaskSection section) {
+    setState(() {
+      _shownSection = _shownSection == section ? null : section;
+      _flashSection = null;
+    });
+    // Tapping the picked card again only lists all the tasks, leaving the
+    // page where it is.
+    if (_shownSection == null) return;
+    // The tasks are below the cards, so bring them into view once they've
+    // been rebuilt, then flash the picked card's tasks.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final tasks = _tasksKey.currentContext;
+      if (tasks == null || !tasks.mounted) return;
+      await Scrollable.ensureVisible(
+        tasks,
+        duration: MediaQuery.disableAnimationsOf(tasks)
+            ? Duration.zero
+            : const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      if (mounted && _shownSection != null) {
+        setState(() {
+          _flashSection = _shownSection;
+          _flashes++;
+        });
+      }
+    });
+  }
+
+  /// Marks the top of the tasks, to scroll to them.
+  final _tasksKey = GlobalKey();
+
+  /// The section whose tasks flash, once they've been scrolled to.
+  _TaskSection? _flashSection;
+
+  /// Counts up each time [_flashSection]'s tasks should flash.
+  int _flashes = 0;
+
+  @override
+  void didUpdateWidget(DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.isShown) _shownSection = null;
+  }
 
   @override
   void initState() {
@@ -57,20 +119,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final settings = context.watch<SettingsController>().settings;
     final period = settings.calendarPeriod;
     final (periodStart, periodEnd) = period.rangeOf(today);
-    final activeTasks = controller.allTasks
-        .where((task) => !controller.isListedAsDone(task))
-        .toList();
-    final overdue = activeTasks
-        .where((task) => calendarDaysBetween(today, task.dueDate) < 0)
-        .length;
-    final dueSoon = activeTasks.where((task) {
-      final days = calendarDaysBetween(today, task.dueDate);
-      return days >= 0 && days <= 30;
-    }).length;
-    final completedInPeriod = controller.allTasks
-        .expand((task) => task.task.completionDates)
-        .where((date) => !date.isBefore(periodStart) && date.isBefore(periodEnd))
-        .length;
+    final activeTasks = controller.allTasks.where(
+      (task) => !controller.isListedAsDone(task),
+    );
+    // A task just marked done stays listed by the date it was due, so it
+    // can be undone before it moves on.
+    int daysUntilDue(HomeItemTask task) =>
+        calendarDaysBetween(today, controller.listDueDate(task));
+    final overdueTasks = controller.orderForList(
+      activeTasks.where((task) => daysUntilDue(task) < 0),
+    );
+    final upcomingTasks = controller.orderForList(
+      activeTasks.where((task) {
+        final days = daysUntilDue(task);
+        return days >= 0 && days <= 30;
+      }),
+    );
+    final overdue = overdueTasks.length;
+    final dueSoon = upcomingTasks.length;
+
+    // Every time a task was done this week, month or year, newest first: the
+    // tasks the Completed card counts. A task done more than once gets a row
+    // for each, so each row is its own [HomeItemTask].
+    final completedOn = <HomeItemTask, DateTime>{
+      for (final item in controller.allTasks)
+        for (final date in item.task.completionDates)
+          if (!date.isBefore(periodStart) && date.isBefore(periodEnd))
+            HomeItemTask(item.homeItem, item.task): date,
+    };
+    final completedTasks = completedOn.keys.toList()
+      ..sort((a, b) => completedOn[b]!.compareTo(completedOn[a]!));
+    final completedInPeriod = completedTasks.length;
     final spentInPeriod = controller.homeItems
         .expand((item) => item.expenses)
         .where(
@@ -130,37 +209,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         value: '$dueSoon',
                         icon: Icons.schedule,
                         color: colors.primary,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const _TaskListScreen(
-                              kind: _TaskListKind.dueSoon,
-                            ),
-                          ),
-                        ),
+                        selected: _shownSection == _TaskSection.upcoming,
+                        onTap: () => _toggleSection(_TaskSection.upcoming),
                       ),
                       _SummaryCard(
                         label: 'Overdue',
                         value: '$overdue',
                         icon: Icons.warning_amber_rounded,
                         color: colors.error,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const _TaskListScreen(
-                              kind: _TaskListKind.overdue,
-                            ),
-                          ),
-                        ),
+                        selected: _shownSection == _TaskSection.overdue,
+                        onTap: () => _toggleSection(_TaskSection.overdue),
                       ),
                       _SummaryCard(
                         label: 'Completed This ${period.label}',
                         value: '$completedInPeriod',
                         icon: Icons.task_alt,
                         color: colors.secondary,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const _CompletionHistoryScreen(),
-                          ),
-                        ),
+                        selected: _shownSection == _TaskSection.completed,
+                        onTap: () => _toggleSection(_TaskSection.completed),
                       ),
                       _SummaryCard(
                         label: 'Spent This ${period.label}',
@@ -205,6 +271,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ],
+                  if (!controller.hasNoTasks)
+                    ..._taskSections(
+                      context,
+                      overdueTasks: overdueTasks,
+                      upcomingTasks: upcomingTasks,
+                      completedTasks: completedTasks,
+                      completedOn: completedOn,
+                      period: period,
+                    ),
                 ],
               ),
             );
@@ -224,6 +299,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (entry == null || !context.mounted) return;
     await controller.addExpense(entry.homeItemId, entry.expense);
+  }
+
+  /// The overdue, upcoming and completed tasks, in that order, each in a
+  /// card like the calendar's, below a line. Only [_shownSection]'s are
+  /// listed if one of the summary cards was tapped.
+  List<Widget> _taskSections(
+    BuildContext context, {
+    required List<HomeItemTask> overdueTasks,
+    required List<HomeItemTask> upcomingTasks,
+    required List<HomeItemTask> completedTasks,
+    required Map<HomeItemTask, DateTime> completedOn,
+    required CalendarPeriod period,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final shown = _shownSection;
+    // Matches the Overview card it's listed for, such as "Completed This
+    // Month".
+    final completedTitle = 'Completed this ${period.name}';
+    final cards = [
+      (_TaskSection.overdue, 'Overdue', overdueTasks, colors.error),
+      (_TaskSection.upcoming, 'Upcoming', upcomingTasks, colors.primary),
+      (
+        _TaskSection.completed,
+        completedTitle,
+        completedTasks,
+        colors.secondary,
+      ),
+    ];
+    final shownCards = [
+      for (final card in cards)
+        if ((shown == null || shown == card.$1) && card.$3.isNotEmpty) card,
+    ];
+
+    return [
+      // Sets the tasks apart from the summary above.
+      Padding(
+        key: _tasksKey,
+        padding: const EdgeInsets.only(top: 24, bottom: 8),
+        child: const Divider(height: 1),
+      ),
+      for (final (section, title, items, accent) in shownCards)
+        TaskSectionCard(
+          // Keeps each card's flash with it as the others come and go.
+          key: ValueKey(section),
+          title: title,
+          items: items,
+          accent: accent,
+          completedOn: completedOn,
+          // Finished tasks are a record, so they don't open.
+          opensTasks: section != _TaskSection.completed,
+          padding: const EdgeInsets.only(top: 8),
+          flash: section == _flashSection ? _flashes : null,
+          doneChange: doneChangeFor(title, {
+            for (final (_, title, items, _) in cards) title: items,
+          }),
+          onDoneChanged: (change) => showDoneChange(change, title),
+          onUndo: undoDoneChange,
+        ),
+      if (shown != null && shownCards.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Text(switch (shown) {
+              _TaskSection.overdue => 'No overdue tasks.',
+              _TaskSection.upcoming => 'No tasks are due in the next 30 days.',
+              _TaskSection.completed =>
+                'No tasks completed this ${period.name}.',
+            }, textAlign: TextAlign.center),
+          ),
+        ),
+    ];
   }
 }
 
@@ -246,6 +392,7 @@ class _SummaryCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.selected = false,
     this.onTap,
   });
 
@@ -253,39 +400,54 @@ class _SummaryCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+
+  /// Whether only this card's tasks are listed below the cards. A selected
+  /// card is outlined in its [color].
+  final bool selected;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
+      // The same corners as other cards.
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: selected ? BorderSide(color: color, width: 2) : BorderSide.none,
+      ),
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon, color: color, size: 27),
-            Column(
+        child: Semantics(
+          selected: selected,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w700, color: color),
-                  ),
+                Icon(icon, color: color, size: 27),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: color,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(label, style: Theme.of(context).textTheme.labelLarge),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(label, style: Theme.of(context).textTheme.labelLarge),
               ],
             ),
-          ],
-        ),
+          ),
         ),
       ),
     );
@@ -521,106 +683,6 @@ class _YearlyExpensesScreenState extends State<_YearlyExpensesScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-enum _TaskListKind { dueSoon, overdue }
-
-class _TaskListScreen extends StatelessWidget {
-  const _TaskListScreen({required this.kind});
-
-  final _TaskListKind kind;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = context.watch<HomeItemController>();
-    final today = dateOnly(DateTime.now());
-    final activeTasks = controller.allTasks
-        .where((item) => !controller.isListedAsDone(item));
-    final items = controller.orderForList(activeTasks.where((item) {
-      final days = calendarDaysBetween(today, item.dueDate);
-      return kind == _TaskListKind.overdue
-          ? days < 0
-          : days >= 0 && days <= 30;
-    }));
-    final title = kind == _TaskListKind.overdue ? 'Overdue' : 'Due Soon';
-    final emptyMessage = kind == _TaskListKind.overdue
-        ? 'No overdue tasks.'
-        : 'No tasks are due in the next 30 days.';
-
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: items.isEmpty
-          ? Center(child: Text(emptyMessage))
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return Card(
-                  clipBehavior: Clip.antiAlias,
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  child: TaskTile(
-                    item: item,
-                    showArrow: true,
-                    onTap: () => _openTask(context, item),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-void _openTask(BuildContext context, HomeItemTask item) {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => TaskFormScreen(
-        homeItemId: item.homeItem.id,
-        homeItemName: item.homeItem.name,
-        existing: item.task,
-      ),
-    ),
-  );
-}
-
-class _CompletionHistoryEntry {
-  const _CompletionHistoryEntry(this.item, this.date);
-
-  final HomeItemTask item;
-  final DateTime date;
-}
-
-class _CompletionHistoryScreen extends StatelessWidget {
-  const _CompletionHistoryScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = context.watch<HomeItemController>();
-    final entries = [
-      for (final item in controller.allTasks)
-        for (final date in item.task.completionDates)
-          _CompletionHistoryEntry(item, date),
-    ]..sort((a, b) => b.date.compareTo(a.date));
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Completion History')),
-      body: entries.isEmpty
-          ? const Center(child: Text('No completed tasks yet.'))
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: entries.length,
-              itemBuilder: (context, index) {
-                final entry = entries[index];
-                return TaskTile(
-                  item: entry.item,
-                  completedOn: entry.date,
-                  showArrow: true,
-                  onTap: () => _openTask(context, entry.item),
-                );
-              },
-            ),
     );
   }
 }

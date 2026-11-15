@@ -118,7 +118,10 @@ class _HomeShellState extends State<HomeShell> {
       children: [
         const HomeItemListScreen(),
         const MaintenanceCalendarScreen(),
-        DashboardScreen(onAssistPressed: () => _select(3)),
+        DashboardScreen(
+          onAssistPressed: () => _select(3),
+          isShown: _selectedIndex == _overviewIndex,
+        ),
         const AssistScreen(),
         const SettingsScreen(),
       ],

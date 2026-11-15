@@ -568,6 +568,151 @@ void main() {
     expect(find.text('Completed (1)'), findsOneWidget);
   });
 
+  testWidgets('the Overview lists tasks below its cards, and a card lists '
+      'only its own', (tester) async {
+    final today = dateOnly(DateTime.now());
+    await pumpApp(tester);
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'gutters',
+        title: 'Clean gutters',
+        interval: const MaintenanceInterval.months(1),
+        // Due 10 days ago.
+        startDate: DateTime(today.year, today.month - 1, today.day - 10),
+      ),
+      MaintenanceTask(
+        id: 'filter',
+        title: 'Replace water filter',
+        interval: const MaintenanceInterval.months(1),
+        // Due in 10 days.
+        startDate: DateTime(today.year, today.month - 1, today.day + 10),
+      ),
+      MaintenanceTask(
+        id: 'smoke-alarms',
+        title: 'Test smoke alarms',
+        interval: const MaintenanceInterval.months(6),
+        startDate: today,
+        lastCompleted: today,
+        completionDates: [today],
+      ),
+    ]);
+
+    final overdue = find.text('Overdue (1)');
+    final upcoming = find.text('Upcoming (1)');
+    // Named like the Overview card it's listed for.
+    final completed = find.text('Completed this month (1)');
+    double top(Finder finder) => tester.getTopLeft(finder).dy;
+
+    // Overdue, upcoming, then completed, all below the summary cards and
+    // the assistant button.
+    expect(overdue, findsOneWidget);
+    expect(upcoming, findsOneWidget);
+    expect(completed, findsOneWidget);
+    expect(
+      top(overdue),
+      greaterThan(top(find.textContaining('Ask AI Assist'))),
+    );
+    expect(top(upcoming), greaterThan(top(overdue)));
+    expect(top(completed), greaterThan(top(upcoming)));
+    // A line sets the tasks apart from the summary above.
+    final divider = find.byType(Divider).first;
+    expect(top(divider), greaterThan(top(find.textContaining('Ask AI'))));
+    expect(top(divider), lessThan(top(overdue)));
+    // Finished tasks are a record, so they don't open.
+    expect(
+      find.descendant(
+        of: find.ancestor(of: completed, matching: find.byType(Card)),
+        matching: find.byIcon(Icons.chevron_right),
+      ),
+      findsNothing,
+    );
+
+    /// Taps the summary card labelled [label], scrolling back up to it if
+    /// the list scrolled down to the tasks.
+    Future<void> tapCard(Finder label) async {
+      await tester.ensureVisible(label);
+      await tester.pumpAndSettle();
+      await tester.tap(label);
+      await tester.pumpAndSettle();
+    }
+
+    // Tapping a card lists only its tasks, scrolled into view; tapping it
+    // again lists them all.
+    final scroll = tester.state<ScrollableState>(find.byType(Scrollable).first);
+    expect(scroll.position.pixels, 0);
+
+    /// The outline around the card titled [title].
+    BorderSide outline(Finder title) {
+      final card = tester.widget<Card>(
+        find.ancestor(of: title, matching: find.byType(Card)).first,
+      );
+      return (card.shape! as RoundedRectangleBorder).side;
+    }
+
+    // Once scrolled to, the picked card's tasks flash an outline briefly.
+    await tester.tap(find.text('Overdue'));
+    var flashed = false;
+    for (var i = 0; i < 30 && !flashed; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      flashed = outline(overdue).width == 2;
+    }
+    expect(flashed, isTrue);
+    await tester.pumpAndSettle();
+    expect(outline(overdue), BorderSide.none);
+    expect(scroll.position.pixels, greaterThan(0));
+    // As far as the page goes: the tasks are on screen.
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(tester.getBottomLeft(overdue).dy, lessThan(screenHeight));
+    expect(overdue, findsOneWidget);
+    expect(upcoming, findsNothing);
+    expect(completed, findsNothing);
+
+    // Tapping it again lists all the tasks without moving the page.
+    await tester.ensureVisible(find.text('Overdue'));
+    await tester.pumpAndSettle();
+    final scrolledTo = scroll.position.pixels;
+    await tester.tap(find.text('Overdue'));
+    await tester.pumpAndSettle();
+    expect(upcoming, findsOneWidget);
+    expect(scroll.position.pixels, scrolledTo);
+
+    await tapCard(find.textContaining('Completed This'));
+    expect(completed, findsOneWidget);
+    expect(overdue, findsNothing);
+    expect(upcoming, findsNothing);
+
+    // Another card switches straight to its tasks.
+    await tapCard(find.text('Due Soon'));
+    expect(upcoming, findsOneWidget);
+    expect(overdue, findsNothing);
+    expect(completed, findsNothing);
+
+    // Like the calendar, a task checked off stays put for a moment with a
+    // way to undo it.
+    final markDone = find.byTooltip('Mark done today');
+    await tester.ensureVisible(markDone);
+    await tester.pumpAndSettle();
+    await tester.tap(markDone);
+    await tester.pump();
+    expect(find.text('Marked as done'), findsOneWidget);
+    expect(upcoming, findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Marked as done'), findsNothing);
+    expect(upcoming, findsOneWidget);
+    await tester.pump(HomeItemController.doneTaskMoveDelay);
+
+    // Leaving the Overview lists all of them again when coming back.
+    await tester.tap(find.text('Calendar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Overview'));
+    await tester.pumpAndSettle();
+    expect(overdue, findsOneWidget);
+    expect(upcoming, findsOneWidget);
+    expect(completed, findsOneWidget);
+  });
+
   testWidgets('the calendar title lines up with other tab titles', (
     tester,
   ) async {
