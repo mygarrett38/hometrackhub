@@ -10,8 +10,8 @@ import '../../../state/settings_controller.dart';
 import '../../widgets/screen_padding.dart';
 import '../../widgets/settings_card.dart';
 
-/// Privacy settings: network scanning, notification details, and saving,
-/// sharing or deleting the user's data.
+/// Privacy settings: network scanning, notification details, hiding serial
+/// numbers, and saving, sharing or deleting the user's data.
 class PrivacySettingsScreen extends StatefulWidget {
   const PrivacySettingsScreen({super.key});
 
@@ -53,6 +53,18 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
                 value: settings.hideDetailsInNotifications,
                 onChanged: (hide) => controller.update(
                   settings.copyWith(hideDetailsInNotifications: hide),
+                ),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.pin_outlined),
+                title: const Text('Hide serial numbers'),
+                subtitle: const Text(
+                  'Serial numbers will only be visible '
+                  'with this setting off',
+                ),
+                value: settings.hideSerialNumbers,
+                onChanged: (hide) => controller.update(
+                  settings.copyWith(hideSerialNumbers: hide),
                 ),
               ),
             ],

@@ -107,6 +107,12 @@ void main() {
     expect(settings.overviewFrequency, OverviewFrequency.off);
     expect(settings.overviewWeekday, DateTime.monday);
     expect(settings.calendarPeriod, CalendarPeriod.month);
+    expect(settings.hideSerialNumbers, isTrue);
+  });
+
+  test('the hide serial numbers setting survives a JSON round trip', () {
+    const settings = AppSettings(hideSerialNumbers: false);
+    expect(AppSettings.fromJson(settings.toJson()).hideSerialNumbers, isFalse);
   });
 
   test('the calendar view setting survives a JSON round trip', () {

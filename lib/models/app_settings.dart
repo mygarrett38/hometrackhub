@@ -42,6 +42,7 @@ class AppSettings {
     this.calendarPeriod = CalendarPeriod.month,
     this.networkDiscoveryEnabled = true,
     this.hideDetailsInNotifications = false,
+    this.hideSerialNumbers = true,
     this.calendarSyncEnabled = false,
     this.syncCalendarId,
     this.syncCalendarName,
@@ -84,6 +85,12 @@ class AppSettings {
   /// naming the home item or task. Useful because notifications can appear
   /// on a locked screen.
   final bool hideDetailsInNotifications;
+
+  /// When true, the VIN or serial number is always hidden on the home item
+  /// form, with no eye button to show it, and can only be typed in when
+  /// adding a home item. When false, it's shown, with an eye button to hide
+  /// it.
+  final bool hideSerialNumbers;
 
   // Calendar
   /// Whether each task is added to [syncCalendarId] as an all-day event on
@@ -139,6 +146,7 @@ class AppSettings {
     CalendarPeriod? calendarPeriod,
     bool? networkDiscoveryEnabled,
     bool? hideDetailsInNotifications,
+    bool? hideSerialNumbers,
     bool? calendarSyncEnabled,
     String? syncCalendarId,
     String? syncCalendarName,
@@ -162,6 +170,7 @@ class AppSettings {
           networkDiscoveryEnabled ?? this.networkDiscoveryEnabled,
       hideDetailsInNotifications:
           hideDetailsInNotifications ?? this.hideDetailsInNotifications,
+      hideSerialNumbers: hideSerialNumbers ?? this.hideSerialNumbers,
       calendarSyncEnabled: calendarSyncEnabled ?? this.calendarSyncEnabled,
       syncCalendarId: syncCalendarId ?? this.syncCalendarId,
       syncCalendarName: syncCalendarName ?? this.syncCalendarName,
@@ -186,6 +195,7 @@ class AppSettings {
     'calendarPeriod': calendarPeriod.name,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
     'hideDetailsInNotifications': hideDetailsInNotifications,
+    'hideSerialNumbers': hideSerialNumbers,
     'calendarSyncEnabled': calendarSyncEnabled,
     'syncCalendarId': syncCalendarId,
     'syncCalendarName': syncCalendarName,
@@ -230,6 +240,8 @@ class AppSettings {
       hideDetailsInNotifications:
           json['hideDetailsInNotifications'] as bool? ??
           defaults.hideDetailsInNotifications,
+      hideSerialNumbers:
+          json['hideSerialNumbers'] as bool? ?? defaults.hideSerialNumbers,
       calendarSyncEnabled:
           json['calendarSyncEnabled'] as bool? ?? defaults.calendarSyncEnabled,
       syncCalendarId: json['syncCalendarId'] as String?,

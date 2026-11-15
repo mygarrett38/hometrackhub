@@ -9,6 +9,7 @@ import '../../../models/home_item_task.dart';
 import '../../../models/maintenance_task.dart';
 import '../../../services/device_discovery_service.dart';
 import '../../../state/home_item_controller.dart';
+import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/form_rows.dart';
@@ -70,9 +71,25 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
 
   bool get _isEditing => widget.existing != null;
 
+  /// Whether the VIN or serial number is always hidden, from the privacy
+  /// settings. Read once so changing the setting doesn't affect an open form.
+  late final bool _hideSerialNumber;
+
+  /// Whether the VIN or serial number is hidden right now. When the setting
+  /// is off, the user can hide or show it with the eye button.
+  late bool _serialNumberObscured = _hideSerialNumber;
+
+  /// A new home item's serial number can always be typed in. An existing
+  /// one can only be changed while it's shown.
+  bool get _serialNumberReadOnly => _isEditing && _serialNumberObscured;
+
   @override
   void initState() {
     super.initState();
+    _hideSerialNumber = context
+        .read<SettingsController>()
+        .settings
+        .hideSerialNumbers;
     final existing = widget.existing;
     final device = widget.discoveredDevice;
 
@@ -211,6 +228,31 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
 
   /// Opens the task form for one of the new tasks, or for a new custom task
   /// when [task] is `null`, and keeps the result if the user saves it.
+  /// Explains why the VIN or serial number is hidden and how to change it.
+  void _showSerialNumberHelp(bool isVehicle) {
+    final name = isVehicle ? 'VIN' : 'serial number';
+    final label = isVehicle ? 'VIN' : 'Serial #';
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Hidden $name'),
+        content: Text(
+          'The Hide serial numbers privacy setting keeps your $name '
+          "hidden. While it's on, the $name can only be typed in when "
+          'adding a home item.\n\n'
+          'To see or change it, turn off Hide serial numbers in Settings > '
+          'Privacy, then tap the eye next to $label.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _editNewTask([MaintenanceTask? task]) async {
     final edited = await Navigator.of(context).push<MaintenanceTask>(
       MaterialPageRoute(
@@ -352,7 +394,18 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
                       InlineTextRow(
                         label: isVehicle ? 'VIN' : 'Serial #',
                         controller: _serialNumber,
-                        obscureText: true,
+                        obscureText: _serialNumberObscured,
+                        // No eye when the setting always hides it.
+                        onObscureTextChanged: _hideSerialNumber
+                            ? null
+                            : (obscured) => setState(
+                                () => _serialNumberObscured = obscured,
+                              ),
+                        readOnly: _serialNumberReadOnly,
+                        // Without the eye, explain why it can't be shown.
+                        onHelp: _hideSerialNumber
+                            ? () => _showSerialNumberHelp(isVehicle)
+                            : null,
                       ),
                     ],
                   ),

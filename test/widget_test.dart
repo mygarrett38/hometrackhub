@@ -2364,6 +2364,91 @@ void main() {
     expect(sharedData['settings'], data['settings']);
   });
 
+  testWidgets('serial numbers stay hidden and locked unless Privacy settings '
+      'say not to', (tester) async {
+    final serialField = find.descendant(
+      of: find.widgetWithText(InlineTextRow, 'Serial #'),
+      matching: find.byType(TextField),
+    );
+    TextField field() => tester.widget<TextField>(serialField);
+
+    Future<void> openNewRefrigerator() async {
+      await tester.tap(find.text('My Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Add home item'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Appliances'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Refrigerator'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> leaveForm() async {
+      while (find.byTooltip('Back').evaluate().isNotEmpty) {
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+    }
+
+    await pumpApp(tester);
+
+    // A new item's serial number can be typed in, but stays hidden, with
+    // no eye to show it.
+    await openNewRefrigerator();
+    expect(field().obscureText, isTrue);
+    expect(field().readOnly, isFalse);
+    expect(find.byTooltip('Show Serial #'), findsNothing);
+    await tester.enterText(serialField, 'SN123');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // Once saved, it can't be changed. A help button says why.
+    await openHomeItem(tester, 'Refrigerator');
+    expect(field().obscureText, isTrue);
+    expect(field().readOnly, isTrue);
+    expect(find.byTooltip('Show Serial #'), findsNothing);
+    await tester.tap(find.byTooltip('About Serial #'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hidden serial number'), findsOneWidget);
+    expect(find.textContaining('Settings > Privacy'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hidden serial number'), findsNothing);
+    await leaveForm();
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy'));
+    await tester.pumpAndSettle();
+    final setting = find.widgetWithText(SwitchListTile, 'Hide serial numbers');
+    expect(tester.widget<SwitchListTile>(setting).value, isTrue);
+    await tester.tap(setting);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Now it's shown and can be changed, with an eye beside its label
+    // instead of the help button.
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await openHomeItem(tester, 'Refrigerator');
+    expect(field().obscureText, isFalse);
+    expect(field().readOnly, isFalse);
+    expect(find.byTooltip('About Serial #'), findsNothing);
+    expect(
+      tester.getCenter(find.byTooltip('Hide Serial #')).dx,
+      lessThan(tester.getCenter(serialField).dx),
+    );
+
+    // Hiding it with the eye locks it again.
+    await tester.tap(find.byTooltip('Hide Serial #'));
+    await tester.pumpAndSettle();
+    expect(field().obscureText, isTrue);
+    expect(field().readOnly, isTrue);
+  });
+
   testWidgets('dark mode can be selected in settings', (tester) async {
     await pumpApp(tester);
 

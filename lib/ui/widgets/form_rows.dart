@@ -26,7 +26,13 @@ Future<DateTime?> pickPastDate(BuildContext context, {DateTime? initialDate}) {
 ///
 /// If [choices] are given, a menu button at the end of the row fills the
 /// field with one of them. The user can still type their own value.
-class InlineTextRow extends StatefulWidget {
+///
+/// If [obscureText] is true, the value is hidden. If [onObscureTextChanged]
+/// is given, an eye button next to the label hides or shows it.
+///
+/// If [onHelp] is given, a help button next to the label calls it, for
+/// example to explain why the field can't be changed.
+class InlineTextRow extends StatelessWidget {
   const InlineTextRow({
     super.key,
     required this.label,
@@ -35,6 +41,9 @@ class InlineTextRow extends StatefulWidget {
     this.validator,
     this.choices = const [],
     this.obscureText = false,
+    this.onObscureTextChanged,
+    this.readOnly = false,
+    this.onHelp,
   });
 
   final String label;
@@ -43,49 +52,54 @@ class InlineTextRow extends StatefulWidget {
   final FormFieldValidator<String>? validator;
   final List<String> choices;
   final bool obscureText;
-
-  @override
-  State<InlineTextRow> createState() => _InlineTextRowState();
-}
-
-class _InlineTextRowState extends State<InlineTextRow> {
-  late bool _obscureText = widget.obscureText;
+  final ValueChanged<bool>? onObscureTextChanged;
+  final bool readOnly;
+  final VoidCallback? onHelp;
 
   @override
   Widget build(BuildContext context) {
+    final onObscureTextChanged = this.onObscureTextChanged;
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: widget.choices.isEmpty && !widget.obscureText ? 16 : 4),
+      padding: EdgeInsets.only(left: 16, right: choices.isEmpty ? 16 : 4),
       child: Row(
         children: [
-          Text(widget.label, style: Theme.of(context).textTheme.bodyLarge),
+          Text(label, style: Theme.of(context).textTheme.bodyLarge),
+          if (onObscureTextChanged != null)
+            IconButton(
+              tooltip: obscureText ? 'Show $label' : 'Hide $label',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(obscureText ? Icons.visibility : Icons.visibility_off),
+              onPressed: () => onObscureTextChanged(!obscureText),
+            ),
+          if (onHelp != null)
+            IconButton(
+              tooltip: 'About $label',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.help_outline),
+              onPressed: onHelp,
+            ),
           const SizedBox(width: 16),
           Expanded(
             child: TextFormField(
-              controller: widget.controller,
-              validator: widget.validator,
+              controller: controller,
+              validator: validator,
               textAlign: TextAlign.end,
               textCapitalization: TextCapitalization.sentences,
-              obscureText: _obscureText,
+              obscureText: obscureText,
+              readOnly: readOnly,
               decoration: InputDecoration(
-                hintText: widget.hint,
+                hintText: hint,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 16),
               ),
             ),
           ),
-          if (widget.obscureText)
-            IconButton(
-              tooltip: _obscureText ? 'Show ${widget.label}' : 'Hide ${widget.label}',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(_obscureText ? Icons.visibility : Icons.visibility_off),
-              onPressed: () => setState(() => _obscureText = !_obscureText),
-            ),
-          if (widget.choices.isNotEmpty)
+          if (choices.isNotEmpty)
             PopupMenuButton<String>(
-              tooltip: 'Choose ${widget.label.toLowerCase()}',
-              onSelected: (choice) => widget.controller.text = choice,
+              tooltip: 'Choose ${label.toLowerCase()}',
+              onSelected: (choice) => controller.text = choice,
               itemBuilder: (context) => [
-                for (final choice in widget.choices)
+                for (final choice in choices)
                   PopupMenuItem(value: choice, child: Text(choice)),
               ],
               // Spaced like the arrow of a [ChoiceMenuButton].
