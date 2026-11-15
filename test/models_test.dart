@@ -108,6 +108,17 @@ void main() {
     expect(settings.overviewWeekday, DateTime.monday);
     expect(settings.calendarPeriod, CalendarPeriod.month);
     expect(settings.hideSerialNumbers, isTrue);
+    expect(settings.overdueReminderDays, 1);
+  });
+
+  test('the overdue reminder setting survives a JSON round trip', () {
+    const settings = AppSettings(overdueReminderDays: 7);
+    expect(AppSettings.fromJson(settings.toJson()).overdueReminderDays, 7);
+    // A value that isn't one of the choices falls back to every day.
+    expect(
+      AppSettings.fromJson({'overdueReminderDays': 5}).overdueReminderDays,
+      1,
+    );
   });
 
   test('the hide serial numbers setting survives a JSON round trip', () {

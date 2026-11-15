@@ -87,6 +87,35 @@ void main() {
       expect(reminders.single.body, contains('overdue'));
     });
 
+    test('overdue reminders repeat as often as the settings say', () {
+      // Due June 1. Every 3 days from then: June 4, 7, 10 at 9:30 (already
+      // passed), then June 13.
+      final reminders = planReminders(
+        homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
+        settings: settings.copyWith(overdueReminderDays: 3),
+        now: now,
+      );
+      expect(reminders.single.time, DateTime(2026, 6, 13, 9, 30));
+
+      // Every week: June 8, then June 15.
+      final weekly = planReminders(
+        homeItems: [homeItemDueOn(DateTime(2026, 6, 1))],
+        settings: settings.copyWith(overdueReminderDays: 7),
+        now: now,
+      );
+      expect(weekly.single.time, DateTime(2026, 6, 15, 9, 30));
+    });
+
+    test('an overdue repeat later today is kept', () {
+      // Due June 4; every 3 days lands on June 10, still ahead at 8:00.
+      final reminders = planReminders(
+        homeItems: [homeItemDueOn(DateTime(2026, 6, 4))],
+        settings: settings.copyWith(overdueReminderDays: 3),
+        now: DateTime(2026, 6, 10, 8, 0),
+      );
+      expect(reminders.single.time, DateTime(2026, 6, 10, 9, 30));
+    });
+
     test('tasks reminded at the same moment are combined', () {
       final reminders = planReminders(
         homeItems: [

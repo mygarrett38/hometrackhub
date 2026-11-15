@@ -1276,6 +1276,31 @@ void main() {
     expect(find.text('1st of each month'), findsOneWidget);
   });
 
+  testWidgets('how often overdue reminders repeat can be changed', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Notifications'));
+    await tester.pumpAndSettle();
+    expect(find.text('Overdue reminders'), findsOneWidget);
+    expect(find.text('Every day'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButton<int>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Every week').last);
+    await tester.pumpAndSettle();
+
+    final settings = tester
+        .element(find.byType(MaterialApp))
+        .read<SettingsController>()
+        .settings;
+    expect(settings.overdueReminderDays, 7);
+    expect(find.text('Every week'), findsOneWidget);
+  });
+
   testWidgets('notification settings can open the device settings', (
     tester,
   ) async {

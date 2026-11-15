@@ -7,6 +7,7 @@ import '../../../models/maintenance_task.dart';
 import '../../../models/task_reminder.dart';
 import '../../../services/reminder_planner.dart';
 import '../../../state/home_item_controller.dart';
+import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../../utils/id_generator.dart';
 import '../../widgets/form_rows.dart';
@@ -320,7 +321,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
 /// For example "Next reminder: Monday, October 5, 2026 at 9:00 AM".
 String _describeNextReminder(BuildContext context, MaintenanceTask task) {
-  final time = nextReminderTime(task, DateTime.now());
+  final time = nextReminderTime(
+    task,
+    DateTime.now(),
+    overdueEveryDays: context.select<SettingsController, int>(
+      (controller) => controller.settings.overdueReminderDays,
+    ),
+  );
   final localizations = MaterialLocalizations.of(context);
   final date = localizations.formatFullDate(time);
   final timeOfDay = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(time));

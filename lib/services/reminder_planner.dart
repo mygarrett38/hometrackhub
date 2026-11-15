@@ -63,7 +63,11 @@ List<PlannedReminder> planReminders({
   for (final item in homeItems) {
     for (final task in item.tasks) {
       if (!task.reminder.enabled) continue;
-      final time = nextReminderTime(task, now);
+      final time = nextReminderTime(
+        task,
+        now,
+        overdueEveryDays: settings.overdueReminderDays,
+      );
       tasksByTime.putIfAbsent(time, () => []).add(HomeItemTask(item, task));
     }
   }
@@ -91,29 +95,37 @@ List<PlannedReminder> planReminders({
 /// When the reminder for [task] will next appear.
 ///
 /// This is normally the time set on the task's reminder. If that time has
-/// already passed, for example because the task is overdue, the reminder is
-/// sent at the reminder's time of day today, or tomorrow if that has passed
-/// too.
-DateTime nextReminderTime(MaintenanceTask task, DateTime now) {
+/// already passed, for example because the task is overdue, the reminder
+/// repeats every [overdueEveryDays] days after it, at the reminder's time of
+/// day (see [AppSettings.overdueReminderDays]). Counting from the original
+/// time keeps the repeats on the same days however often the app is opened.
+DateTime nextReminderTime(
+  MaintenanceTask task,
+  DateTime now, {
+  int overdueEveryDays = 1,
+}) {
+  assert(overdueEveryDays > 0, 'overdueEveryDays must be positive.');
   final reminder = task.reminder;
   final idealTime = reminder.timeFor(task.nextDueDate);
   if (idealTime.isAfter(now)) return idealTime;
 
-  final today = DateTime(
-    now.year,
-    now.month,
-    now.day,
+  DateTime daysAfterIdeal(int days) => DateTime(
+    idealTime.year,
+    idealTime.month,
+    idealTime.day + days,
     reminder.hour,
     reminder.minute,
   );
-  if (today.isAfter(now)) return today;
-  return DateTime(
-    now.year,
-    now.month,
-    now.day + 1,
-    reminder.hour,
-    reminder.minute,
-  );
+
+  // The latest repeat on or before today, then the one after it if that
+  // has already passed.
+  final daysSince = calendarDaysBetween(idealTime, now);
+  final repeat = daysAfterIdeal(daysSince - daysSince % overdueEveryDays);
+  return repeat.isAfter(now)
+      ? repeat
+      : daysAfterIdeal(
+          daysSince - daysSince % overdueEveryDays + overdueEveryDays,
+        );
 }
 
 /// One line per task, such as "Replace filter (Furnace) - due in 3 days".

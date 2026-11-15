@@ -20,8 +20,17 @@ const weekdayNames = {
   DateTime.sunday: 'Sunday',
 };
 
-/// Settings for the weekly or monthly maintenance overview notification.
-/// Reminders for individual tasks are set on each task.
+/// For example "Every day", "Every 3 days" or "Every 2 weeks".
+String overdueReminderLabel(int days) => switch (days) {
+  1 => 'Every day',
+  7 => 'Every week',
+  _ when days % 7 == 0 => 'Every ${days ~/ 7} weeks',
+  _ => 'Every $days days',
+};
+
+/// Settings for the weekly or monthly maintenance overview notification and
+/// how often overdue tasks are reminded about. Reminders for individual
+/// tasks are set on each task.
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
@@ -77,6 +86,25 @@ class _NotificationSettingsScreenState
                 title: const Text('Send a test notification'),
                 onTap: () =>
                     context.read<NotificationService>().showTestNotification(),
+              ),
+            ],
+          ),
+          // How often reminders repeat for overdue tasks.
+          SettingsCard(
+            children: [
+              SettingsDropdownRow<int>(
+                icon: Icons.event_repeat,
+                title: 'Overdue reminders',
+                description:
+                    "How often a task's reminder repeats once the task is "
+                    'overdue, until it is marked done.',
+                value: settings.overdueReminderDays,
+                choices: {
+                  for (final days in AppSettings.overdueReminderDayChoices)
+                    days: overdueReminderLabel(days),
+                },
+                onChanged: (days) =>
+                    update(settings.copyWith(overdueReminderDays: days)),
               ),
             ],
           ),

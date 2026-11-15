@@ -38,6 +38,7 @@ class AppSettings {
     this.overviewWeekday = DateTime.monday,
     this.overviewHour = 8,
     this.overviewMinute = 0,
+    this.overdueReminderDays = 1,
     this.themeMode = ThemeMode.system,
     this.calendarPeriod = CalendarPeriod.month,
     this.networkDiscoveryEnabled = true,
@@ -55,6 +56,10 @@ class AppSettings {
     this.nearbySort = ServiceSort.rating,
   });
 
+  /// The choices for [overdueReminderDays], from every day to every two
+  /// weeks.
+  static const overdueReminderDayChoices = [1, 2, 3, 7, 14];
+
   /// The choices for [keepChatsDays].
   static const keepChatsDayChoices = [7, 14, 30];
 
@@ -69,6 +74,10 @@ class AppSettings {
   /// The time of day (24 hour clock) overviews are sent.
   final int overviewHour;
   final int overviewMinute;
+
+  /// How many days apart a task's reminder repeats once the task is overdue.
+  /// One of [overdueReminderDayChoices].
+  final int overdueReminderDays;
 
   // Appearance
   final ThemeMode themeMode;
@@ -142,6 +151,7 @@ class AppSettings {
     int? overviewWeekday,
     int? overviewHour,
     int? overviewMinute,
+    int? overdueReminderDays,
     ThemeMode? themeMode,
     CalendarPeriod? calendarPeriod,
     bool? networkDiscoveryEnabled,
@@ -164,6 +174,7 @@ class AppSettings {
       overviewWeekday: overviewWeekday ?? this.overviewWeekday,
       overviewHour: overviewHour ?? this.overviewHour,
       overviewMinute: overviewMinute ?? this.overviewMinute,
+      overdueReminderDays: overdueReminderDays ?? this.overdueReminderDays,
       themeMode: themeMode ?? this.themeMode,
       calendarPeriod: calendarPeriod ?? this.calendarPeriod,
       networkDiscoveryEnabled:
@@ -191,6 +202,7 @@ class AppSettings {
     'overviewWeekday': overviewWeekday,
     'overviewHour': overviewHour,
     'overviewMinute': overviewMinute,
+    'overdueReminderDays': overdueReminderDays,
     'themeMode': themeMode.name,
     'calendarPeriod': calendarPeriod.name,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
@@ -217,6 +229,7 @@ class AppSettings {
     final overviewName = json['overviewFrequency'] as String?;
     final levelName = json['technicalLevel'] as String?;
     final keepChatsDays = json['keepChatsDays'] as int?;
+    final overdueReminderDays = json['overdueReminderDays'] as int?;
     final locationSourceName = json['nearbyLocationSource'] as String?;
     final zipCode = json['nearbyZipCode'] as String?;
     final sortName = json['nearbySort'] as String?;
@@ -228,6 +241,10 @@ class AppSettings {
           json['overviewWeekday'] as int? ?? defaults.overviewWeekday,
       overviewHour: json['overviewHour'] as int? ?? defaults.overviewHour,
       overviewMinute: json['overviewMinute'] as int? ?? defaults.overviewMinute,
+      overdueReminderDays:
+          overdueReminderDayChoices.contains(overdueReminderDays)
+          ? overdueReminderDays!
+          : defaults.overdueReminderDays,
       themeMode: themeName == null
           ? defaults.themeMode
           : ThemeMode.values.byName(themeName),
