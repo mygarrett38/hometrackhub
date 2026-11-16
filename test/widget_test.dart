@@ -1111,6 +1111,46 @@ void main() {
     expect(find.text('Undo'), findsNothing);
   });
 
+  testWidgets('dates on the home item and task screens show the year', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester
+        .element(find.byType(HomeShell))
+        .read<HomeItemController>()
+        .addHomeItem(
+          HomeItem(
+            id: 'furnace',
+            name: 'Furnace',
+            category: HomeItemCategory.hvac,
+            purchaseDate: DateTime(2019, 8, 2),
+            tasks: [
+              MaintenanceTask(
+                id: 'filter',
+                title: 'Replace filter',
+                interval: const MaintenanceInterval.months(1),
+                startDate: DateTime(2025, 1, 1),
+                lastCompleted: DateTime(2025, 3, 14),
+                completionDates: [DateTime(2025, 3, 14)],
+              ),
+            ],
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('My Home'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Furnace'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aug 2, 2019'), findsOneWidget);
+
+    await scrollTo(tester, find.text('Replace filter'));
+    await tester.tap(find.text('Replace filter'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mar 14, 2025'), findsOneWidget); // Last done
+    expect(find.text('Apr 14, 2025'), findsOneWidget); // Next due
+  });
+
   testWidgets('a home item can be deleted from its edit screen', (
     tester,
   ) async {
@@ -2910,16 +2950,15 @@ void main() {
 
     // Loading warns that it replaces everything, and can be cancelled.
     await load(jsonEncode(fromOtherDevice), name: savedName);
-    expect(find.text('Replace all of your data?'), findsOneWidget);
-    expect(find.textContaining('"$savedName"'), findsOneWidget);
-    expect(find.textContaining('1 home item with 0 tasks'), findsOneWidget);
+    expect(find.text('Confirm import'), findsOneWidget);
+    expect(find.textContaining('will be lost'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(homeItems.homeItems, hasLength(2));
 
     await tester.tap(find.byTooltip('Load my data'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Replace my data'));
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(find.text('Data loaded'), findsOneWidget);
     await tester.tap(find.text('OK'));

@@ -353,8 +353,9 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                     if (interval != null) ...[
                       InlineValueRow(
                         label: 'Next due',
+                        // With the year, like the date rows.
                         value: MaterialLocalizations.of(context)
-                            .formatMediumDate(
+                            .formatShortDate(
                               interval.addTo(_lastCompleted ?? _startDate),
                             ),
                       ),

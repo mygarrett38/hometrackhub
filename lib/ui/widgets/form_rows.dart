@@ -158,7 +158,9 @@ class InlineDateRow extends StatelessWidget {
               Text(
                 date == null
                     ? emptyText
-                    : MaterialLocalizations.of(context).formatMediumDate(date),
+                    // With the year, such as "Nov 4, 2026", since dates
+                    // here can be years apart.
+                    : MaterialLocalizations.of(context).formatShortDate(date),
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: date == null
                       ? theme.colorScheme.onSurfaceVariant
