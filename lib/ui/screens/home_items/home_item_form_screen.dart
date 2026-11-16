@@ -103,9 +103,11 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
   /// settings. Read once so changing the setting doesn't affect an open form.
   late final bool _hideSerialNumber;
 
-  /// Whether the VIN or serial number is hidden right now. When the setting
-  /// is off, the user can hide or show it with the eye button.
-  late bool _serialNumberObscured = _hideSerialNumber;
+  /// Whether the VIN or serial number is hidden right now. It's always shown
+  /// while adding a home item, so the user can check what they type. After
+  /// that, the setting keeps it hidden, or when the setting is off, the user
+  /// can hide or show it with the eye button.
+  late bool _serialNumberObscured = _hideSerialNumber && _isEditing;
 
   /// A new home item's serial number can always be typed in. An existing
   /// one can only be changed while it's shown.
@@ -496,7 +498,9 @@ class _HomeItemFormScreenState extends State<HomeItemFormScreen> {
                                 ),
                           readOnly: _serialNumberReadOnly,
                           // Without the eye, explain why it can't be shown.
-                          onHelp: _hideSerialNumber
+                          // While adding it's shown, so there's nothing to
+                          // explain.
+                          onHelp: _hideSerialNumber && _isEditing
                               ? () => _showSerialNumberHelp(isVehicle)
                               : null,
                         ),

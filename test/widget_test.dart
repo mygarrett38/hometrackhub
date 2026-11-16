@@ -2833,12 +2833,14 @@ void main() {
 
     await pumpApp(tester);
 
-    // A new item's serial number can be typed in, but stays hidden, with
-    // no eye to show it.
+    // While adding an item, its serial number is shown so it can be checked
+    // as it's typed, even with the setting on. There's no eye or help.
     await openNewRefrigerator();
-    expect(field().obscureText, isTrue);
+    expect(field().obscureText, isFalse);
     expect(field().readOnly, isFalse);
     expect(find.byTooltip('Show Serial #'), findsNothing);
+    expect(find.byTooltip('Hide Serial #'), findsNothing);
+    expect(find.byTooltip('About Serial #'), findsNothing);
     await tester.enterText(serialField, 'SN123');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
