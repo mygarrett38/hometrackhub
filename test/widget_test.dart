@@ -143,6 +143,12 @@ class FakeDataExportService implements DataExportService {
   Future<void> share(String fileName, String contents, {Rect? origin}) async {
     shared.add((fileName, contents));
   }
+
+  /// The file the user picks to load, or `null` to cancel.
+  OpenedFile? openAnswer;
+
+  @override
+  Future<OpenedFile?> open() async => openAnswer;
 }
 
 /// Starts the app with fake services and waits until the launch animation
@@ -2702,6 +2708,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Privacy'));
     await tester.pumpAndSettle();
+
+    // The data buttons are in one line, each with a one-word label.
+    final labels = [
+      for (final label in ['Save', 'Load', 'Share', 'Delete'])
+        tester.getCenter(find.text(label)),
+    ];
+    for (var i = 1; i < labels.length; i++) {
+      expect(labels[i].dy, labels[0].dy);
+      expect(labels[i].dx, greaterThan(labels[i - 1].dx));
+    }
+
     final today = DateTime.now();
     final fileName =
         'hometrackhub-data-${today.year}-'
@@ -2710,15 +2727,17 @@ void main() {
 
     // Cancelling the save dialog changes nothing.
     export.saveAnswer = false;
-    await tester.tap(find.text('Save my data'));
+    await tester.tap(find.byTooltip('Save my data'));
     await tester.pumpAndSettle();
     expect(export.saved, isEmpty);
-    expect(find.text('Save a copy of all of your data as a file'), findsOne);
+    expect(find.byType(AlertDialog), findsNothing);
 
     export.saveAnswer = true;
-    await tester.tap(find.text('Save my data'));
+    await tester.tap(find.byTooltip('Save my data'));
     await tester.pumpAndSettle();
-    expect(find.text('Your data was saved'), findsOneWidget);
+    expect(find.text('Data saved'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
     final (savedName, savedJson) = export.saved.single;
     expect(savedName, fileName);
     final data = jsonDecode(savedJson) as Map<String, dynamic>;
@@ -2727,13 +2746,14 @@ void main() {
 
     // Saving can fail, and says so.
     export.saveAnswer = Exception('Disk full');
-    await tester.tap(find.text('Save my data'));
+    await tester.tap(find.byTooltip('Save my data'));
     await tester.pumpAndSettle();
-    expect(find.text('Could not save your data. Try again.'), findsOneWidget);
+    expect(find.text("Couldn't save your data"), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
 
     // Sharing explains what it sends, and sends the same file.
-    expect(find.textContaining('Sends a copy of everything'), findsOneWidget);
-    await tester.tap(find.text('Share my data'));
+    await tester.tap(find.byTooltip('Share my data'));
     await tester.pumpAndSettle();
     final (sharedName, sharedJson) = export.shared.single;
     expect(sharedName, fileName);
@@ -2826,6 +2846,99 @@ void main() {
     await tester.pumpAndSettle();
     expect(field().obscureText, isTrue);
     expect(field().readOnly, isTrue);
+  });
+
+  testWidgets('saved data can be loaded back from a file', (tester) async {
+    final export = FakeDataExportService();
+    await pumpApp(tester, export: export);
+    await addTasks(tester, []);
+    final shell = tester.element(find.byType(HomeShell));
+    final homeItems = shell.read<HomeItemController>();
+    final settings = shell.read<SettingsController>();
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Privacy'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save my data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    final (savedName, savedJson) = export.saved.single;
+
+    /// Picks [contents] as the file to load and taps Load my data.
+    Future<void> load(String contents, {String name = 'data.json'}) async {
+      export.openAnswer = (name: name, contents: contents);
+      await tester.tap(find.byTooltip('Load my data'));
+      await tester.pumpAndSettle();
+    }
+
+    // Files this version can't read are turned away with a popup saying
+    // why, changing nothing.
+    await load('Shopping list', name: 'list.txt');
+    expect(find.text("Can't load this file"), findsOneWidget);
+    expect(
+      find.textContaining('incompatible with HomeTrackHub'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    final fromNewerVersion = jsonDecode(savedJson) as Map<String, dynamic>
+      ..['version'] = 2;
+    await load(jsonEncode(fromNewerVersion));
+    expect(find.textContaining('incompatible version'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    // Change things after saving, to see them replaced.
+    await homeItems.addHomeItem(
+      HomeItem(
+        id: 'garage',
+        name: 'Garage door',
+        category: HomeItemCategory.custom,
+      ),
+    );
+    await settings.update(settings.settings.copyWith(hideSerialNumbers: false));
+    await tester.pumpAndSettle();
+
+    // A calendar picked on another device isn't brought along.
+    final fromOtherDevice = jsonDecode(savedJson) as Map<String, dynamic>;
+    (fromOtherDevice['settings'] as Map<String, dynamic>)
+      ..['calendarSyncEnabled'] = true
+      ..['syncCalendarId'] = 'other-device-calendar';
+
+    // Loading warns that it replaces everything, and can be cancelled.
+    await load(jsonEncode(fromOtherDevice), name: savedName);
+    expect(find.text('Replace all of your data?'), findsOneWidget);
+    expect(find.textContaining('"$savedName"'), findsOneWidget);
+    expect(find.textContaining('1 home item with 0 tasks'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(homeItems.homeItems, hasLength(2));
+
+    await tester.tap(find.byTooltip('Load my data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replace my data'));
+    await tester.pumpAndSettle();
+    expect(find.text('Data loaded'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(homeItems.homeItems.map((item) => item.name), ['House']);
+    expect(settings.settings.hideSerialNumbers, isTrue);
+    expect(settings.settings.calendarSyncEnabled, isFalse);
+    expect(settings.settings.syncCalendarId, isNull);
+
+    // Deleting everything says so in a popup too.
+    await tester.tap(find.byTooltip('Delete all my data'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete everything'));
+    await tester.pumpAndSettle();
+    expect(find.text('Data deleted'), findsOneWidget);
+    expect(homeItems.homeItems, isEmpty);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
   });
 
   testWidgets('dark mode can be selected in settings', (tester) async {

@@ -204,6 +204,17 @@ class HomeItemController extends ChangeNotifier {
     );
   }
 
+  /// Replaces every home item with [homeItems], for example when the user
+  /// loads their data from a file.
+  Future<void> replaceAll(List<HomeItem> homeItems) async {
+    for (final timer in _justDoneTimers.values) {
+      timer.cancel();
+    }
+    _justDoneTimers.clear();
+    _homeItems = [...homeItems];
+    await _saveAndNotify();
+  }
+
   /// Deletes all home items from the device.
   Future<void> deleteAll() async {
     _homeItems = [];

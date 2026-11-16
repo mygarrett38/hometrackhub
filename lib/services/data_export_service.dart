@@ -5,7 +5,11 @@ import 'dart:ui' show Rect;
 import 'package:file_picker/file_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Saves or shares a copy of the user's data as a file.
+/// A file the user picked: its name and what's in it.
+typedef OpenedFile = ({String name, String contents});
+
+/// Saves or shares a copy of the user's data as a file, or opens one to
+/// load it back in.
 abstract class DataExportService {
   /// Asks the user where to save [contents] as [fileName]. Returns whether
   /// it was saved, which is false if the user cancelled.
@@ -16,6 +20,10 @@ abstract class DataExportService {
   /// [origin] is where the share sheet points from on tablets, such as the
   /// button that opened it.
   Future<void> share(String fileName, String contents, {Rect? origin});
+
+  /// Asks the user to pick a saved data file, returning it, or `null` if
+  /// they cancelled.
+  Future<OpenedFile?> open();
 }
 
 /// Uses the device's own save dialog and share sheet.
@@ -42,6 +50,23 @@ class DeviceDataExportService implements DataExportService {
         sharePositionOrigin: origin,
       ),
     );
+  }
+
+  @override
+  Future<OpenedFile?> open() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+    );
+    if (file == null) return null;
+    // A file that isn't text can't be the app's data. Its contents are left
+    // malformed rather than throwing, so it's turned away like any other
+    // file that isn't.
+    final contents = utf8.decode(
+      await file.readAsBytes(),
+      allowMalformed: true,
+    );
+    return (name: file.name, contents: contents);
   }
 
   static Uint8List _bytes(String contents) =>

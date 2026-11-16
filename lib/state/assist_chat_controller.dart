@@ -189,6 +189,13 @@ class AssistChatController extends ChangeNotifier {
     await _saveAndNotify();
   }
 
+  /// Replaces every chat with [chats], for example when the user loads their
+  /// data from a file. Chats that have already expired are left out.
+  Future<void> replaceAll(List<AssistChat> chats) async {
+    _chats = [...chats];
+    await _saveAndNotify();
+  }
+
   /// Deletes every chat, for example when the user deletes all their data.
   Future<void> deleteAll() async {
     _chats = [];
