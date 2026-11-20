@@ -362,7 +362,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                       formRowDivider,
                     ],
                     InlineChoiceRow<int>(
-                      label: 'Notify me',
+                      label: 'Start notifying me',
                       value: _reminderChoice,
                       choices: _reminderOptions,
                       onChanged: _setReminderChoice,
