@@ -9,17 +9,6 @@ import '../../widgets/notification_permission.dart';
 import '../../widgets/screen_padding.dart';
 import '../../widgets/settings_card.dart';
 
-/// Weekday names for the weekly overview, keyed by [DateTime.weekday].
-const weekdayNames = {
-  DateTime.monday: 'Monday',
-  DateTime.tuesday: 'Tuesday',
-  DateTime.wednesday: 'Wednesday',
-  DateTime.thursday: 'Thursday',
-  DateTime.friday: 'Friday',
-  DateTime.saturday: 'Saturday',
-  DateTime.sunday: 'Sunday',
-};
-
 /// For example "every day", "every 3 days" or "every 2 weeks", following a
 /// time as in "9:00 AM every day".
 String reminderIntervalLabel(int days) => switch (days) {
@@ -29,13 +18,10 @@ String reminderIntervalLabel(int days) => switch (days) {
   _ => 'every $days days',
 };
 
-/// The kinds of notification that can be turned off.
-enum _NotificationKind { overdue, overview }
-
-/// Settings for each kind of notification: upcoming tasks, which are always
-/// sent, and overdue tasks and overviews, which can be turned off. Each has
-/// its own time and how often it repeats. How far ahead each task is first
-/// notified about is set on the task.
+/// Settings for the two kinds of notification: one listing the upcoming
+/// tasks, which is always sent, and one listing the overdue tasks, which can
+/// be turned off. Each has its own time and how often it repeats. How far
+/// ahead each task is first notified about is set on the task.
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
@@ -46,9 +32,9 @@ class NotificationSettingsScreen extends StatefulWidget {
 
 class _NotificationSettingsScreenState
     extends State<NotificationSettingsScreen> {
-  /// The kinds of notification that were turned on while notifications
-  /// turned out to be blocked.
-  final Set<_NotificationKind> _blocked = {};
+  /// Whether notifications turned out to be blocked when overdue
+  /// notifications were turned on.
+  bool _overdueBlocked = false;
 
   /// Whether the device's notification settings couldn't be opened.
   bool _couldNotOpenSettings = false;
@@ -138,12 +124,8 @@ class _NotificationSettingsScreenState
                 _SwitchedSection(
                   title: 'Overdue tasks',
                   enabled: settings.overdueEnabled,
-                  blocked: _blocked.contains(_NotificationKind.overdue),
-                  onChanged: (enabled) => _turnOn(
-                    _NotificationKind.overdue,
-                    enabled,
-                    settings.copyWith(overdueEnabled: enabled),
-                  ),
+                  blocked: _overdueBlocked,
+                  onChanged: _setOverdueEnabled,
                   children: [
                     _ReceiveAtRow<int>(
                       key: const Key('overdueReceiveAt'),
@@ -162,61 +144,6 @@ class _NotificationSettingsScreenState
                     ),
                   ],
                 ),
-                divider,
-                _SwitchedSection(
-                  title: 'Overviews',
-                  enabled: settings.overviewEnabled,
-                  blocked: _blocked.contains(_NotificationKind.overview),
-                  onChanged: (enabled) => _turnOn(
-                    _NotificationKind.overview,
-                    enabled,
-                    settings.copyWith(overviewEnabled: enabled),
-                  ),
-                  children: [
-                    _ReceiveAtRow<OverviewFrequency>(
-                      key: const Key('overviewReceiveAt'),
-                      hour: settings.overviewHour,
-                      minute: settings.overviewMinute,
-                      onTimeChanged: (time) => update(
-                        (s) => s.copyWith(
-                          overviewHour: time.hour,
-                          overviewMinute: time.minute,
-                        ),
-                      ),
-                      repeat: settings.overviewFrequency,
-                      repeatChoices: {
-                        for (final frequency in OverviewFrequency.values)
-                          frequency: frequency.label,
-                      },
-                      onRepeatChanged: (frequency) => update(
-                        (s) => s.copyWith(overviewFrequency: frequency),
-                      ),
-                    ),
-                    _SubRow(
-                      label: 'Day',
-                      // Monthly overviews have no menu, so the text needs
-                      // the space the menu's arrow would take.
-                      endPadding:
-                          settings.overviewFrequency == OverviewFrequency.weekly
-                          ? 4
-                          : 16,
-                      trailing: switch (settings.overviewFrequency) {
-                        OverviewFrequency.weekly => ChoiceMenuButton<int>(
-                          tooltip: 'Choose overview day',
-                          value: settings.overviewWeekday,
-                          choices: weekdayNames,
-                          onChanged: (weekday) => update(
-                            (s) => s.copyWith(overviewWeekday: weekday),
-                          ),
-                        ),
-                        OverviewFrequency.monthly => Text(
-                          '1st of each month',
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                      },
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -232,23 +159,20 @@ class _NotificationSettingsScreenState
     if (mounted) setState(() => _couldNotOpenSettings = !opened);
   }
 
-  /// Saves [newSettings], with [kind] turned on or off. Turning one on asks
-  /// for permission to show notifications, if it hasn't been given yet.
-  Future<void> _turnOn(
-    _NotificationKind kind,
-    bool enabled,
-    AppSettings newSettings,
-  ) async {
-    await context.read<SettingsController>().update(newSettings);
+  /// Turns overdue notifications on or off. Turning them on asks for
+  /// permission to show notifications, if it hasn't been given yet.
+  Future<void> _setOverdueEnabled(bool enabled) async {
+    final controller = context.read<SettingsController>();
+    await controller.update(
+      controller.settings.copyWith(overdueEnabled: enabled),
+    );
     if (!enabled) {
-      setState(() => _blocked.remove(kind));
+      if (mounted) setState(() => _overdueBlocked = false);
       return;
     }
     if (!mounted) return;
     final allowed = await requestNotificationPermission(context);
-    if (mounted) {
-      setState(() => allowed ? _blocked.remove(kind) : _blocked.add(kind));
-    }
+    if (mounted) setState(() => _overdueBlocked = !allowed);
   }
 }
 
@@ -307,17 +231,10 @@ class _SwitchedSection extends StatelessWidget {
 /// the kind's title above to show it belongs to it, and its value on the
 /// right.
 class _SubRow extends StatelessWidget {
-  const _SubRow({
-    required this.label,
-    required this.trailing,
-    this.endPadding = 4,
-  });
+  const _SubRow({required this.label, required this.trailing});
 
   final String label;
   final Widget trailing;
-
-  /// Space after [trailing]. Menus bring their own, so need less.
-  final double endPadding;
 
   /// Twice a [ListTile]'s usual 16 pixel indent.
   static const _indent = 32.0;
@@ -327,7 +244,8 @@ class _SubRow extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: formRowHeight),
       child: Padding(
-        padding: EdgeInsets.only(left: _indent, right: endPadding),
+        // Menus bring their own space at the end.
+        padding: const EdgeInsets.only(left: _indent, right: 4),
         child: Row(
           children: [
             Expanded(

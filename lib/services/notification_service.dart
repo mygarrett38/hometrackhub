@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -27,6 +29,10 @@ abstract interface class NotificationService {
   /// user can allow, block or customize its notifications. Returns `false`
   /// if the settings could not be opened.
   Future<bool> openDeviceNotificationSettings();
+
+  /// The kind of each reminder the user taps, including one that opened the
+  /// app, so the app can show the tasks it lists.
+  Stream<ReminderKind> get tappedReminders;
 }
 
 /// [NotificationService] that uses the operating system's notification
@@ -35,6 +41,13 @@ class LocalNotificationService implements NotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
 
   static const _testNotificationId = 999999;
+
+  /// Reminders tapped so far. Kept until listened to, since the reminder
+  /// that opened the app is known before anything is listening.
+  final _tappedReminders = StreamController<ReminderKind>();
+
+  @override
+  Stream<ReminderKind> get tappedReminders => _tappedReminders.stream;
 
   /// Notifications sent at the same time are grouped under this key on
   /// Android and this thread on iOS, so they're stacked together.
@@ -45,12 +58,12 @@ class LocalNotificationService implements NotificationService {
   /// here, past the reminders' own ids.
   static const _firstSummaryId = 100000;
 
-  /// Used for reminders about individual tasks.
+  /// Used for the reminders listing upcoming or overdue tasks.
   static const _taskDetails = NotificationDetails(
     android: AndroidNotificationDetails(
       'maintenance_reminders',
       'Maintenance Reminders',
-      channelDescription: 'Reminders when home maintenance is due.',
+      channelDescription: _channelDescription,
       category: AndroidNotificationCategory.reminder,
       importance: Importance.defaultImportance,
       priority: Priority.low,
@@ -60,23 +73,9 @@ class LocalNotificationService implements NotificationService {
     iOS: DarwinNotificationDetails(threadIdentifier: _groupKey),
   );
 
-  /// Used for the weekly or monthly overview. A separate Android channel lets
-  /// people control overviews and task reminders independently in the
-  /// system notification settings.
-  static const _overviewDetails = NotificationDetails(
-    android: AndroidNotificationDetails(
-      'maintenance_overviews',
-      'Maintenance Overviews',
-      channelDescription:
-          'Weekly or monthly summaries of upcoming maintenance.',
-      category: AndroidNotificationCategory.reminder,
-      importance: Importance.defaultImportance,
-      priority: Priority.low,
-      styleInformation: BigTextStyleInformation(''),
-      groupKey: _groupKey,
-    ),
-    iOS: DarwinNotificationDetails(threadIdentifier: _groupKey),
-  );
+  /// Shown for the reminders' channel in Android's notification settings.
+  static const _channelDescription =
+      'Lists of maintenance tasks coming up, and of tasks that are overdue.';
 
   /// The Android summary for a group of notifications sent together. iOS
   /// groups notifications by their thread without one.
@@ -84,7 +83,7 @@ class LocalNotificationService implements NotificationService {
     android: AndroidNotificationDetails(
       'maintenance_reminders',
       'Maintenance Reminders',
-      channelDescription: 'Reminders when home maintenance is due.',
+      channelDescription: _channelDescription,
       category: AndroidNotificationCategory.reminder,
       importance: Importance.defaultImportance,
       priority: Priority.low,
@@ -107,7 +106,21 @@ class LocalNotificationService implements NotificationService {
           requestSoundPermission: false,
         ),
       ),
+      onDidReceiveNotificationResponse: _onTapped,
     );
+
+    // A reminder tapped while the app wasn't running opened it.
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch != null && launch.didNotificationLaunchApp) {
+      _onTapped(launch.notificationResponse);
+    }
+  }
+
+  /// Passes on the kind of reminder tapped, which is its payload. Other
+  /// notifications, such as the test one, have none.
+  void _onTapped(NotificationResponse? response) {
+    final kind = ReminderKind.values.asNameMap()[response?.payload];
+    if (kind != null) _tappedReminders.add(kind);
   }
 
   /// Scheduled notifications need to know the device's time zone so that a
@@ -163,10 +176,9 @@ class LocalNotificationService implements NotificationService {
         title: reminder.title,
         body: reminder.body,
         scheduledDate: tz.TZDateTime.from(reminder.time, tz.local),
-        notificationDetails: switch (reminder.kind) {
-          ReminderKind.task => _taskDetails,
-          ReminderKind.overview => _overviewDetails,
-        },
+        notificationDetails: _taskDetails,
+        // Says which tasks to show when it's tapped.
+        payload: reminder.kind.name,
         // Inexact scheduling avoids needing the "Alarms & reminders"
         // permission. The reminder may arrive a few minutes late, which is
         // fine for home maintenance.

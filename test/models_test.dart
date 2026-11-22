@@ -105,8 +105,6 @@ void main() {
 
     expect(settings.themeMode, ThemeMode.dark);
     expect(settings.overdueEnabled, isTrue);
-    expect(settings.overviewEnabled, isFalse);
-    expect(settings.overviewWeekday, DateTime.monday);
     expect(settings.calendarPeriod, CalendarPeriod.month);
     expect(settings.hideSerialNumbers, isTrue);
     expect(settings.upcomingReminderDays, 1);
@@ -120,9 +118,6 @@ void main() {
       upcomingReminderDays: 2,
       overdueHour: 18,
       overdueReminderDays: 7,
-      overviewEnabled: true,
-      overviewFrequency: OverviewFrequency.monthly,
-      overviewHour: 8,
     );
     expect(AppSettings.fromJson(settings.toJson()).toJson(), settings.toJson());
     // A repeat that isn't one of the choices falls back to every day.
@@ -132,18 +127,15 @@ void main() {
     );
   });
 
-  test('overviews saved as "off" or as how often still load', () {
-    final off = AppSettings.fromJson({'overviewFrequency': 'off'});
-    expect(off.overviewEnabled, isFalse);
-    expect(off.overviewFrequency, OverviewFrequency.weekly);
-
-    final monthly = AppSettings.fromJson({
+  test('settings saved when there were overview notifications still load', () {
+    final settings = AppSettings.fromJson({
+      'overviewEnabled': true,
       'overviewFrequency': 'monthly',
       'overviewHour': 7,
+      'overdueHour': 18,
     });
-    expect(monthly.overviewEnabled, isTrue);
-    expect(monthly.overviewFrequency, OverviewFrequency.monthly);
-    expect(monthly.overviewHour, 7);
+    expect(settings.overdueHour, 18);
+    expect(settings.toJson().keys, isNot(contains('overviewEnabled')));
   });
 
   test('the hide serial numbers setting survives a JSON round trip', () {

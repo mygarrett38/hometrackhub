@@ -7,6 +7,7 @@ import '../../../models/calendar_period.dart';
 import '../../../models/home_expense.dart';
 import '../../../models/home_item.dart';
 import '../../../models/home_item_task.dart';
+import '../../../services/reminder_planner.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
@@ -18,6 +19,15 @@ import 'dashboard_setup_card.dart';
 /// like the calendar's. Tapping a summary card lists only its tasks.
 enum _TaskSection { overdue, upcoming, completed }
 
+/// Asks the Overview to list only the upcoming or only the overdue tasks,
+/// scrolled to and flashed, as when a reminder about them is tapped. Each
+/// request is acted on once, so asking again takes a new one.
+class ShowTasksRequest {
+  ShowTasksRequest(this.kind);
+
+  final ReminderKind kind;
+}
+
 /// The first tab: a live summary of saved maintenance and expense data,
 /// with the overdue, upcoming and completed tasks below it.
 class DashboardScreen extends StatefulWidget {
@@ -25,6 +35,7 @@ class DashboardScreen extends StatefulWidget {
     super.key,
     required this.onAssistPressed,
     this.isShown = true,
+    this.showTasks,
   });
 
   final VoidCallback onAssistPressed;
@@ -32,6 +43,9 @@ class DashboardScreen extends StatefulWidget {
   /// Whether this is the tab being shown. Leaving it lists all the tasks
   /// again, rather than only those of the summary card that was tapped.
   final bool isShown;
+
+  /// The latest request to show only the upcoming or overdue tasks.
+  final ShowTasksRequest? showTasks;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -48,15 +62,19 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   /// Lists only [section]'s tasks, or all of them again if it already was.
   void _toggleSection(_TaskSection section) {
+    final picking = _shownSection != section;
     setState(() {
-      _shownSection = _shownSection == section ? null : section;
+      _shownSection = picking ? section : null;
       _flashSection = null;
     });
     // Tapping the picked card again only lists all the tasks, leaving the
     // page where it is.
-    if (_shownSection == null) return;
-    // The tasks are below the cards, so bring them into view once they've
-    // been rebuilt, then flash the picked card's tasks.
+    if (picking) _scrollToTasks();
+  }
+
+  /// The tasks are below the cards, so brings them into view once they've
+  /// been rebuilt, then flashes the picked card's tasks.
+  void _scrollToTasks() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final tasks = _tasksKey.currentContext;
       if (tasks == null || !tasks.mounted) return;
@@ -89,6 +107,15 @@ class _DashboardScreenState extends State<DashboardScreen>
   void didUpdateWidget(DashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.isShown) _shownSection = null;
+    final request = widget.showTasks;
+    if (request != null && !identical(request, oldWidget.showTasks)) {
+      _shownSection = switch (request.kind) {
+        ReminderKind.upcoming => _TaskSection.upcoming,
+        ReminderKind.overdue => _TaskSection.overdue,
+      };
+      _flashSection = null;
+      _scrollToTasks();
+    }
   }
 
   @override

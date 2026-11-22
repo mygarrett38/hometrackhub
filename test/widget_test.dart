@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -66,6 +67,12 @@ class FakeNotificationService implements NotificationService {
     openSettingsCalls++;
     return true;
   }
+
+  /// Add a kind of reminder to act as if the user tapped one.
+  final taps = StreamController<ReminderKind>.broadcast();
+
+  @override
+  Stream<ReminderKind> get tappedReminders => taps.stream;
 }
 
 class FakeDiscoveryService implements DeviceDiscoveryService {
@@ -572,6 +579,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit custom item'), findsNothing);
     expect(find.text('Completed (1)'), findsOneWidget);
+  });
+
+  testWidgets('tapping a reminder shows the tasks it lists on the Overview', (
+    tester,
+  ) async {
+    final today = dateOnly(DateTime.now());
+    final notifications = FakeNotificationService();
+    await pumpApp(tester, notifications: notifications);
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'gutters',
+        title: 'Clean gutters',
+        interval: const MaintenanceInterval.months(1),
+        // Due 10 days ago.
+        startDate: DateTime(today.year, today.month - 1, today.day - 10),
+      ),
+      MaintenanceTask(
+        id: 'filter',
+        title: 'Replace water filter',
+        interval: const MaintenanceInterval.months(1),
+        // Due in 10 days.
+        startDate: DateTime(today.year, today.month - 1, today.day + 10),
+      ),
+    ]);
+    final overdue = find.text('Overdue (1)');
+    final upcoming = find.text('Upcoming (1)');
+
+    // Even from a screen on another tab, the reminder's tasks are shown.
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Notifications'));
+    await tester.pumpAndSettle();
+    notifications.taps.add(ReminderKind.overdue);
+    await tester.pumpAndSettle();
+    expect(find.text('Upcoming tasks'), findsNothing);
+    expect(overdue, findsOneWidget);
+    expect(upcoming, findsNothing);
+    final overdueCard = tester.getRect(
+      find.ancestor(of: overdue, matching: find.byType(Card)).first,
+    );
+    final screenHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(overdueCard.bottom, lessThan(screenHeight));
+
+    notifications.taps.add(ReminderKind.upcoming);
+    await tester.pumpAndSettle();
+    expect(upcoming, findsOneWidget);
+    expect(overdue, findsNothing);
   });
 
   testWidgets('the Overview lists tasks below its cards, and a card lists '
@@ -1592,7 +1647,7 @@ void main() {
 
   group('notification settings', () {
     /// [finder] within the "Receive at" row of the kind of notification
-    /// named [kind]: upcoming, overdue or overview.
+    /// named [kind]: upcoming or overdue.
     Finder receiveAt(String kind, Finder finder) => find.descendant(
       of: find.byKey(Key('${kind}ReceiveAt')),
       matching: finder,
@@ -1620,15 +1675,16 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('overdue and overview notifications have switches that show '
-        'their settings', (tester) async {
+    testWidgets('only overdue notifications have a switch, which shows their '
+        'settings', (tester) async {
       await pumpApp(tester);
       await openNotifications(tester);
 
-      // Upcoming tasks are always notified about, so have no switch.
       // The device's settings, then the kinds of notification.
       expect(find.byType(Card), findsNWidgets(2));
-      expect(find.byType(SwitchListTile), findsNWidgets(2));
+      expect(find.byType(SwitchListTile), findsOneWidget);
+      // Overviews were folded into the upcoming and overdue notifications.
+      expect(find.text('Overviews'), findsNothing);
 
       // Upcoming tasks are always notified about, so have no switch. Their
       // settings fold open with an arrow instead.
@@ -1644,31 +1700,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('upcomingReceiveAt')), findsNothing);
 
-      // Overdue notifications start on, overviews off.
+      // Overdue notifications start on, and fold away when turned off.
       await scrollTo(tester, find.byKey(const Key('overdueReceiveAt')));
-      await scrollTo(tester, find.text('Overviews'));
-      expect(find.byKey(const Key('overviewReceiveAt')), findsNothing);
-
-      await tester.tap(find.text('Overviews'));
-      await tester.pumpAndSettle();
-      await scrollTo(tester, find.text('Day'));
-      expect(find.text('Monday'), findsOneWidget);
-
-      await tester.tap(receiveAt('overview', find.text('every week')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('every month').last);
-      await tester.pumpAndSettle();
-      expect(find.text('1st of each month'), findsOneWidget);
-
-      await scrollTo(tester, find.text('Overdue tasks'));
       await tester.tap(find.text('Overdue tasks'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('overdueReceiveAt')), findsNothing);
-
-      final settings = settingsOf(tester);
-      expect(settings.overdueEnabled, isFalse);
-      expect(settings.overviewEnabled, isTrue);
-      expect(settings.overviewFrequency, OverviewFrequency.monthly);
+      expect(settingsOf(tester).overdueEnabled, isFalse);
     });
 
     testWidgets('each kind of notification is received at its own time and '

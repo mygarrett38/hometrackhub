@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/home_assistant_client.dart';
 import '../services/notification_service.dart';
+import '../services/reminder_planner.dart';
 import '../state/home_item_controller.dart';
 import '../state/settings_controller.dart';
 import 'screens/assist/assist_screen.dart';
@@ -31,6 +34,11 @@ class _HomeShellState extends State<HomeShell> {
 
   int _selectedIndex = _overviewIndex;
 
+  /// The tasks the Overview was last asked to show, after a reminder was
+  /// tapped.
+  ShowTasksRequest? _showTasks;
+  StreamSubscription<ReminderKind>? _tappedReminders;
+
   /// The Overview tab is shown as the app's logo in a circle instead, so it
   /// has no icon here and its label is used just for tooltips and screen
   /// readers.
@@ -45,18 +53,35 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    final notifications = context.read<NotificationService>();
+    _tappedReminders = notifications.tappedReminders.listen(_showReminder);
     // Ask for notification permission once the first screen is visible, if
     // any notification would be sent.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final settings = context.read<SettingsController>().settings;
       final anyTaskReminders = context.read<HomeItemController>().allTasks.any(
         (item) => item.task.reminder.enabled,
       );
-      if (anyTaskReminders || settings.overviewEnabled) {
-        context.read<NotificationService>().requestPermission();
-      }
+      if (anyTaskReminders) notifications.requestPermission();
       _askAboutAssistant();
+    });
+  }
+
+  @override
+  void dispose() {
+    _tappedReminders?.cancel();
+    super.dispose();
+  }
+
+  /// Shows the tasks a tapped reminder lists: the Overview, with only the
+  /// upcoming or only the overdue tasks listed. Any screen opened on top is
+  /// closed first.
+  void _showReminder(ReminderKind kind) {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() {
+      _selectedIndex = _overviewIndex;
+      _showTasks = ShowTasksRequest(kind);
     });
   }
 
@@ -121,6 +146,7 @@ class _HomeShellState extends State<HomeShell> {
         DashboardScreen(
           onAssistPressed: () => _select(3),
           isShown: _selectedIndex == _overviewIndex,
+          showTasks: _showTasks,
         ),
         const AssistScreen(),
         const SettingsScreen(),

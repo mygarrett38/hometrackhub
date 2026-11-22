@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../../services/notification_service.dart';
 
 /// Asks for permission to show notifications, returning whether they're
-/// allowed. Call this when the user turns on a reminder or the overview
-/// notification, and show [NotificationsBlockedNotice] if it returns false.
+/// allowed. Call this when the user turns on a task's reminder or overdue
+/// notifications, and show [NotificationsBlockedNotice] if it returns false.
 Future<bool> requestNotificationPermission(BuildContext context) =>
     context.read<NotificationService>().requestPermission();
 
