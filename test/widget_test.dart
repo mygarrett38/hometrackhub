@@ -601,12 +601,28 @@ void main() {
         lastCompleted: today,
         completionDates: [today],
       ),
+      // Outside the month ahead and the month back, so not counted.
+      MaintenanceTask(
+        id: 'roof',
+        title: 'Inspect roof',
+        interval: const MaintenanceInterval.months(3),
+        // Due in about 45 days.
+        startDate: DateTime(today.year, today.month - 3, today.day + 45),
+      ),
+      MaintenanceTask(
+        id: 'chimney',
+        title: 'Sweep chimney',
+        interval: const MaintenanceInterval.months(12),
+        startDate: today.subtract(const Duration(days: 45)),
+        lastCompleted: today.subtract(const Duration(days: 45)),
+        completionDates: [today.subtract(const Duration(days: 45))],
+      ),
     ]);
 
     final overdue = find.text('Overdue (1)');
     final upcoming = find.text('Upcoming (1)');
     // Named like the Overview card it's listed for.
-    final completed = find.text('Completed this month (1)');
+    final completed = find.text('Recently completed (1)');
     double top(Finder finder) => tester.getTopLeft(finder).dy;
 
     // Overdue, upcoming, then completed, all below the summary cards and
@@ -683,13 +699,13 @@ void main() {
     expect(upcoming, findsOneWidget);
     expect(scroll.position.pixels, scrolledTo);
 
-    await tapCard(find.textContaining('Completed This'));
+    await tapCard(find.text('Recently Completed'));
     expect(completed, findsOneWidget);
     expect(overdue, findsNothing);
     expect(upcoming, findsNothing);
 
     // Another card switches straight to its tasks.
-    await tapCard(find.text('Due Soon'));
+    await tapCard(find.text('Upcoming'));
     expect(upcoming, findsOneWidget);
     expect(overdue, findsNothing);
     expect(completed, findsNothing);
@@ -1542,14 +1558,14 @@ void main() {
     await tester.pumpAndSettle();
     // The form's list is the outermost scrollable; text fields have their own.
     await tester.scrollUntilVisible(
-      find.text('Notify me'),
+      find.text('Start notifying me'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('On the due date'), findsOneWidget);
     // The next due date leads the card with the notification choice.
     final notifyCard = find.ancestor(
-      of: find.text('Notify me'),
+      of: find.text('Start notifying me'),
       matching: find.byType(Card),
     );
     expect(
@@ -1558,7 +1574,7 @@ void main() {
     );
     expect(
       tester.getTopLeft(find.text('Next due')).dy,
-      lessThan(tester.getTopLeft(find.text('Notify me')).dy),
+      lessThan(tester.getTopLeft(find.text('Start notifying me')).dy),
     );
 
     await tester.tap(find.text('On the due date'));
@@ -2691,7 +2707,7 @@ void main() {
         tester.widget<Text>(calendarTitle.first).data!.contains(' – ');
 
     await pumpApp(tester);
-    expect(find.text('Completed This Month'), findsOneWidget);
+    expect(find.text('Recently Completed'), findsOneWidget);
     expect(find.text('Spent This Month'), findsOneWidget);
 
     await tester.tap(find.text('Settings'));
@@ -2705,11 +2721,10 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // The Overview counts this week straight away.
+    // Spending is still counted by the month, like a budget.
     await tester.tap(find.byTooltip('Overview'));
     await tester.pumpAndSettle();
-    expect(find.text('Completed This Week'), findsOneWidget);
-    expect(find.text('Spent This Week'), findsOneWidget);
+    expect(find.text('Spent This Month'), findsOneWidget);
 
     // The calendar that's already open keeps showing a month.
     await tester.tap(find.text('Calendar'));

@@ -159,6 +159,34 @@ void main() {
     );
   });
 
+  test('CalendarPeriod.shift moves a day by weeks, months or years', () {
+    final day = DateTime(2026, 11, 16);
+    expect(CalendarPeriod.week.shift(day, 1), DateTime(2026, 11, 23));
+    expect(CalendarPeriod.week.shift(day, -1), DateTime(2026, 11, 9));
+    expect(CalendarPeriod.month.shift(day, 1), DateTime(2026, 12, 16));
+    expect(CalendarPeriod.month.shift(day, -1), DateTime(2026, 10, 16));
+    expect(CalendarPeriod.year.shift(day, -1), DateTime(2025, 11, 16));
+    // Across the year's end, and onto the last day of a shorter month.
+    expect(
+      CalendarPeriod.month.shift(DateTime(2026, 12, 31), 2),
+      DateTime(2027, 2, 28),
+    );
+    expect(
+      CalendarPeriod.month.shift(DateTime(2027, 3, 31), -1),
+      DateTime(2027, 2, 28),
+    );
+    expect(
+      CalendarPeriod.year.shift(DateTime(2028, 2, 29), 1),
+      DateTime(2029, 2, 28),
+    );
+  });
+
+  test('spending is counted by the month or year', () {
+    expect(CalendarPeriod.week.budgetPeriod, CalendarPeriod.month);
+    expect(CalendarPeriod.month.budgetPeriod, CalendarPeriod.month);
+    expect(CalendarPeriod.year.budgetPeriod, CalendarPeriod.year);
+  });
+
   test('CalendarPeriod.rangeOf covers the week, month or year of a day', () {
     // A Wednesday.
     final day = DateTime(2026, 11, 4);

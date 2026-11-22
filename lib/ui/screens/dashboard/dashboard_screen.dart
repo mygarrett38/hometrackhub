@@ -114,11 +114,16 @@ class _DashboardScreenState extends State<DashboardScreen>
     final controller = context.watch<HomeItemController>();
     final now = DateTime.now();
     final today = dateOnly(now);
-    // The Completed and Spent cards count this week, month or year, as
-    // chosen in Appearance settings.
+    // The Upcoming and Recently Completed cards look a week, month or year
+    // ahead and back from today, as chosen in Appearance settings. Overdue tasks are all
+    // counted, however long ago they were due.
     final settings = context.watch<SettingsController>().settings;
     final period = settings.calendarPeriod;
-    final (periodStart, periodEnd) = period.rangeOf(today);
+    final dueBy = period.shift(today, 1);
+    final completedSince = period.shift(today, -1);
+    // Spending is counted by this month or year, like a budget.
+    final budgetPeriod = period.budgetPeriod;
+    final (budgetStart, budgetEnd) = budgetPeriod.rangeOf(today);
     final activeTasks = controller.allTasks.where(
       (task) => !controller.isListedAsDone(task),
     );
@@ -132,19 +137,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     final upcomingTasks = controller.orderForList(
       activeTasks.where((task) {
         final days = daysUntilDue(task);
-        return days >= 0 && days <= 30;
+        return days >= 0 && days <= calendarDaysBetween(today, dueBy);
       }),
     );
     final overdue = overdueTasks.length;
-    final dueSoon = upcomingTasks.length;
+    final upcoming = upcomingTasks.length;
 
-    // Every time a task was done this week, month or year, newest first: the
-    // tasks the Completed card counts. A task done more than once gets a row
-    // for each, so each row is its own [HomeItemTask].
+    // Every time a task was done in the past week, month or year, newest
+    // first: the tasks the Recently Completed card counts. A task done more than once
+    // gets a row for each, so each row is its own [HomeItemTask].
     final completedOn = <HomeItemTask, DateTime>{
       for (final item in controller.allTasks)
         for (final date in item.task.completionDates)
-          if (!date.isBefore(periodStart) && date.isBefore(periodEnd))
+          if (!dateOnly(date).isBefore(completedSince))
             HomeItemTask(item.homeItem, item.task): date,
     };
     final completedTasks = completedOn.keys.toList()
@@ -154,8 +159,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         .expand((item) => item.expenses)
         .where(
           (expense) =>
-              !expense.date.isBefore(periodStart) &&
-              expense.date.isBefore(periodEnd),
+              !expense.date.isBefore(budgetStart) &&
+              expense.date.isBefore(budgetEnd),
         )
         .fold<double>(0, (total, expense) => total + expense.amount);
     final colors = Theme.of(context).colorScheme;
@@ -205,8 +210,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                         : 1.32,
                     children: [
                       _SummaryCard(
-                        label: 'Due Soon',
-                        value: '$dueSoon',
+                        label: 'Upcoming',
+                        value: '$upcoming',
                         icon: Icons.schedule,
                         color: colors.primary,
                         selected: _shownSection == _TaskSection.upcoming,
@@ -221,7 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         onTap: () => _toggleSection(_TaskSection.overdue),
                       ),
                       _SummaryCard(
-                        label: 'Completed This ${period.label}',
+                        label: 'Recently Completed',
                         value: '$completedInPeriod',
                         icon: Icons.task_alt,
                         color: colors.secondary,
@@ -229,15 +234,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                         onTap: () => _toggleSection(_TaskSection.completed),
                       ),
                       _SummaryCard(
-                        label: 'Spent This ${period.label}',
+                        label: 'Spent This ${budgetPeriod.label}',
                         value: '\$${spentInPeriod.toStringAsFixed(2)}',
                         icon: Icons.account_balance_wallet_outlined,
                         color: colors.tertiary,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute<void>(
-                            // There's no list for a single week, so a week
-                            // opens the month it's in.
-                            builder: (_) => period == CalendarPeriod.year
+                            builder: (_) => budgetPeriod == CalendarPeriod.year
                                 ? _YearlyExpensesScreen(
                                     initialYear: now.year,
                                     onRecordExpense: () =>
@@ -314,15 +317,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   }) {
     final colors = Theme.of(context).colorScheme;
     final shown = _shownSection;
-    // Matches the Overview card it's listed for, such as "Completed This
-    // Month".
-    final completedTitle = 'Completed this ${period.name}';
     final cards = [
       (_TaskSection.overdue, 'Overdue', overdueTasks, colors.error),
       (_TaskSection.upcoming, 'Upcoming', upcomingTasks, colors.primary),
       (
         _TaskSection.completed,
-        completedTitle,
+        'Recently completed',
         completedTasks,
         colors.secondary,
       ),
@@ -363,9 +363,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           child: Center(
             child: Text(switch (shown) {
               _TaskSection.overdue => 'No overdue tasks.',
-              _TaskSection.upcoming => 'No tasks are due in the next 30 days.',
+              _TaskSection.upcoming =>
+                'No tasks are due within the next ${period.name}.',
               _TaskSection.completed =>
-                'No tasks completed this ${period.name}.',
+                'No tasks completed in the past ${period.name}.',
             }, textAlign: TextAlign.center),
           ),
         ),
@@ -480,7 +481,8 @@ class _MonthlyExpensesScreen extends StatelessWidget {
     final entries = [
       for (final item in controller.homeItems)
         for (final expense in item.expenses)
-          if (!expense.date.isBefore(monthStart) && expense.date.isBefore(nextMonth))
+          if (!expense.date.isBefore(monthStart) &&
+              expense.date.isBefore(nextMonth))
             _ExpenseDetailEntry(item, expense),
     ]..sort((a, b) => b.expense.date.compareTo(a.expense.date));
     final total = entries.fold<double>(
@@ -539,9 +541,8 @@ class _MonthlyExpensesScreen extends StatelessWidget {
               title: const Text('Total spent'),
               trailing: Text(
                 '\$${total.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -645,9 +646,8 @@ class _YearlyExpensesScreenState extends State<_YearlyExpensesScreen> {
               title: const Text('Year total'),
               trailing: Text(
                 '\$${yearlyTotal.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ),
@@ -662,9 +662,7 @@ class _YearlyExpensesScreenState extends State<_YearlyExpensesScreen> {
                     title: Text(
                       localizations.formatMonthYear(DateTime(_year, month)),
                     ),
-                    subtitle: Text(
-                      '${entriesByMonth[month]!.length} expenses',
-                    ),
+                    subtitle: Text('${entriesByMonth[month]!.length} expenses'),
                     trailing: Text(
                       '\$${entriesByMonth[month]!.fold<double>(0, (total, entry) => total + entry.expense.amount).toStringAsFixed(2)}',
                     ),
@@ -719,9 +717,7 @@ class _RecordExpenseDialogState extends State<_RecordExpenseDialog> {
     final validAmount = amount != null && amount > 0;
     if (description.isEmpty || !validAmount) {
       setState(() {
-        _descriptionError = description.isEmpty
-            ? 'Enter a description'
-            : null;
+        _descriptionError = description.isEmpty ? 'Enter a description' : null;
         _amountError = validAmount ? null : 'Enter an amount above \$0';
       });
       return;

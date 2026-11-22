@@ -115,8 +115,10 @@ class AppSettings {
   // Appearance
   final ThemeMode themeMode;
 
-  /// What the calendar shows when the app opens, and the time the
-  /// Overview's Completed and Spent cards count: this week, month or year.
+  /// What the calendar shows when the app opens, and how far ahead and back
+  /// the Overview's Upcoming and Recently Completed cards look: a week,
+  /// month or year.
+  /// The Spent card counts this month or year.
   final CalendarPeriod calendarPeriod;
 
   // Privacy

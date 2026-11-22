@@ -48,8 +48,8 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 title: 'Calendar view',
                 description:
                     'What the calendar shows when the app opens. The '
-                    'Overview\'s Completed and Spent cards also count this '
-                    'week, month or year.',
+                    'Overview also counts tasks due within this long and '
+                    'done in the past one, and spending this month or year.',
                 value: settings.calendarPeriod,
                 choices: {
                   for (final period in CalendarPeriod.values)
