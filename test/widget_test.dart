@@ -2467,6 +2467,28 @@ void main() {
     expect(find.text('What would you like to do today?'), findsOneWidget);
   });
 
+  testWidgets('with the assistant off, nearby services wait until the '
+      'Assist tab is opened', (tester) async {
+    await pumpApp(
+      tester,
+      savedData: {
+        'settings_v1': jsonEncode({
+          ...const AppSettings().toJson(),
+          'assistantEnabled': false,
+        }),
+      },
+    );
+    // Nothing is searched for, or located, while another tab is shown.
+    expect(
+      find.text('Riverbend Plumbing & Drain', skipOffstage: false),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Assist'));
+    await tester.pumpAndSettle();
+    expect(find.text('Riverbend Plumbing & Drain'), findsOneWidget);
+  });
+
   /// Opens Settings, then the Assistant settings page.
   Future<void> openAssistantSettings(WidgetTester tester) async {
     await tester.tap(find.text('Settings'));

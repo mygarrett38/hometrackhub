@@ -136,6 +136,21 @@ class _GoogleLikeClient implements NearbyServicesClient {
   }) async => [_plumber, _electrician];
 }
 
+/// Like [_GoogleLikeClient], also recording the area of each search.
+class _AreaRecordingClient extends _GoogleLikeClient {
+  final areas = <SearchArea?>[];
+
+  @override
+  Future<List<ServiceProvider>> search({
+    String query = '',
+    ServiceType? service,
+    SearchArea? area,
+  }) {
+    areas.add(area);
+    return super.search(query: query, service: service, area: area);
+  }
+}
+
 /// A client that fails in a way it doesn't explain, as a dropped connection
 /// might.
 class _BrokenClient implements NearbyServicesClient {
@@ -475,6 +490,49 @@ void main() {
       await tester.tap(find.byIcon(Icons.tune));
       await tester.pumpAndSettle();
     }
+
+    testWidgets('follows changes to where to search and the default sort', (
+      tester,
+    ) async {
+      final client = _AreaRecordingClient();
+      await pumpScreen(
+        tester,
+        client: client,
+        settings: const AppSettings(
+          nearbyLocationSource: NearbyLocationSource.zipCode,
+          nearbyZipCode: '62701',
+        ),
+      );
+      final settings = Provider.of<SettingsController>(
+        tester.element(find.byType(NearbyServicesScreen)),
+        listen: false,
+      );
+      List<String> zipCodes() => [
+        for (final area in client.areas) (area! as SearchAroundZipCode).zipCode,
+      ];
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      expect(zipCodes(), ['62701']);
+      expect(top('Spark Electric'), lessThan(top('Pipe Pros')));
+
+      // As when it's changed from the Settings tab while this stays open.
+      await settings.update(settings.settings.copyWith(nearbyZipCode: '62702'));
+      await tester.pumpAndSettle();
+      expect(zipCodes(), ['62701', '62702']);
+
+      // The default sort reorders the results without searching again.
+      await settings.update(
+        settings.settings.copyWith(nearbySort: ServiceSort.reviews),
+      );
+      await tester.pumpAndSettle();
+      expect(top('Pipe Pros'), lessThan(top('Spark Electric')));
+
+      // Other settings change nothing here.
+      await settings.update(
+        settings.settings.copyWith(assistantEnabled: false),
+      );
+      await tester.pumpAndSettle();
+      expect(client.areas, hasLength(2));
+    });
 
     testWidgets('lists sample businesses with their ratings', (tester) async {
       await pumpScreen(tester);

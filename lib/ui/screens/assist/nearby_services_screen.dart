@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../models/app_settings.dart';
 import '../../../models/service_provider.dart';
 import '../../../models/service_sort.dart';
 import '../../../models/service_type.dart';
@@ -22,7 +25,8 @@ import '../settings/nearby_services_settings_screen.dart';
 /// get directions.
 ///
 /// Where to search around and the order the results start in come from the
-/// Nearby services settings.
+/// Nearby services settings. Changing them while the screen is open, such as
+/// from the Settings tab, searches again or reorders the results.
 class NearbyServicesScreen extends StatelessWidget {
   const NearbyServicesScreen({super.key});
 
@@ -59,11 +63,50 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
   /// bar. They're hidden at first to leave more room for the results.
   bool _filtersOpen = false;
 
+  late final SettingsController _settings;
+
+  /// The settings when they were last checked for changes.
+  late AppSettings _lastSettings;
+
+  /// Rebuilds the screen every minute, so "Open now" stays right while it's
+  /// left open.
+  late final Timer _clock;
+
+  @override
+  void initState() {
+    super.initState();
+    _settings = context.read<SettingsController>();
+    _lastSettings = _settings.settings;
+    _settings.addListener(_onSettingsChanged);
+    _clock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   @override
   void dispose() {
+    _clock.cancel();
+    _settings.removeListener(_onSettingsChanged);
     _search.dispose();
     super.dispose();
   }
+
+  /// Searches again when where to search changes, and changes the order
+  /// when the default sort does.
+  void _onSettingsChanged() {
+    final before = _lastSettings;
+    final after = _settings.settings;
+    _lastSettings = after;
+    final controller = context.read<NearbyServicesController>();
+    if (after.nearbySort != before.nearbySort) {
+      controller.setSort(after.nearbySort);
+    }
+    if (!_searchesSameArea(before, after)) controller.relocate();
+  }
+
+  static bool _searchesSameArea(AppSettings a, AppSettings b) =>
+      a.nearbyLocationSource == b.nearbyLocationSource &&
+      a.nearbyZipCode == b.nearbyZipCode;
 
   @override
   Widget build(BuildContext context) {
@@ -228,15 +271,20 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
     );
   }
 
-  /// Opens the Nearby services settings, then searches again in case the
-  /// user changed where to search.
+  /// Opens the Nearby services settings. A change to where to search is
+  /// searched for as it's made. Otherwise this searches again once the user
+  /// is back, in case they fixed the problem outside the app, such as by
+  /// allowing location access.
   Future<void> _openSettings(NearbyServicesController controller) async {
+    final before = _settings.settings;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const NearbyServicesSettingsScreen(),
       ),
     );
-    if (mounted) await controller.relocate();
+    if (mounted && _searchesSameArea(before, _settings.settings)) {
+      await controller.relocate();
+    }
   }
 
   void _showDetails(ServiceProvider provider, DateTime now) {

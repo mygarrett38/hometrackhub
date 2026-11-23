@@ -31,6 +31,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   /// The Overview tab, in the middle, is shown first.
   static const _overviewIndex = 2;
+  static const _assistIndex = 3;
 
   int _selectedIndex = _overviewIndex;
 
@@ -144,11 +145,11 @@ class _HomeShellState extends State<HomeShell> {
         const HomeItemListScreen(),
         const MaintenanceCalendarScreen(),
         DashboardScreen(
-          onAssistPressed: () => _select(3),
+          onAssistPressed: () => _select(_assistIndex),
           isShown: _selectedIndex == _overviewIndex,
           showTasks: _showTasks,
         ),
-        const AssistScreen(),
+        AssistScreen(isShown: _selectedIndex == _assistIndex),
         const SettingsScreen(),
       ],
     );
