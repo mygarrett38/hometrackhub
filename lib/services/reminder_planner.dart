@@ -170,29 +170,47 @@ PlannedReminder _reminder({
   required List<HomeItemTask> tasks,
   required bool hideDetails,
 }) {
-  final (title, kindOfTask) = switch (moment.kind) {
-    ReminderKind.upcoming => ('Upcoming maintenance', 'upcoming'),
-    ReminderKind.overdue => ('Overdue maintenance', 'overdue'),
+  final kindOfTask = switch (moment.kind) {
+    ReminderKind.upcoming => 'upcoming',
+    ReminderKind.overdue => 'overdue',
   };
   final count = tasks.length;
   return PlannedReminder(
     id: id,
     time: moment.time,
     kind: moment.kind,
-    title: title,
-    body: hideDetails
-        ? 'You have $count $kindOfTask maintenance '
-              '${count == 1 ? 'task' : 'tasks'}. Tap to view.'
-        : _taskLines(tasks, moment.time),
+    // Only a count, so it's fine on a locked screen even with details
+    // hidden.
+    title: 'You have $count $kindOfTask ${count == 1 ? 'task' : 'tasks'}',
+    body: hideDetails ? 'Tap to view.' : _taskLines(tasks, moment.time),
   );
 }
 
-/// One line per task, such as "Replace filter (Furnace) – due in 3 days",
-/// as of [time].
+/// The tasks by home item, as of [time]: each home item's name on a line of
+/// its own, then a line for each of its tasks saying when it's due first,
+/// with a blank line between home items. For example:
+///
+/// ```text
+/// Furnace
+/// Due in 3 days – Replace filter
+///
+/// Dryer
+/// Due in 5 days – Clean lint trap
+/// ```
+///
+/// Home items come in the order of their soonest task, and each one's tasks
+/// in the order [tasks] lists them.
 String _taskLines(List<HomeItemTask> tasks, DateTime time) {
+  final byHomeItem = <String, List<HomeItemTask>>{};
+  for (final item in tasks) {
+    byHomeItem.putIfAbsent(item.homeItem.id, () => []).add(item);
+  }
   return [
-    for (final item in tasks)
-      '${item.task.title} (${item.homeItem.name}) – '
-          '${describeDueDate(item.dueDate, time).toLowerCase()}',
-  ].join('\n');
+    for (final items in byHomeItem.values)
+      [
+        items.first.homeItem.name,
+        for (final item in items)
+          '${describeDueDate(item.dueDate, time)} – ${item.task.title}',
+      ].join('\n'),
+  ].join('\n\n');
 }

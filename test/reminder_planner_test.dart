@@ -167,11 +167,50 @@ void main() {
       final reminder = reminders.single;
       expect(reminder.time, DateTime(2026, 6, 20, 9, 30));
       expect(reminder.kind, ReminderKind.upcoming);
-      expect(reminder.title, 'Upcoming maintenance');
+      expect(reminder.title, 'You have 2 upcoming tasks');
+      // Each home item, then its tasks with when they're due first.
       expect(
         reminder.body,
-        'Replace filter (Dryer) – due today\n'
-        'Replace filter (Furnace) – due today',
+        'Dryer\n'
+        'Due today – Replace filter\n'
+        '\n'
+        'Furnace\n'
+        'Due today – Replace filter',
+      );
+    });
+
+    test('list each home item\'s tasks together, under its name', () {
+      final reminders = planReminders(
+        homeItems: [
+          HomeItem(
+            id: 'furnace',
+            name: 'Furnace',
+            category: HomeItemCategory.hvac,
+            tasks: [
+              taskDueOn(DateTime(2026, 6, 20)),
+              MaintenanceTask(
+                id: 'coils',
+                title: 'Clean coils',
+                interval: const MaintenanceInterval.months(1),
+                startDate: DateTime(2026, 5, 20),
+              ),
+            ],
+          ),
+          homeItemDueOn(DateTime(2026, 6, 20), name: 'Dryer'),
+        ],
+        settings: upcomingOnly,
+        now: now,
+      );
+
+      expect(reminders.single.title, 'You have 3 upcoming tasks');
+      expect(
+        reminders.single.body,
+        'Dryer\n'
+        'Due today – Replace filter\n'
+        '\n'
+        'Furnace\n'
+        'Due today – Clean coils\n'
+        'Due today – Replace filter',
       );
     });
 
@@ -195,8 +234,11 @@ void main() {
       );
       expect(
         june15.body,
-        'Replace filter (Dryer) – due today\n'
-        'Replace filter (Furnace) – due in 5 days',
+        'Dryer\n'
+        'Due today – Replace filter\n'
+        '\n'
+        'Furnace\n'
+        'Due in 5 days – Replace filter',
       );
     });
 
@@ -213,11 +255,14 @@ void main() {
       final first = reminders.first;
       expect(first.time, DateTime(2026, 6, 10, 18));
       expect(first.kind, ReminderKind.overdue);
-      expect(first.title, 'Overdue maintenance');
+      expect(first.title, 'You have 2 overdue tasks');
       expect(
         first.body,
-        'Replace filter (Furnace) – overdue by 9 days\n'
-        'Replace filter (Dryer) – overdue by 5 days',
+        'Furnace\n'
+        'Overdue by 9 days – Replace filter\n'
+        '\n'
+        'Dryer\n'
+        'Overdue by 5 days – Replace filter',
       );
     });
 
@@ -256,16 +301,13 @@ void main() {
       );
 
       final overdue = reminders.first;
-      expect(overdue.title, 'Overdue maintenance');
-      expect(overdue.body, 'You have 1 overdue maintenance task. Tap to view.');
+      expect(overdue.title, 'You have 1 overdue task');
+      expect(overdue.body, 'Tap to view.');
       final upcoming = reminders.firstWhere(
         (reminder) => reminder.kind == ReminderKind.upcoming,
       );
-      expect(upcoming.title, 'Upcoming maintenance');
-      expect(
-        upcoming.body,
-        'You have 2 upcoming maintenance tasks. Tap to view.',
-      );
+      expect(upcoming.title, 'You have 2 upcoming tasks');
+      expect(upcoming.body, 'Tap to view.');
       for (final reminder in reminders) {
         expect(reminder.title, isNot(contains('Furnace')));
         expect(reminder.body, isNot(contains('Furnace')));
