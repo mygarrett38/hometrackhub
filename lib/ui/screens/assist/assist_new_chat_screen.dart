@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -118,15 +120,16 @@ class _AssistNewChatScreenState extends State<AssistNewChatScreen> {
     final question = text.trim();
     if (question.isEmpty || _starting) return;
     final chats = context.read<AssistChatController>();
+    final assistant = context.read<HomeAssistantClient>();
     setState(() => _starting = true);
     final chatId = await chats.startChat(question);
+    // Answered whether or not the user stays in the chat.
+    unawaited(chats.answer(chatId, assistant));
     if (!mounted) return;
     // The chat takes this screen's place, so back from it goes to the
     // Assist tab rather than to an empty new conversation.
     await Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => AssistChatScreen(chatId: chatId, askOnOpen: true),
-      ),
+      MaterialPageRoute<void>(builder: (_) => AssistChatScreen(chatId: chatId)),
     );
   }
 }

@@ -1,10 +1,32 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/assist_chat.dart';
+import 'package:hometrackhub/models/technical_level.dart';
+import 'package:hometrackhub/services/home_assistant_client.dart';
 import 'package:hometrackhub/state/assist_chat_controller.dart';
 import 'package:hometrackhub/state/settings_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// An assistant that answers only when the test completes [pending].
+class _WaitingAssistant implements HomeAssistantClient {
+  final pending = <Completer<AssistantReply>>[];
+
+  @override
+  bool get isConfigured => true;
+
+  @override
+  Future<AssistantReply> ask(
+    List<AssistantMessage> conversation, {
+    TechnicalLevel technicalLevel = TechnicalLevel.someExperience,
+  }) {
+    final reply = Completer<AssistantReply>();
+    pending.add(reply);
+    return reply.future;
+  }
+}
 
 void main() {
   late SharedPreferences preferences;
@@ -302,5 +324,70 @@ void main() {
 
       expect([for (final message in sent) message.content], ['Follow-up']);
     });
+  });
+
+  group('answering', () {
+    List<String> contents(AssistChat chat) => [
+      for (final message in chat.messages) message.content,
+    ];
+
+    test('a question is answered once, even if asked again while the '
+        'assistant is working on it', () async {
+      final controller = createController();
+      final assistant = _WaitingAssistant();
+      final id = await controller.startChat('Furnace filter?');
+
+      final answering = controller.answer(id, assistant);
+      expect(controller.isAnswering(id), isTrue);
+      // As when the chat is reopened and asked again.
+      await controller.answer(id, assistant);
+      expect(assistant.pending, hasLength(1));
+
+      assistant.pending.single.complete(
+        const AssistantReply(answer: 'Every 90 days.'),
+      );
+      await answering;
+      expect(controller.isAnswering(id), isFalse);
+      expect(contents(controller.chatById(id)!), [
+        'Furnace filter?',
+        'Every 90 days.',
+      ]);
+
+      // A question that's been answered isn't asked again.
+      await controller.answer(id, assistant);
+      expect(assistant.pending, hasLength(1));
+    });
+
+    test(
+      "says why a question couldn't be answered until it's asked again",
+      () async {
+        final controller = createController();
+        final assistant = _WaitingAssistant();
+        final id = await controller.startChat('Furnace filter?');
+
+        final first = controller.answer(id, assistant);
+        assistant.pending[0].completeError(
+          const AssistantConnectionException('No connection.'),
+        );
+        await first;
+        expect(controller.answerErrorOf(id), 'No connection.');
+        expect(controller.isAnswering(id), isFalse);
+        expect(controller.chatById(id)!.isAwaitingAnswer, isTrue);
+
+        final second = controller.answer(id, assistant);
+        expect(controller.answerErrorOf(id), isNull);
+        assistant.pending[1].complete(
+          const AssistantReply(
+            answer: 'Every 90 days.',
+            recommendProfessional: true,
+          ),
+        );
+        await second;
+        expect(
+          controller.chatById(id)!.messages.last.professionalNote,
+          'This is a job for a professional.',
+        );
+      },
+    );
   });
 }

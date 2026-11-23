@@ -115,6 +115,10 @@ class FakeAssistantClient implements HomeAssistantClient {
   /// The technical level each question was asked at, oldest first.
   final technicalLevels = <TechnicalLevel>[];
 
+  /// When set, questions aren't answered until this completes, so a test
+  /// can see what happens while the assistant is working on an answer.
+  Future<void>? answerWhen;
+
   @override
   Future<AssistantReply> ask(
     List<AssistantMessage> conversation, {
@@ -122,6 +126,7 @@ class FakeAssistantClient implements HomeAssistantClient {
   }) async {
     conversations.add(List.of(conversation));
     technicalLevels.add(technicalLevel);
+    if (answerWhen case final wait?) await wait;
     final reply = this.reply;
     if (reply is AssistantReply) return reply;
     throw reply;
@@ -2077,6 +2082,44 @@ void main() {
     expect(find.text('Clean the P-trap.'), findsOneWidget);
     // The question is asked again rather than added a second time.
     expect(assistant.conversations.last.length, 1);
+  });
+
+  testWidgets('a chat left while the assistant answers is still waiting '
+      'when reopened, and is answered once', (tester) async {
+    final answered = Completer<void>();
+    final assistant = FakeAssistantClient()
+      ..answerWhen = answered.future
+      ..reply = const AssistantReply(answer: 'Clean the P-trap.');
+    await pumpApp(tester, assistant: assistant);
+    await openNewConversation(tester);
+
+    // The waiting spinner never settles, so frames are pumped by hand.
+    Future<void> pumpFor() async {
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    await tester.enterText(find.byType(TextField), 'Why is my sink slow?');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Send'));
+    await pumpFor();
+    expect(find.text('Thinking…'), findsOneWidget);
+
+    await tester.pageBack();
+    await pumpFor();
+    await tester.tap(find.text('Continue conversation'));
+    await pumpFor();
+    await tester.tap(find.widgetWithText(ListTile, todaysChat()));
+    await pumpFor();
+    expect(find.text('Thinking…'), findsOneWidget);
+    expect(find.text("This question hasn't been answered yet."), findsNothing);
+    expect(find.text('Try again'), findsNothing);
+
+    answered.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Clean the P-trap.'), findsOneWidget);
+    expect(find.text('Thinking…'), findsNothing);
+    expect(assistant.conversations, hasLength(1));
   });
 
   testWidgets('chats are reopened from the history and carry on', (

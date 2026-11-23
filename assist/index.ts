@@ -20,7 +20,13 @@ const MODEL = "claude-haiku-5-5";
 // Limits on what one request may contain, so a single caller can't run up
 // the bill. The app keeps its own messages well under these.
 const MAX_MESSAGES = 40;
-const MAX_MESSAGE_CHARS = 4_000;
+/**
+ * The longest question. Claude's own earlier answers, which the app sends
+ * back with each follow-up, can be longer, and are only limited by
+ * MAX_TOTAL_CHARS. Otherwise one long answer would make every follow-up in
+ * its chat fail, with nothing the user could shorten.
+ */
+const MAX_QUESTION_CHARS = 4_000;
 const MAX_TOTAL_CHARS = 40_000;
 
 const SYSTEM_PROMPT = `You are HomeTrack Hub's home maintenance assistant. \
@@ -224,8 +230,8 @@ function parseMessages(body: unknown): Anthropic.MessageParam[] | string {
     if (typeof content !== "string" || content.trim() === "") {
       return "Each message needs some text.";
     }
-    if (content.length > MAX_MESSAGE_CHARS) {
-      return "A message is too long. Shorten it and try again.";
+    if (role === "user" && content.length > MAX_QUESTION_CHARS) {
+      return "Your question is too long. Shorten it and try again.";
     }
     totalChars += content.length;
     if (role === "user") {

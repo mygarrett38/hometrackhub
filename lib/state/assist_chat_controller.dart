@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../data/assist_chat_repository.dart';
 import '../models/app_settings.dart';
 import '../models/assist_chat.dart';
+import '../services/home_assistant_client.dart';
 import '../utils/date_utils.dart';
 import '../utils/id_generator.dart';
 import 'settings_controller.dart';
@@ -30,6 +31,14 @@ class AssistChatController extends ChangeNotifier {
   final DateTime Function() _clock;
   List<AssistChat> _chats;
   Duration _keepFor;
+  bool _disposed = false;
+
+  /// The ids of the chats whose last question the assistant is answering.
+  final _answering = <String>{};
+
+  /// Why the assistant couldn't answer each chat's last question, by chat
+  /// id, until it's asked again.
+  final _answerErrors = <String, String>{};
 
   static Duration _keepForIn(AppSettings settings) =>
       Duration(days: settings.keepChatsDays);
@@ -59,6 +68,7 @@ class AssistChatController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _settings.removeListener(_onSettingsChanged);
     super.dispose();
   }
@@ -144,6 +154,53 @@ class AssistChatController extends ChangeNotifier {
     await _saveAndNotify();
   }
 
+  /// Whether the assistant is working on an answer to the last question in
+  /// the chat with [chatId]. Kept here rather than by the chat's screen, so
+  /// the chat still shows it's waiting if the user leaves and comes back.
+  bool isAnswering(String chatId) => _answering.contains(chatId);
+
+  /// Why the assistant couldn't answer the last question in the chat with
+  /// [chatId], if it couldn't.
+  String? answerErrorOf(String chatId) => _answerErrors[chatId];
+
+  /// Asks [assistant] to answer the last question in a chat, at the user's
+  /// technical level, and adds its answer to the chat. If it can't, says
+  /// why in [answerErrorOf].
+  ///
+  /// Does nothing while the chat is already being answered, so a question
+  /// is never answered twice, or if it has no question waiting.
+  Future<void> answer(String chatId, HomeAssistantClient assistant) async {
+    final chat = chatById(chatId);
+    if (chat == null || !chat.isAwaitingAnswer || isAnswering(chatId)) return;
+    _answering.add(chatId);
+    _answerErrors.remove(chatId);
+    notifyListeners();
+    try {
+      final reply = await assistant.ask(
+        chat.recentMessages(),
+        technicalLevel: _settings.settings.technicalLevel,
+      );
+      if (_disposed) return;
+      final reason = reply.professionalReason?.trim() ?? '';
+      // Saved even if the user has left the chat, so it's there when they
+      // come back to it.
+      await addMessage(
+        chatId,
+        AssistChatMessage.assistant(
+          reply.answer,
+          professionalNote: reply.recommendProfessional
+              ? (reason.isEmpty ? 'This is a job for a professional.' : reason)
+              : null,
+        ),
+      );
+    } on AssistantConnectionException catch (error) {
+      _answerErrors[chatId] = error.message;
+    } finally {
+      _answering.remove(chatId);
+      if (!_disposed) notifyListeners();
+    }
+  }
+
   /// Gives a chat the user's own [name]. An empty name, or the default name
   /// unchanged, goes back to naming it after its day. Renaming doesn't count
   /// as activity, so it doesn't keep the chat from expiring.
@@ -182,6 +239,7 @@ class AssistChatController extends ChangeNotifier {
 
   Future<void> deleteChats(Iterable<String> chatIds) async {
     final ids = chatIds.toSet();
+    _answerErrors.removeWhere((id, _) => ids.contains(id));
     _chats = [
       for (final chat in _chats)
         if (!ids.contains(chat.id)) chat,
@@ -193,12 +251,14 @@ class AssistChatController extends ChangeNotifier {
   /// data from a file. Chats that have already expired are left out.
   Future<void> replaceAll(List<AssistChat> chats) async {
     _chats = [...chats];
+    _answerErrors.clear();
     await _saveAndNotify();
   }
 
   /// Deletes every chat, for example when the user deletes all their data.
   Future<void> deleteAll() async {
     _chats = [];
+    _answerErrors.clear();
     await _repository.deleteAll();
     notifyListeners();
   }

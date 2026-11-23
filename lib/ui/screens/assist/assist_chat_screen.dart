@@ -5,24 +5,18 @@ import 'package:provider/provider.dart';
 import '../../../models/assist_chat.dart';
 import '../../../services/home_assistant_client.dart';
 import '../../../state/assist_chat_controller.dart';
-import '../../../state/settings_controller.dart';
 import 'assist_widgets.dart';
 
 /// One Assist chat on its own screen, named after the chat, where the user
 /// can ask follow-up questions. Chats are renamed and deleted from the chat
 /// history.
+///
+/// Whether the assistant is answering, and why it couldn't, comes from the
+/// [AssistChatController], so leaving and reopening the chat shows the same.
 class AssistChatScreen extends StatefulWidget {
-  const AssistChatScreen({
-    super.key,
-    required this.chatId,
-    this.askOnOpen = false,
-  });
+  const AssistChatScreen({super.key, required this.chatId});
 
   final String chatId;
-
-  /// Whether to ask the assistant to answer the chat's last question as soon
-  /// as the screen opens, as when the chat was just started.
-  final bool askOnOpen;
 
   @override
   State<AssistChatScreen> createState() => _AssistChatScreenState();
@@ -30,22 +24,6 @@ class AssistChatScreen extends StatefulWidget {
 
 class _AssistChatScreenState extends State<AssistChatScreen> {
   final _input = TextEditingController();
-
-  bool _sending = false;
-
-  /// Shown on screen when the last question couldn't be answered.
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.askOnOpen) {
-      _sending = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _ask();
-      });
-    }
-  }
 
   @override
   void dispose() {
@@ -74,24 +52,31 @@ class _AssistChatScreenState extends State<AssistChatScreen> {
       );
     }
 
+    final answering = chats.isAnswering(chat.id);
     // A question left without an answer, for example in a chat reopened
     // from the history after the assistant couldn't be reached.
-    final unanswered = !_sending && chat.isAwaitingAnswer;
+    final unanswered = !answering && chat.isAwaitingAnswer;
 
     return Scaffold(
       appBar: AppBar(title: Text(chats.titleOf(chat))),
       body: Column(
         children: [
           Expanded(
-            child: _Conversation(messages: chat.messages, waiting: _sending),
+            child: _Conversation(messages: chat.messages, waiting: answering),
           ),
           if (unanswered && configured)
             _ErrorRow(
-              message: _error ?? "This question hasn't been answered yet.",
+              message:
+                  chats.answerErrorOf(chat.id) ??
+                  "This question hasn't been answered yet.",
               onRetry: _ask,
             ),
           if (configured)
-            AssistComposer(controller: _input, sending: _sending, onSend: _send)
+            AssistComposer(
+              controller: _input,
+              sending: answering,
+              onSend: _send,
+            )
           else
             const _UnavailableNote(),
         ],
@@ -101,57 +86,19 @@ class _AssistChatScreenState extends State<AssistChatScreen> {
 
   Future<void> _send(String text) async {
     final question = text.trim();
-    if (question.isEmpty || _sending) return;
     final chats = context.read<AssistChatController>();
-    setState(() {
-      _sending = true;
-      _error = null;
-      _input.clear();
-    });
+    if (question.isEmpty || chats.isAnswering(widget.chatId)) return;
+    _input.clear();
     await chats.addMessage(widget.chatId, AssistChatMessage.user(question));
     if (mounted) await _ask();
   }
 
-  /// Asks the assistant to answer the last question in the chat, and saves
-  /// the answer there.
-  Future<void> _ask() async {
-    final chats = context.read<AssistChatController>();
-    final client = context.read<HomeAssistantClient>();
-    final chat = chats.chatById(widget.chatId);
-    if (chat == null) {
-      setState(() => _sending = false);
-      return;
-    }
-    setState(() {
-      _sending = true;
-      _error = null;
-    });
-    try {
-      final reply = await client.ask(
-        chat.recentMessages(),
-        technicalLevel: context
-            .read<SettingsController>()
-            .settings
-            .technicalLevel,
-      );
-      final reason = reply.professionalReason?.trim() ?? '';
-      // Saved even if the user has left this screen, so it's there when
-      // they come back to the chat.
-      await chats.addMessage(
-        widget.chatId,
-        AssistChatMessage.assistant(
-          reply.answer,
-          professionalNote: reply.recommendProfessional
-              ? (reason.isEmpty ? 'This is a job for a professional.' : reason)
-              : null,
-        ),
-      );
-    } on AssistantConnectionException catch (error) {
-      if (mounted) setState(() => _error = error.message);
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
+  /// Asks the assistant to answer the last question in the chat. The
+  /// answer is saved in the chat even if the user leaves this screen.
+  Future<void> _ask() => context.read<AssistChatController>().answer(
+    widget.chatId,
+    context.read<HomeAssistantClient>(),
+  );
 }
 
 /// The messages so far, newest at the bottom, with a placeholder while the
