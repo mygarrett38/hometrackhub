@@ -9,6 +9,7 @@ import 'package:flutter/material.dart'
 import '../models/service_provider.dart';
 import '../models/service_type.dart';
 import 'nearby_services_client.dart';
+import 'server_response.dart';
 
 /// Searches Google Places for real businesses, through the `/places` route
 /// of the server in `assist/`, so the Google API key stays on that server
@@ -93,18 +94,8 @@ class GooglePlacesClient implements NearbyServicesClient {
       );
       final body = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        // The server explains what went wrong in "error" when it can.
-        String? serverMessage;
-        try {
-          final payload = jsonDecode(body);
-          if (payload is Map<String, dynamic>) {
-            serverMessage = payload['error'] as String?;
-          }
-        } on FormatException {
-          // Not JSON, for example a proxy's error page.
-        }
         throw NearbyServicesException(
-          serverMessage ??
+          serverErrorIn(body) ??
               'The nearby services search returned status '
                   '${response.statusCode}.',
           // The server can't find a ZIP code that doesn't exist.
@@ -112,8 +103,10 @@ class GooglePlacesClient implements NearbyServicesClient {
               area is SearchAroundZipCode && response.statusCode == 400,
         );
       }
+      final payload = jsonDecode(body);
+      if (payload is! Map<String, dynamic>) throw const FormatException();
       return providersFromResponse(
-        jsonDecode(body) as Map<String, dynamic>,
+        payload,
         service: service,
         photoFor: _photoFor,
       );
@@ -123,7 +116,9 @@ class GooglePlacesClient implements NearbyServicesClient {
       throw const NearbyServicesException(
         'The search took too long. Please try again.',
       );
-    } on SocketException {
+    } on IOException {
+      // Any problem with the connection, such as having none, it dropping
+      // partway through the results, or a secure connection failing.
       throw const NearbyServicesException(
         'Could not reach the nearby services search. Check your connection.',
       );

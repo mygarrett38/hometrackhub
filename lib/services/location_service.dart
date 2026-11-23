@@ -30,6 +30,22 @@ class LocationException implements Exception {
 class DeviceLocationService implements LocationService {
   @override
   Future<Coordinates> currentLocation() async {
+    try {
+      return await _find();
+    } on LocationException {
+      rethrow;
+    } on Exception {
+      // Anything else the device's location services report, such as a
+      // permission request already being shown.
+      throw const LocationException(_notFound);
+    }
+  }
+
+  static const _notFound =
+      "Your location couldn't be found. Try again, or search near a ZIP code "
+      'instead.';
+
+  Future<Coordinates> _find() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const LocationException(
         "Location is turned off on this device. Turn it on, or search near "
@@ -73,10 +89,7 @@ class DeviceLocationService implements LocationService {
       if (last != null) {
         return (latitude: last.latitude, longitude: last.longitude);
       }
-      throw const LocationException(
-        "Your location couldn't be found. Try again, or search near a ZIP "
-        'code instead.',
-      );
+      throw const LocationException(_notFound);
     } on LocationServiceDisabledException {
       throw const LocationException(
         "Location is turned off on this device. Turn it on, or search near "

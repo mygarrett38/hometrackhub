@@ -173,6 +173,13 @@ class NearbyServicesController extends ChangeNotifier {
       );
     } on NearbyServicesException catch (exception) {
       error = exception;
+    } on Exception {
+      // The client and location turn the problems they expect into
+      // NearbyServicesExceptions. Anything else still ends the search, so
+      // it's never left loading.
+      error = const NearbyServicesException(
+        'The search ran into a problem. Please try again.',
+      );
     }
     if (_disposed || searchId != _latestSearch) return;
 

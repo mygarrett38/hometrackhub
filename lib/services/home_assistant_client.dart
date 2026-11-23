@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../models/technical_level.dart';
+import 'server_response.dart';
 
 /// A conversation turn sent to and returned from the Home Assistant service.
 class AssistantMessage {
@@ -95,50 +98,55 @@ class HomeAssistantClient {
       );
       final responseBody = await response.transform(utf8.decoder).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        // The server explains what went wrong in "error" when it can.
-        String? serverMessage;
-        try {
-          final payload = jsonDecode(responseBody);
-          if (payload is Map<String, dynamic>) {
-            serverMessage = payload['error'] as String?;
-          }
-        } on FormatException {
-          // Not JSON, for example a proxy's error page.
-        }
         throw AssistantConnectionException(
-          serverMessage ??
+          serverErrorIn(responseBody) ??
               'The assistant service returned status ${response.statusCode}.',
         );
       }
-      final payload = jsonDecode(responseBody) as Map<String, dynamic>;
-      final answer = payload['answer'] as String?;
-      if (answer == null || answer.trim().isEmpty) {
-        throw const AssistantConnectionException(
-          'The assistant service returned an empty answer.',
-        );
-      }
-      return AssistantReply(
-        answer: answer,
-        recommendProfessional:
-            payload['recommendProfessional'] as bool? ?? false,
-        professionalReason: payload['professionalReason'] as String?,
-      );
+      return replyFrom(responseBody);
     } on AssistantConnectionException {
       rethrow;
     } on TimeoutException {
       throw const AssistantConnectionException(
         'The assistant took too long to respond. Please try again.',
       );
-    } on SocketException {
+    } on IOException {
+      // Any problem with the connection, such as having none, it dropping
+      // partway through the answer, or a secure connection failing.
       throw const AssistantConnectionException(
         'Could not reach the assistant service. Check your connection.',
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// The answer in the server's [body].
+  ///
+  /// Throws an [AssistantConnectionException] if it isn't laid out as
+  /// expected or has no answer.
+  @visibleForTesting
+  static AssistantReply replyFrom(String body) {
+    try {
+      final payload = jsonDecode(body);
+      if (payload is! Map<String, dynamic>) throw const FormatException();
+      final answer = payload['answer'];
+      if (answer is! String) throw const FormatException();
+      if (answer.trim().isEmpty) {
+        throw const AssistantConnectionException(
+          'The assistant service returned an empty answer.',
+        );
+      }
+      final reason = payload['professionalReason'];
+      return AssistantReply(
+        answer: answer,
+        recommendProfessional: payload['recommendProfessional'] == true,
+        professionalReason: reason is String ? reason : null,
       );
     } on FormatException {
       throw const AssistantConnectionException(
         'The assistant service returned an invalid response.',
       );
-    } finally {
-      client.close(force: true);
     }
   }
 }

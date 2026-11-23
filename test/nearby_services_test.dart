@@ -136,6 +136,20 @@ class _GoogleLikeClient implements NearbyServicesClient {
   }) async => [_plumber, _electrician];
 }
 
+/// A client that fails in a way it doesn't explain, as a dropped connection
+/// might.
+class _BrokenClient implements NearbyServicesClient {
+  @override
+  bool get isSample => false;
+
+  @override
+  Future<List<ServiceProvider>> search({
+    String query = '',
+    ServiceType? service,
+    SearchArea? area,
+  }) async => throw Exception('Connection closed while receiving data.');
+}
+
 /// A device that's at [location], or whose location can't be found when
 /// it's `null`. Counts how often it's asked.
 class FakeLocationService implements LocationService {
@@ -337,6 +351,18 @@ void main() {
 
       expect(ids(controller), ['electrician']);
       expect(controller.loading, isFalse);
+    });
+
+    test('a search that fails unexpectedly still finishes', () async {
+      final controller = createController(_BrokenClient());
+      await controller.search();
+
+      expect(controller.loading, isFalse);
+      expect(controller.searched, isTrue);
+      expect(
+        controller.error,
+        'The search ran into a problem. Please try again.',
+      );
     });
 
     test('a failed search shows why', () async {
