@@ -1066,6 +1066,61 @@ void main() {
     expect(find.text('Completed (1)'), findsOneWidget);
   });
 
+  testWidgets('a card whose last task moves on fades out with its note', (
+    tester,
+  ) async {
+    final today = dateOnly(DateTime.now());
+    await pumpApp(tester);
+    await addTasks(tester, [
+      MaintenanceTask(
+        id: 'gutters',
+        title: 'Clean gutters',
+        interval: const MaintenanceInterval.months(1),
+        // Due 10 days ago, so once it's done it's no longer overdue.
+        startDate: DateTime(today.year, today.month - 1, today.day - 10),
+      ),
+    ]);
+    final markDone = find.byTooltip('Mark done today');
+    await scrollTo(tester, markDone);
+    await tester.tap(markDone);
+    await tester.pumpAndSettle();
+
+    final heading = find.text('Overdue (1)');
+    final message = find.text('Marked as done');
+    double opacityAbove(Finder finder) => tester
+        .widget<FadeTransition>(
+          find
+              .ancestor(of: finder, matching: find.byType(FadeTransition))
+              .first,
+        )
+        .opacity
+        .value;
+    expect(heading, findsOneWidget);
+    expect(message, findsOneWidget);
+
+    // When the task moves on, the card stays while it and its note fade.
+    await tester.pump(HomeItemController.doneTaskMoveDelay);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opacityAbove(heading), inExclusiveRange(0, 1));
+    expect(opacityAbove(message), inExclusiveRange(0, 1));
+    // Its task can't be checked off again while it goes.
+    expect(
+      tester
+          .widget<IgnorePointer>(
+            find
+                .ancestor(of: heading, matching: find.byType(IgnorePointer))
+                .first,
+          )
+          .ignoring,
+      isTrue,
+    );
+
+    await tester.pumpAndSettle();
+    expect(heading, findsNothing);
+    expect(message, findsNothing);
+    expect(find.text('Recently completed (1)'), findsOneWidget);
+  });
+
   testWidgets('an incomplete expense is explained under its fields', (
     tester,
   ) async {

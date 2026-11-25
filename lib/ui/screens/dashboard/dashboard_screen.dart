@@ -354,9 +354,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         colors.secondary,
       ),
     ];
+    // Cards without tasks stay in place but aren't shown, so one whose last
+    // task just moved on can fade out.
     final shownCards = [
       for (final card in cards)
-        if ((shown == null || shown == card.$1) && card.$3.isNotEmpty) card,
+        if (shown == null || shown == card.$1) card,
     ];
 
     return [
@@ -384,7 +386,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           onDoneChanged: (change) => showDoneChange(change, title),
           onUndo: undoDoneChange,
         ),
-      if (shown != null && shownCards.isEmpty)
+      if (shown != null && shownCards.every((card) => card.$3.isEmpty))
         Padding(
           padding: const EdgeInsets.all(32),
           child: Center(

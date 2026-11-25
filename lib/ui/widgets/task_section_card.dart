@@ -15,7 +15,12 @@ import 'task_tile.dart';
 /// opens the task when tapped (unless [opensTasks] is false). After a task
 /// is checked off, the heading can show [doneChange] with a button to undo
 /// it.
-class TaskSectionCard extends StatelessWidget {
+///
+/// The card isn't shown while it has no tasks. If its last task leaves it
+/// while it's showing [doneChange], such as when the task moves to another
+/// card once it's done, the card fades out along with the note rather than
+/// disappearing at once.
+class TaskSectionCard extends StatefulWidget {
   const TaskSectionCard({
     super.key,
     required this.title,
@@ -60,13 +65,96 @@ class TaskSectionCard extends StatelessWidget {
   /// elsewhere on the screen. `null` never flashes.
   final Object? flash;
 
+  /// How long the note, and a card whose last task just left, take to fade
+  /// out.
+  static const fadeDuration = Duration(milliseconds: 250);
+
+  @override
+  State<TaskSectionCard> createState() => _TaskSectionCardState();
+}
+
+class _TaskSectionCardState extends State<TaskSectionCard>
+    with SingleTickerProviderStateMixin {
+  /// The card as it was before its last task left, shown while it fades
+  /// out.
+  TaskSectionCard? _leaving;
+
+  late final AnimationController _opacity = AnimationController(
+    vsync: this,
+    duration: TaskSectionCard.fadeDuration,
+    value: 1,
+  );
+
+  @override
+  void didUpdateWidget(TaskSectionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.items.isNotEmpty) {
+      // A task came back before the card finished fading, such as after
+      // Undo.
+      _leaving = null;
+      _opacity.value = 1;
+    } else if (oldWidget.items.isNotEmpty &&
+        oldWidget.doneChange != null &&
+        !MediaQuery.disableAnimationsOf(context)) {
+      _leaving = oldWidget;
+      _opacity.reverse(from: 1).whenCompleteOrCancel(() {
+        if (mounted && widget.items.isEmpty) setState(() => _leaving = null);
+      });
+    } else {
+      _leaving = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _opacity.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
+    final leaving = _leaving;
+    if (widget.items.isEmpty && leaving == null) {
+      return const SizedBox.shrink();
+    }
+    // Always wrapped the same way, so the note keeps fading when the card
+    // starts to.
+    return FadeTransition(
+      opacity: _opacity,
+      child: IgnorePointer(
+        // Its tasks have moved on, so they can't be checked off here.
+        ignoring: leaving != null,
+        child: _card(
+          context,
+          leaving ?? widget,
+          // The note fades with the card.
+          change: leaving == null ? widget.doneChange : null,
+        ),
+      ),
+    );
+  }
+
+  /// The card listing [card]'s tasks, with [change] in its heading.
+  Widget _card(
+    BuildContext context,
+    TaskSectionCard card, {
+    required TaskDoneChange? change,
+  }) {
+    final TaskSectionCard(
+      :title,
+      :items,
+      :accent,
+      :dueOn,
+      :completedOn,
+      :opensTasks,
+      :onDoneChanged,
+      :onUndo,
+      :padding,
+      :flash,
+    ) = card;
     final theme = Theme.of(context);
     final cardColor =
         theme.cardTheme.color ?? theme.colorScheme.surfaceContainerLow;
-    final change = doneChange;
 
     // A card like the home item screen's maintenance tasks, with a light
     // wash of [accent]. At 12% every text color in the rows keeps a
@@ -99,7 +187,7 @@ class TaskSectionCard extends StatelessWidget {
                       duration: Duration.zero,
                       reverseDuration: MediaQuery.disableAnimationsOf(context)
                           ? Duration.zero
-                          : const Duration(milliseconds: 250),
+                          : TaskSectionCard.fadeDuration,
                       child: change != null && onUndo != null
                           ? DoneChangeNote(
                               // The same key for every note, so a new one
@@ -107,7 +195,7 @@ class TaskSectionCard extends StatelessWidget {
                               // showing through it as it fades.
                               key: const ValueKey('note'),
                               change: change,
-                              onUndo: onUndo!,
+                              onUndo: onUndo,
                             )
                           : const SizedBox.shrink(),
                     ),
