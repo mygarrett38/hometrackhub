@@ -28,10 +28,14 @@ import '../settings/nearby_services_settings_screen.dart';
 /// a search finds them.
 ///
 /// Where to search around and the order the results start in come from the
-/// Nearby services settings. Changing them while the screen is open, such as
+/// Nearby services settings. The search starts out for [initialService],
+/// such as the kind of business the assistant suggested hiring. Changing them while the screen is open, such as
 /// from the Settings tab, searches again or reorders the results.
 class NearbyServicesScreen extends StatelessWidget {
-  const NearbyServicesScreen({super.key});
+  const NearbyServicesScreen({super.key, this.initialService});
+
+  /// The service to search for when the screen opens, or `null` for any.
+  final ServiceType? initialService;
 
   @override
   Widget build(BuildContext context) {
@@ -42,19 +46,25 @@ class NearbyServicesScreen extends StatelessWidget {
         return NearbyServicesController(
           context.read<NearbyServicesClient>(),
           initialSort: settings.settings.nearbySort,
+          initialService: initialService,
           pinnedIds: settings.settings.pinnedBusinessIds.toSet(),
           // Reads the settings when it's called, so changes made from the
           // error message's settings button are used.
           locate: () => searchAreaFor(settings.settings, location),
         )..search();
       },
-      child: const _NearbyServicesView(),
+      // Shows the service it's searching for, so it's clear why only those
+      // businesses are listed.
+      child: _NearbyServicesView(filtersOpen: initialService != null),
     );
   }
 }
 
 class _NearbyServicesView extends StatefulWidget {
-  const _NearbyServicesView();
+  const _NearbyServicesView({required this.filtersOpen});
+
+  /// Whether the filters start out shown.
+  final bool filtersOpen;
 
   @override
   State<_NearbyServicesView> createState() => _NearbyServicesViewState();
@@ -64,8 +74,8 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
   final _search = TextEditingController();
 
   /// Whether the service, rating and sort choices are shown under the top
-  /// bar. They're hidden at first to leave more room for the results.
-  bool _filtersOpen = false;
+  /// bar. Usually hidden at first, to leave more room for the results.
+  late bool _filtersOpen = widget.filtersOpen;
 
   late final SettingsController _settings;
 

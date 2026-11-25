@@ -5,8 +5,18 @@ Claude Haiku 5.5 (`claude-haiku-5-5`). The app sends the conversation to
 `POST /chat`, and the Worker calls the Claude API and returns:
 
 ```json
-{ "answer": "...", "recommendProfessional": false, "professionalReason": null }
+{
+  "answer": "...",
+  "recommendProfessional": true,
+  "professionalReason": "...",
+  "professionalService": "plumbing"
+}
 ```
+
+When Claude recommends a professional, `professionalService` names the kind
+of business to hire, as the app's Nearby services screen names it, so the app
+can offer to find one nearby. Otherwise it and `professionalReason` are
+`null`.
 
 Errors come back as `{ "error": "..." }` with a matching HTTP status, and the
 app shows that message on screen.

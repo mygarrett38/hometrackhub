@@ -6,6 +6,7 @@ import '../../../models/assist_chat.dart';
 import '../../../services/home_assistant_client.dart';
 import '../../../state/assist_chat_controller.dart';
 import 'assist_widgets.dart';
+import 'nearby_services_screen.dart';
 
 /// One Assist chat on its own screen, named after the chat, where the user
 /// can ask follow-up questions. Chats are renamed and deleted from the chat
@@ -172,9 +173,32 @@ class _MessageBubble extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Consider a professional: $note',
-                      style: TextStyle(color: colors.onTertiaryContainer),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Consider a professional: $note',
+                          style: TextStyle(color: colors.onTertiaryContainer),
+                        ),
+                        // Searches for the kind of business suggested, or
+                        // any when the assistant didn't say.
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: colors.onTertiaryContainer,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          icon: const Icon(Icons.location_on_outlined),
+                          label: const Text('Find one nearby'),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => NearbyServicesScreen(
+                                initialService: message.professionalService,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

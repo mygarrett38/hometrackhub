@@ -55,8 +55,13 @@ paragraphs, "- " or "1. " lists for steps, and **bold** for the one or two \
 things that matter most, such as a safety warning. Use a "### " heading only \
 to split a longer answer into parts. Don't use tables, images, links or code \
 blocks. Set "recommendProfessional" to true when the user should hire a professional \
-for this problem, and put the reason in one sentence in "professionalReason". \
-Otherwise set it to false and leave "professionalReason" empty.`;
+for this problem, put the reason in one sentence in "professionalReason", and \
+set "professionalService" to the kind of business to hire: "plumbing", \
+"hvac" (heating and cooling), "electrical", "appliance" (appliance repair), \
+"roofing", "landscaping" (lawn and landscaping), "pestControl", "handyman" or \
+"auto" (auto repair). Pick "handyman" for general repairs that fit none of the \
+others. Otherwise set "recommendProfessional" to false, leave \
+"professionalReason" empty and set "professionalService" to "none".`;
 
 // What to tell Claude for each technical level the app can send. Anything
 // else is ignored in favour of the middle level, so the instructions can't
@@ -82,14 +87,39 @@ function technicalLevelOf(body: unknown): TechnicalLevel {
     : "someExperience";
 }
 
+/**
+ * The kinds of business the app's Nearby services screen can search for,
+ * named as the app names them, so it can search for the one Claude picks.
+ */
+const PROFESSIONAL_SERVICES = [
+  "plumbing",
+  "hvac",
+  "electrical",
+  "appliance",
+  "roofing",
+  "landscaping",
+  "pestControl",
+  "handyman",
+  "auto",
+] as const;
+
 const REPLY_SCHEMA = {
   type: "object",
   properties: {
     answer: { type: "string" },
     recommendProfessional: { type: "boolean" },
     professionalReason: { type: "string" },
+    professionalService: {
+      type: "string",
+      enum: [...PROFESSIONAL_SERVICES, "none"],
+    },
   },
-  required: ["answer", "recommendProfessional", "professionalReason"],
+  required: [
+    "answer",
+    "recommendProfessional",
+    "professionalReason",
+    "professionalService",
+  ],
   additionalProperties: false,
 };
 
@@ -156,6 +186,7 @@ export default {
           answer: "Sorry, I can't help with that question.",
           recommendProfessional: false,
           professionalReason: null,
+          professionalService: null,
         });
       }
       if (response.stop_reason === "max_tokens") {
@@ -170,11 +201,17 @@ export default {
         answer: string;
         recommendProfessional: boolean;
         professionalReason: string;
+        professionalService: (typeof PROFESSIONAL_SERVICES)[number] | "none";
       };
       return json({
         answer: reply.answer,
         recommendProfessional: reply.recommendProfessional,
         professionalReason: reply.professionalReason.trim() || null,
+        // Only with a recommendation, so the app can search for one nearby.
+        professionalService:
+          reply.recommendProfessional && reply.professionalService !== "none"
+            ? reply.professionalService
+            : null,
       });
     } catch (err) {
       if (err instanceof Anthropic.RateLimitError) {

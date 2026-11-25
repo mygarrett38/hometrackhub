@@ -235,6 +235,19 @@ void main() {
       expect(ids(controller), ['electrician', 'plumber']);
     });
 
+    test('can start out searching for a service', () async {
+      final client = _ControlledClient();
+      final controller = NearbyServicesController(
+        client,
+        debounce: Duration.zero,
+        initialService: ServiceType.plumbing,
+      );
+
+      controller.search();
+      expect(controller.service, ServiceType.plumbing);
+      expect(client.searches.single.service, ServiceType.plumbing);
+    });
+
     test('picking a service searches for businesses that offer it', () async {
       final client = _ControlledClient();
       final controller = createController(client);

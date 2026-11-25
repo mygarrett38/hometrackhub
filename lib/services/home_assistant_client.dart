@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../models/service_type.dart';
 import '../models/technical_level.dart';
 import 'server_response.dart';
 
@@ -28,11 +29,16 @@ class AssistantReply {
     required this.answer,
     this.recommendProfessional = false,
     this.professionalReason,
+    this.professionalService,
   });
 
   final String answer;
   final bool recommendProfessional;
   final String? professionalReason;
+
+  /// The kind of business to hire, when the assistant recommends a
+  /// professional and says which, so one can be found nearby.
+  final ServiceType? professionalService;
 }
 
 /// Calls the server-side AI proxy in `assist/`. The model API key and the
@@ -138,10 +144,16 @@ class HomeAssistantClient {
         );
       }
       final reason = payload['professionalReason'];
+      final recommendProfessional = payload['recommendProfessional'] == true;
       return AssistantReply(
         answer: answer,
-        recommendProfessional: payload['recommendProfessional'] == true,
+        recommendProfessional: recommendProfessional,
         professionalReason: reason is String ? reason : null,
+        // Anything the app doesn't know, such as from a newer server, is
+        // left out.
+        professionalService: recommendProfessional
+            ? ServiceType.values.asNameMap()[payload['professionalService']]
+            : null,
       );
     } on FormatException {
       throw const AssistantConnectionException(

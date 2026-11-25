@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/assist_chat.dart';
+import 'package:hometrackhub/models/service_type.dart';
 import 'package:hometrackhub/models/technical_level.dart';
 import 'package:hometrackhub/services/home_assistant_client.dart';
 import 'package:hometrackhub/state/assist_chat_controller.dart';
@@ -52,6 +53,7 @@ void main() {
       const AssistChatMessage.assistant(
         'Clean the P-trap.',
         professionalNote: 'Call a plumber if it keeps clogging.',
+        professionalService: ServiceType.plumbing,
       ),
     );
     await controller.rename(id, 'Kitchen sink');
@@ -68,6 +70,9 @@ void main() {
       chat.messages.last.professionalNote,
       'Call a plumber if it keeps clogging.',
     );
+    expect(chat.messages.last.professionalService, ServiceType.plumbing);
+    // Questions never have one.
+    expect(chat.messages.first.professionalService, isNull);
   });
 
   test('chats are listed most recently active first', () async {
@@ -380,13 +385,13 @@ void main() {
           const AssistantReply(
             answer: 'Every 90 days.',
             recommendProfessional: true,
+            professionalService: ServiceType.hvac,
           ),
         );
         await second;
-        expect(
-          controller.chatById(id)!.messages.last.professionalNote,
-          'This is a job for a professional.',
-        );
+        final answer = controller.chatById(id)!.messages.last;
+        expect(answer.professionalNote, 'This is a job for a professional.');
+        expect(answer.professionalService, ServiceType.hvac);
       },
     );
   });

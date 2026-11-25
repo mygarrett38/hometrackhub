@@ -15,6 +15,7 @@ import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
+import 'package:hometrackhub/models/service_type.dart';
 import 'package:hometrackhub/models/task_reminder.dart';
 import 'package:hometrackhub/models/technical_level.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
@@ -32,6 +33,7 @@ import 'package:hometrackhub/ui/home_shell.dart';
 import 'package:hometrackhub/ui/screens/dashboard/dashboard_screen.dart';
 import 'package:hometrackhub/ui/screens/assist/assist_new_chat_screen.dart';
 import 'package:hometrackhub/ui/screens/assist/assist_widgets.dart';
+import 'package:hometrackhub/ui/screens/assist/nearby_services_screen.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/screens/settings/assistant_settings_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
@@ -2137,6 +2139,43 @@ void main() {
     expect(find.text('Clean the P-trap.'), findsOneWidget);
     // The question is asked again rather than added a second time.
     expect(assistant.conversations.last.length, 1);
+  });
+
+  testWidgets('a professional the assistant suggests can be found nearby', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantReply(
+        answer: 'Turn off the breaker before you check it.',
+        recommendProfessional: true,
+        professionalReason: 'Wiring work needs an electrician.',
+        professionalService: ServiceType.electrical,
+      );
+    await pumpApp(tester, assistant: assistant);
+    await openNewConversation(tester);
+    await askAssistant(tester, 'My outlet sparks');
+
+    await tester.tap(find.text('Find one nearby'));
+    await tester.pumpAndSettle();
+
+    // Nearby services opens searching for electricians, with the service
+    // shown as picked.
+    expect(find.byType(NearbyServicesScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<ChoiceChip>(
+            find.widgetWithText(ChoiceChip, ServiceType.electrical.label),
+          )
+          .selected,
+      isTrue,
+    );
+    expect(find.text('BrightLine Electric'), findsOneWidget);
+    expect(find.text('Riverbend Plumbing & Drain'), findsNothing);
+
+    // Back returns to the chat.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Find one nearby'), findsOneWidget);
   });
 
   testWidgets('a chat left while the assistant answers is still waiting '

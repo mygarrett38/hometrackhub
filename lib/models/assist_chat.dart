@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/home_assistant_client.dart';
+import 'service_type.dart';
 
 /// One message in an [AssistChat].
 @immutable
@@ -9,14 +10,19 @@ class AssistChatMessage {
     required this.role,
     required this.content,
     this.professionalNote,
+    this.professionalService,
   });
 
   const AssistChatMessage.user(this.content)
     : role = 'user',
-      professionalNote = null;
+      professionalNote = null,
+      professionalService = null;
 
-  const AssistChatMessage.assistant(this.content, {this.professionalNote})
-    : role = 'assistant';
+  const AssistChatMessage.assistant(
+    this.content, {
+    this.professionalNote,
+    this.professionalService,
+  }) : role = 'assistant';
 
   /// "user" or "assistant".
   final String role;
@@ -24,6 +30,10 @@ class AssistChatMessage {
 
   /// Why the assistant suggested hiring a professional, if it did.
   final String? professionalNote;
+
+  /// The kind of business the assistant suggested hiring, if it said, so
+  /// one can be found nearby.
+  final ServiceType? professionalService;
 
   bool get isUser => role == 'user';
 
@@ -34,6 +44,8 @@ class AssistChatMessage {
     'role': role,
     'content': content,
     if (professionalNote != null) 'professionalNote': professionalNote,
+    if (professionalService != null)
+      'professionalService': professionalService!.name,
   };
 
   factory AssistChatMessage.fromJson(Map<String, dynamic> json) =>
@@ -41,6 +53,8 @@ class AssistChatMessage {
         role: json['role'] as String,
         content: json['content'] as String,
         professionalNote: json['professionalNote'] as String?,
+        professionalService: ServiceType.values
+            .asNameMap()[json['professionalService']],
       );
 }
 

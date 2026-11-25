@@ -191,6 +191,9 @@ class AssistChatController extends ChangeNotifier {
           professionalNote: reply.recommendProfessional
               ? (reason.isEmpty ? 'This is a job for a professional.' : reason)
               : null,
+          professionalService: reply.recommendProfessional
+              ? reply.professionalService
+              : null,
         ),
       );
     } on AssistantConnectionException catch (error) {

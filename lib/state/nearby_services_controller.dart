@@ -19,7 +19,9 @@ import '../services/nearby_services_client.dart';
 class NearbyServicesController extends ChangeNotifier {
   /// [debounce] is how long typing has to pause before a search is made, so
   /// there isn't a search for every letter. The results start in
-  /// [initialSort] order, with the businesses in [pinnedIds] first.
+  /// [initialSort] order, with the businesses in [pinnedIds] first. The
+  /// search starts out for [initialService], or any service when it's
+  /// `null`.
   ///
   /// [locate] finds the area to search around, such as with
   /// [searchAreaFor]. It's called before the first search and then reused,
@@ -29,10 +31,12 @@ class NearbyServicesController extends ChangeNotifier {
     this.debounce = const Duration(milliseconds: 400),
     DateTime Function()? clock,
     ServiceSort initialSort = ServiceSort.rating,
+    ServiceType? initialService,
     this._pinnedIds = const {},
     this._locate,
   }) : _clock = clock ?? DateTime.now,
-       _sort = initialSort;
+       _sort = initialSort,
+       _service = initialService;
 
   final NearbyServicesClient _client;
   final Duration debounce;
