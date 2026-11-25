@@ -11,7 +11,7 @@ import '../../widgets/settings_dropdown_row.dart';
 
 /// Lets the user choose where the Nearby services screen searches around,
 /// their location or a ZIP code, and the order businesses are listed in
-/// when it opens.
+/// when it opens, and unpin every business they pinned.
 class NearbyServicesSettingsScreen extends StatelessWidget {
   const NearbyServicesSettingsScreen({super.key});
 
@@ -21,6 +21,7 @@ class NearbyServicesSettingsScreen extends StatelessWidget {
     final settings = controller.settings;
     final useZipCode =
         settings.nearbyLocationSource == NearbyLocationSource.zipCode;
+    final pinnedCount = settings.pinnedBusinessIds.length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Nearby services')),
@@ -64,10 +65,54 @@ class NearbyServicesSettingsScreen extends StatelessWidget {
                 onChanged: (sort) =>
                     controller.update(settings.copyWith(nearbySort: sort)),
               ),
+              ListTile(
+                leading: const Icon(Icons.push_pin_outlined),
+                title: const Text('Unpin all businesses'),
+                subtitle: Text(switch (pinnedCount) {
+                  0 => 'No businesses are pinned.',
+                  1 => '1 business is pinned to the top of the results.',
+                  _ =>
+                    '$pinnedCount businesses are pinned to the top of the '
+                        'results.',
+                }),
+                // Greyed out when there's nothing to unpin.
+                enabled: pinnedCount > 0,
+                onTap: () => _confirmUnpinAll(context, pinnedCount),
+              ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _confirmUnpinAll(BuildContext context, int count) async {
+    final controller = context.read<SettingsController>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unpin all businesses?'),
+        content: Text(
+          count == 1
+              ? "The business you pinned won't be listed first anymore."
+              : "The $count businesses you pinned won't be listed first "
+                    'anymore.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Unpin all'),
+          ),
+        ],
+      ),
+    );
+    if (!(confirmed ?? false)) return;
+    await controller.update(
+      controller.settings.copyWith(pinnedBusinessIds: const []),
     );
   }
 }

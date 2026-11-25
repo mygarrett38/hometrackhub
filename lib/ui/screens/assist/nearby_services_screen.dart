@@ -24,6 +24,9 @@ import '../settings/nearby_services_settings_screen.dart';
 /// business shows its details, with buttons to call it, open its website or
 /// get directions.
 ///
+/// Businesses the user pins, from their details, are listed first whenever
+/// a search finds them.
+///
 /// Where to search around and the order the results start in come from the
 /// Nearby services settings. Changing them while the screen is open, such as
 /// from the Settings tab, searches again or reorders the results.
@@ -39,6 +42,7 @@ class NearbyServicesScreen extends StatelessWidget {
         return NearbyServicesController(
           context.read<NearbyServicesClient>(),
           initialSort: settings.settings.nearbySort,
+          pinnedIds: settings.settings.pinnedBusinessIds.toSet(),
           // Reads the settings when it's called, so changes made from the
           // error message's settings button are used.
           locate: () => searchAreaFor(settings.settings, location),
@@ -92,7 +96,7 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
   }
 
   /// Searches again when where to search changes, and changes the order
-  /// when the default sort does.
+  /// when the default sort or the pinned businesses do.
   void _onSettingsChanged() {
     final before = _lastSettings;
     final after = _settings.settings;
@@ -101,6 +105,7 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
     if (after.nearbySort != before.nearbySort) {
       controller.setSort(after.nearbySort);
     }
+    controller.setPinnedIds(after.pinnedBusinessIds.toSet());
     if (!_searchesSameArea(before, after)) controller.relocate();
   }
 
@@ -264,6 +269,7 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
           _ProviderCard(
             key: ValueKey(provider.id),
             provider: provider,
+            pinned: controller.isPinned(provider.id),
             onTap: () => _showDetails(provider, controller.now),
           ),
         if (!controller.isSample) const _GoogleMapsCredit(),
@@ -489,11 +495,18 @@ class _SampleNotice extends StatelessWidget {
 }
 
 /// A business in the results: its picture on the left, fading out toward
-/// its name and city, and its rating on the right.
+/// its name and city, and its rating on the right. A pin before the city
+/// shows the user [pinned] it.
 class _ProviderCard extends StatelessWidget {
-  const _ProviderCard({super.key, required this.provider, required this.onTap});
+  const _ProviderCard({
+    super.key,
+    required this.provider,
+    required this.pinned,
+    required this.onTap,
+  });
 
   final ServiceProvider provider;
+  final bool pinned;
   final VoidCallback onTap;
 
   /// How far into the card the picture reaches. It has faded out
@@ -556,15 +569,30 @@ class _ProviderCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          // A space keeps the line's height when the city
-                          // isn't known.
-                          provider.city ?? ' ',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                        Row(
+                          children: [
+                            if (pinned) ...[
+                              Icon(
+                                Icons.push_pin,
+                                size: 16,
+                                color: theme.colorScheme.primary,
+                                semanticLabel: 'Pinned',
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Expanded(
+                              child: Text(
+                                // A space keeps the line's height when the
+                                // city isn't known.
+                                provider.city ?? ' ',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -773,8 +801,8 @@ class _OpenStatus extends StatelessWidget {
 }
 
 /// The details of one business, in a sheet that slides up from the bottom,
-/// with buttons to call it, open its website, or get directions in a maps
-/// app.
+/// with buttons to call it, open its website, get directions in a maps app,
+/// or pin it to the top of the results.
 class _ProviderDetails extends StatelessWidget {
   const _ProviderDetails({required this.provider, required this.now});
 
@@ -786,6 +814,10 @@ class _ProviderDetails extends StatelessWidget {
     final theme = Theme.of(context);
     final phone = provider.phone;
     final website = provider.website;
+    // From the settings, since the sheet is outside the screen that lists
+    // the results.
+    final settings = context.watch<SettingsController>();
+    final pinned = settings.settings.pinnedBusinessIds.contains(provider.id);
 
     return SingleChildScrollView(
       padding: screenPadding(context).copyWith(top: 0),
@@ -860,6 +892,13 @@ class _ProviderDetails extends StatelessWidget {
                         'query': '${provider.name}, ${provider.address}',
                       }),
                   'directions',
+                ),
+              ),
+              _ActionButton(
+                icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                label: pinned ? 'Unpin' : 'Pin',
+                onPressed: () => settings.update(
+                  settings.settings.withBusinessPinned(provider.id, !pinned),
                 ),
               ),
             ],

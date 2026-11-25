@@ -13,12 +13,13 @@ import '../services/nearby_services_client.dart';
 /// filters and sorts the results.
 ///
 /// The search text and service are sent with each search. The minimum
-/// rating, open now and sort order only change which results are shown and
-/// in what order, so changing them doesn't search again.
+/// rating, open now, sort order and pinned businesses only change which
+/// results are shown and in what order, so changing them doesn't search
+/// again.
 class NearbyServicesController extends ChangeNotifier {
   /// [debounce] is how long typing has to pause before a search is made, so
   /// there isn't a search for every letter. The results start in
-  /// [initialSort] order.
+  /// [initialSort] order, with the businesses in [pinnedIds] first.
   ///
   /// [locate] finds the area to search around, such as with
   /// [searchAreaFor]. It's called before the first search and then reused,
@@ -28,6 +29,7 @@ class NearbyServicesController extends ChangeNotifier {
     this.debounce = const Duration(milliseconds: 400),
     DateTime Function()? clock,
     ServiceSort initialSort = ServiceSort.rating,
+    this._pinnedIds = const {},
     this._locate,
   }) : _clock = clock ?? DateTime.now,
        _sort = initialSort;
@@ -45,6 +47,7 @@ class NearbyServicesController extends ChangeNotifier {
   double? _minRating;
   bool _openNowOnly = false;
   ServiceSort _sort;
+  Set<String> _pinnedIds;
 
   List<ServiceProvider> _results = const [];
   bool _loading = false;
@@ -73,6 +76,10 @@ class NearbyServicesController extends ChangeNotifier {
   bool get openNowOnly => _openNowOnly;
   ServiceSort get sort => _sort;
 
+  /// Whether the user pinned the business with [id] to the top of the
+  /// results.
+  bool isPinned(String id) => _pinnedIds.contains(id);
+
   /// Whether a search is in progress. The previous results stay until it
   /// finishes.
   bool get loading => _loading;
@@ -90,8 +97,8 @@ class NearbyServicesController extends ChangeNotifier {
   /// Whether the minimum rating or open now is hiding any businesses.
   bool get hasFilters => _minRating != null || _openNowOnly;
 
-  /// The results of the last search that match the filters, in [sort]
-  /// order.
+  /// The results of the last search that match the filters: the pinned ones
+  /// first, then the rest, each in [sort] order.
   List<ServiceProvider> get providers {
     final shown = [
       for (final provider in _results)
@@ -142,6 +149,14 @@ class NearbyServicesController extends ChangeNotifier {
   void setSort(ServiceSort sort) {
     if (sort == _sort) return;
     _sort = sort;
+    notifyListeners();
+  }
+
+  /// Lists the businesses with [ids] first, such as after the user pins or
+  /// unpins one.
+  void setPinnedIds(Set<String> ids) {
+    if (setEquals(ids, _pinnedIds)) return;
+    _pinnedIds = ids;
     notifyListeners();
   }
 
@@ -218,9 +233,11 @@ class NearbyServicesController extends ChangeNotifier {
     return true;
   }
 
-  /// Orders businesses by [sort]. Businesses missing what's being sorted by
-  /// go last, and ties are broken by name.
+  /// Orders pinned businesses first, then by [sort]. Businesses missing
+  /// what's being sorted by go last, and ties are broken by name.
   int _compare(ServiceProvider a, ServiceProvider b) {
+    final pinnedFirst = (isPinned(b.id) ? 1 : 0) - (isPinned(a.id) ? 1 : 0);
+    if (pinnedFirst != 0) return pinnedFirst;
     final bySort = switch (_sort) {
       ServiceSort.rating => _missingLast(
         a.rating,

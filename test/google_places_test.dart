@@ -295,6 +295,31 @@ void main() {
       );
     });
 
+    test('keep pinned businesses in the order they were pinned', () {
+      final settings = const AppSettings()
+          .withBusinessPinned('b', true)
+          .withBusinessPinned('a', true)
+          .withBusinessPinned('c', true)
+          .withBusinessPinned('a', false);
+      expect(settings.pinnedBusinessIds, ['b', 'c']);
+      // Pinning again doesn't list it twice.
+      expect(settings.withBusinessPinned('b', true).pinnedBusinessIds, [
+        'c',
+        'b',
+      ]);
+
+      final loaded = AppSettings.fromJson(settings.toJson());
+      expect(loaded.pinnedBusinessIds, ['b', 'c']);
+      expect(const AppSettings().pinnedBusinessIds, isEmpty);
+      // Anything that isn't an id is left out.
+      expect(
+        AppSettings.fromJson({
+          'pinnedBusinessIds': ['b', 7, null],
+        }).pinnedBusinessIds,
+        ['b'],
+      );
+    });
+
     Future<SettingsController> pumpSettings(WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({});
       final controller = SettingsController(
@@ -350,6 +375,43 @@ void main() {
 
       await choose(tester, 'Top rated', 'Closest');
       expect(controller.settings.nearbySort, ServiceSort.distance);
+    });
+
+    testWidgets('every pinned business can be unpinned at once', (
+      tester,
+    ) async {
+      final controller = await pumpSettings(tester);
+      final unpinAll = find.widgetWithText(ListTile, 'Unpin all businesses');
+      // Greyed out with nothing pinned.
+      expect(tester.widget<ListTile>(unpinAll).enabled, isFalse);
+      expect(find.text('No businesses are pinned.'), findsOneWidget);
+
+      await controller.update(
+        controller.settings
+            .withBusinessPinned('a', true)
+            .withBusinessPinned('b', true),
+      );
+      await tester.pump();
+      expect(tester.widget<ListTile>(unpinAll).enabled, isTrue);
+      expect(
+        find.text('2 businesses are pinned to the top of the results.'),
+        findsOneWidget,
+      );
+
+      // Cancelling keeps them.
+      await tester.tap(unpinAll);
+      await tester.pumpAndSettle();
+      expect(find.text('Unpin all businesses?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(controller.settings.pinnedBusinessIds, ['a', 'b']);
+
+      await tester.tap(unpinAll);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Unpin all'));
+      await tester.pumpAndSettle();
+      expect(controller.settings.pinnedBusinessIds, isEmpty);
+      expect(find.text('No businesses are pinned.'), findsOneWidget);
     });
   });
 }

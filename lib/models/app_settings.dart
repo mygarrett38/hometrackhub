@@ -46,6 +46,7 @@ class AppSettings {
     this.nearbyLocationSource = NearbyLocationSource.device,
     this.nearbyZipCode,
     this.nearbySort = ServiceSort.rating,
+    this.pinnedBusinessIds = const [],
   });
 
   /// The choices for [upcomingReminderDays] and [overdueReminderDays], from
@@ -147,6 +148,20 @@ class AppSettings {
   /// opens. The user can still change it on the screen.
   final ServiceSort nearbySort;
 
+  /// The businesses the user pinned to the top of the Nearby services
+  /// results, by id: Google's place IDs, which are all Google lets the app
+  /// keep, or the sample businesses' ids. In the order they were pinned.
+  final List<String> pinnedBusinessIds;
+
+  /// These settings with the business with [id] pinned or not.
+  AppSettings withBusinessPinned(String id, bool pinned) => copyWith(
+    pinnedBusinessIds: [
+      for (final pinnedId in pinnedBusinessIds)
+        if (pinnedId != id) pinnedId,
+      if (pinned) id,
+    ],
+  );
+
   /// Whether [zipCode] is a five-digit US ZIP code.
   static bool isValidZipCode(String zipCode) =>
       RegExp(r'^\d{5}$').hasMatch(zipCode);
@@ -175,6 +190,7 @@ class AppSettings {
     String? nearbyZipCode,
     bool clearNearbyZipCode = false,
     ServiceSort? nearbySort,
+    List<String>? pinnedBusinessIds,
   }) {
     return AppSettings(
       upcomingHour: upcomingHour ?? this.upcomingHour,
@@ -203,6 +219,7 @@ class AppSettings {
           ? null
           : nearbyZipCode ?? this.nearbyZipCode,
       nearbySort: nearbySort ?? this.nearbySort,
+      pinnedBusinessIds: pinnedBusinessIds ?? this.pinnedBusinessIds,
     );
   }
 
@@ -229,6 +246,7 @@ class AppSettings {
     'nearbyLocationSource': nearbyLocationSource.name,
     'nearbyZipCode': nearbyZipCode,
     'nearbySort': nearbySort.name,
+    'pinnedBusinessIds': pinnedBusinessIds,
   };
 
   /// Reads settings saved by [toJson]. Missing values fall back to the
@@ -294,6 +312,10 @@ class AppSettings {
       nearbySort: sortName == null
           ? defaults.nearbySort
           : ServiceSort.values.byName(sortName),
+      pinnedBusinessIds: [
+        for (final id in json['pinnedBusinessIds'] as List<dynamic>? ?? [])
+          if (id is String) id,
+      ],
     );
   }
 }

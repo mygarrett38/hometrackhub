@@ -216,6 +216,25 @@ void main() {
       expect(ids(controller), ['plumber', 'electrician', 'handyman']);
     });
 
+    test('pinned businesses come first in any order, still filtered', () async {
+      final controller = createController();
+      await controller.search();
+      expect(ids(controller), ['electrician', 'plumber', 'handyman']);
+
+      controller.setPinnedIds({'handyman'});
+      expect(ids(controller), ['handyman', 'electrician', 'plumber']);
+      controller.setSort(ServiceSort.reviews);
+      expect(ids(controller), ['handyman', 'plumber', 'electrician']);
+
+      // Pinned businesses are in the sort order among themselves.
+      controller.setPinnedIds({'handyman', 'electrician'});
+      expect(ids(controller), ['electrician', 'handyman', 'plumber']);
+
+      // The filters still hide them.
+      controller.setMinRating(4.0);
+      expect(ids(controller), ['electrician', 'plumber']);
+    });
+
     test('picking a service searches for businesses that offer it', () async {
       final client = _ControlledClient();
       final controller = createController(client);
@@ -702,6 +721,44 @@ void main() {
       expect(find.text('Call'), findsOneWidget);
       expect(find.text('Website'), findsOneWidget);
       expect(find.text('Directions'), findsOneWidget);
+    });
+
+    testWidgets('a business pinned from its details is listed first', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        providers: const [_plumber, _electrician, _handyman],
+      );
+      double top(String name) => tester.getTopLeft(find.text(name)).dy;
+      final settings = Provider.of<SettingsController>(
+        tester.element(find.byType(NearbyServicesScreen)),
+        listen: false,
+      );
+      Future<void> togglePin(String name, String button) async {
+        await tester.tap(find.text(name));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(button));
+        await tester.pumpAndSettle();
+        Navigator.of(tester.element(find.text(name).last)).pop();
+        await tester.pumpAndSettle();
+      }
+
+      // Unrated, so it starts last.
+      expect(top('Fix It All'), greaterThan(top('Pipe Pros')));
+      expect(find.byIcon(Icons.push_pin), findsNothing);
+
+      await togglePin('Fix It All', 'Pin');
+      expect(top('Fix It All'), lessThan(top('Spark Electric')));
+      // Read out with the card.
+      expect(find.bySemanticsLabel(RegExp('Pinned')), findsOneWidget);
+      // Kept in the settings, so it stays pinned in later searches.
+      expect(settings.settings.pinnedBusinessIds, ['handyman']);
+
+      await togglePin('Fix It All', 'Unpin');
+      expect(top('Fix It All'), greaterThan(top('Pipe Pros')));
+      expect(find.bySemanticsLabel(RegExp('Pinned')), findsNothing);
+      expect(settings.settings.pinnedBusinessIds, isEmpty);
     });
 
     testWidgets("Google's results end with Google's logo", (tester) async {
