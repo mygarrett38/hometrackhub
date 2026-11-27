@@ -1069,6 +1069,71 @@ void main() {
     expect(find.text('Completed (1)'), findsOneWidget);
   });
 
+  group('the keyboard', () {
+    /// Whether a text field is being typed in, with the keyboard up.
+    bool typing(WidgetTester tester) {
+      final focused = FocusManager.instance.primaryFocus;
+      final inTextField =
+          focused?.context?.findAncestorStateOfType<EditableTextState>() !=
+          null;
+      return inTextField && tester.testTextInput.isVisible;
+    }
+
+    testWidgets("doesn't come back on returning to a screen", (tester) async {
+      await pumpApp(tester);
+      // A home item named House.
+      await addTasks(tester, const []);
+      await tester.tap(find.text('My Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('House'));
+      await tester.pumpAndSettle();
+
+      // Typing in its name, then opening another screen.
+      final name = find.byWidgetPredicate(
+        (widget) => widget is EditableText && widget.controller.text == 'House',
+      );
+      await tester.tap(name);
+      await tester.pumpAndSettle();
+      expect(typing(tester), isTrue);
+      await scrollTo(tester, find.byTooltip('Add task'));
+      await tester.tap(find.byTooltip('Add task'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Add task'), findsOneWidget);
+      expect(typing(tester), isFalse);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(name, findsOneWidget);
+      expect(typing(tester), isFalse);
+    });
+
+    testWidgets("doesn't come back on returning to a tab", (tester) async {
+      await pumpApp(
+        tester,
+        savedData: {
+          'settings_v1': jsonEncode({
+            ...const AppSettings().toJson(),
+            // So the Assist tab is the nearby services search.
+            'assistantEnabled': false,
+          }),
+        },
+      );
+      await tester.tap(find.text('Assist'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(SearchBar));
+      await tester.pumpAndSettle();
+      expect(typing(tester), isTrue);
+
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(typing(tester), isFalse);
+
+      await tester.tap(find.text('Assist'));
+      await tester.pumpAndSettle();
+      expect(typing(tester), isFalse);
+    });
+  });
+
   testWidgets('a card whose last task moves on fades out with its note', (
     tester,
   ) async {
