@@ -3,8 +3,14 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/assist_chat.dart';
+import '../../../models/home_item.dart';
+import '../../../models/suggested_task.dart';
 import '../../../services/home_assistant_client.dart';
 import '../../../state/assist_chat_controller.dart';
+import '../../../state/home_item_controller.dart';
+import '../../../utils/date_utils.dart';
+import '../home_items/choose_home_item_screen.dart';
+import '../home_items/task_form_screen.dart';
 import 'assist_widgets.dart';
 import 'nearby_services_screen.dart';
 
@@ -127,7 +133,8 @@ class _Conversation extends StatelessWidget {
   }
 }
 
-/// One message: the user's on the right, the assistant's on the left.
+/// One message: the user's on the right, the assistant's on the left. Under
+/// an answer are any tasks the assistant suggested, to add to a home item.
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message});
 
@@ -205,10 +212,107 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ],
+          if (message.suggestedTasks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Add to your schedule',
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(color: textColor),
+            ),
+            for (final suggestion in message.suggestedTasks)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _SuggestedTaskButton(suggestion: suggestion),
+              ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// A task the assistant suggested, with how often to repeat it. Tapping it
+/// adds it to a home item.
+class _SuggestedTaskButton extends StatelessWidget {
+  const _SuggestedTaskButton({required this.suggestion});
+
+  final SuggestedTask suggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          alignment: AlignmentDirectional.centerStart,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: () => _addSuggestedTask(context, suggestion),
+        child: Row(
+          children: [
+            const Icon(Icons.add_task, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(suggestion.title),
+                  Text(
+                    suggestion.interval.label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Asks which home item [suggestion] is for, then opens it as a new task for
+/// that home item, for the user to check and add. Says so once it's added.
+Future<void> _addSuggestedTask(
+  BuildContext context,
+  SuggestedTask suggestion,
+) async {
+  final homeItems = context.read<HomeItemController>();
+  final navigator = Navigator.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  final homeItem = await navigator.push(
+    MaterialPageRoute<HomeItem>(
+      builder: (_) => ChooseHomeItemScreen(
+        taskTitle: suggestion.title,
+        taskRepeat: suggestion.interval.label,
+      ),
+    ),
+  );
+  if (homeItem == null) return;
+
+  int taskCount() => homeItems.findById(homeItem.id)?.tasks.length ?? 0;
+  final before = taskCount();
+  await navigator.push(
+    MaterialPageRoute<void>(
+      builder: (_) => TaskFormScreen(
+        homeItemId: homeItem.id,
+        homeItemName: homeItem.name,
+        template: suggestion.toTask(dateOnly(DateTime.now())),
+      ),
+    ),
+  );
+  // Going back from the form without tapping Add adds nothing.
+  if (taskCount() <= before) return;
+  final added = homeItems.findById(homeItem.id)!.tasks.last;
+  messenger.showSnackBar(
+    SnackBar(content: Text('Added "${added.title}" to ${homeItem.name}.')),
+  );
 }
 
 /// Markdown styles that fit in a chat bubble: the app's usual text in

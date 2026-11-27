@@ -48,7 +48,7 @@ class HomeItemListScreen extends StatelessWidget {
               padding: screenPadding(context)
                   .copyWith(bottom: 88 + MediaQuery.paddingOf(context).bottom),
               children: [
-                for (final (room, items) in _groupByRoom(homeItems))
+                for (final (room, items) in groupByRoom(homeItems))
                   _RoomCard(key: ValueKey(room), room: room, items: items),
               ],
             ),
@@ -58,7 +58,7 @@ class HomeItemListScreen extends StatelessWidget {
   /// Sorts [homeItems] into rooms, ignoring differences in capitalization
   /// such as "kitchen" and "Kitchen". Items without a room come last under
   /// "Unknown".
-  static List<(String, List<HomeItem>)> _groupByRoom(List<HomeItem> homeItems) {
+  static List<(String, List<HomeItem>)> groupByRoom(List<HomeItem> homeItems) {
     final rooms = <String, (String, List<HomeItem>)>{};
     for (final item in homeItems) {
       final location = item.location.trim();

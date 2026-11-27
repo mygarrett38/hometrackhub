@@ -9,7 +9,15 @@ Claude Haiku 5.5 (`claude-haiku-5-5`). The app sends the conversation to
   "answer": "...",
   "recommendProfessional": true,
   "professionalReason": "...",
-  "professionalService": "plumbing"
+  "professionalService": "plumbing",
+  "suggestedTasks": [
+    {
+      "title": "Flush the water heater",
+      "description": "...",
+      "every": 1,
+      "unit": "years"
+    }
+  ]
 }
 ```
 
@@ -17,6 +25,10 @@ When Claude recommends a professional, `professionalService` names the kind
 of business to hire, as the app's Nearby services screen names it, so the app
 can offer to find one nearby. Otherwise it and `professionalReason` are
 `null`.
+
+`suggestedTasks` lists up to 3 maintenance tasks the answer recommends
+repeating on a schedule, which the app offers to add to a home item. `unit`
+is `days`, `weeks`, `months` or `years`. It's empty when there are none.
 
 Errors come back as `{ "error": "..." }` with a matching HTTP status, and the
 app shows that message on screen.

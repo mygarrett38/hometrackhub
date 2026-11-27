@@ -26,6 +26,7 @@ class TaskFormScreen extends StatefulWidget {
     required this.homeItemId,
     required this.homeItemName,
     this.existing,
+    this.template,
   }) : onSaved = null;
 
   /// Edits a task for a home item that hasn't been saved yet. Instead of
@@ -35,7 +36,8 @@ class TaskFormScreen extends StatefulWidget {
     required this.homeItemName,
     required ValueChanged<MaintenanceTask> this.onSaved,
     this.existing,
-  }) : homeItemId = null;
+  }) : homeItemId = null,
+       template = null;
 
   /// The home item the task belongs to, or `null` for a home item that
   /// hasn't been saved yet.
@@ -46,6 +48,11 @@ class TaskFormScreen extends StatefulWidget {
 
   /// The task being edited, or `null` when adding a new task.
   final MaintenanceTask? existing;
+
+  /// For a new task, a task whose title, instructions and repeat it starts
+  /// with, such as one the assistant suggested. The user can still change
+  /// them before adding it.
+  final MaintenanceTask? template;
 
   /// Receives the task each time it's saved, for a home item that hasn't
   /// been saved yet.
@@ -122,6 +129,10 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       for (final controller in [_title, _description, _amount]) {
         controller.addListener(_scheduleSave);
       }
+    } else if (widget.template case final template?) {
+      _title.text = template.title;
+      _description.text = template.description;
+      _setInterval(template.interval);
     }
   }
 

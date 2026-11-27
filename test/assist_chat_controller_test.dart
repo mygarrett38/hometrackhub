@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/data/assist_chat_repository.dart';
 import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/assist_chat.dart';
+import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/service_type.dart';
+import 'package:hometrackhub/models/suggested_task.dart';
 import 'package:hometrackhub/models/technical_level.dart';
 import 'package:hometrackhub/services/home_assistant_client.dart';
 import 'package:hometrackhub/state/assist_chat_controller.dart';
@@ -54,6 +56,13 @@ void main() {
         'Clean the P-trap.',
         professionalNote: 'Call a plumber if it keeps clogging.',
         professionalService: ServiceType.plumbing,
+        suggestedTasks: [
+          SuggestedTask(
+            title: 'Clean the P-trap',
+            description: 'Unscrew it over a bucket.',
+            interval: MaintenanceInterval.months(6),
+          ),
+        ],
       ),
     );
     await controller.rename(id, 'Kitchen sink');
@@ -71,8 +80,13 @@ void main() {
       'Call a plumber if it keeps clogging.',
     );
     expect(chat.messages.last.professionalService, ServiceType.plumbing);
-    // Questions never have one.
+    final suggested = chat.messages.last.suggestedTasks.single;
+    expect(suggested.title, 'Clean the P-trap');
+    expect(suggested.description, 'Unscrew it over a bucket.');
+    expect(suggested.interval, const MaintenanceInterval.months(6));
+    // Questions never have them.
     expect(chat.messages.first.professionalService, isNull);
+    expect(chat.messages.first.suggestedTasks, isEmpty);
   });
 
   test('chats are listed most recently active first', () async {
@@ -386,12 +400,19 @@ void main() {
             answer: 'Every 90 days.',
             recommendProfessional: true,
             professionalService: ServiceType.hvac,
+            suggestedTasks: [
+              SuggestedTask(
+                title: 'Replace furnace filter',
+                interval: MaintenanceInterval.days(90),
+              ),
+            ],
           ),
         );
         await second;
         final answer = controller.chatById(id)!.messages.last;
         expect(answer.professionalNote, 'This is a job for a professional.');
         expect(answer.professionalService, ServiceType.hvac);
+        expect(answer.suggestedTasks.single.title, 'Replace furnace filter');
       },
     );
   });

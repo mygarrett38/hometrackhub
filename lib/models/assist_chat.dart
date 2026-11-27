@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/home_assistant_client.dart';
 import 'service_type.dart';
+import 'suggested_task.dart';
 
 /// One message in an [AssistChat].
 @immutable
@@ -11,17 +12,20 @@ class AssistChatMessage {
     required this.content,
     this.professionalNote,
     this.professionalService,
+    this.suggestedTasks = const [],
   });
 
   const AssistChatMessage.user(this.content)
     : role = 'user',
       professionalNote = null,
-      professionalService = null;
+      professionalService = null,
+      suggestedTasks = const [];
 
   const AssistChatMessage.assistant(
     this.content, {
     this.professionalNote,
     this.professionalService,
+    this.suggestedTasks = const [],
   }) : role = 'assistant';
 
   /// "user" or "assistant".
@@ -35,6 +39,10 @@ class AssistChatMessage {
   /// one can be found nearby.
   final ServiceType? professionalService;
 
+  /// Maintenance the assistant suggested repeating on a schedule, which the
+  /// user can add as tasks.
+  final List<SuggestedTask> suggestedTasks;
+
   bool get isUser => role == 'user';
 
   AssistantMessage toAssistantMessage() =>
@@ -46,6 +54,8 @@ class AssistChatMessage {
     if (professionalNote != null) 'professionalNote': professionalNote,
     if (professionalService != null)
       'professionalService': professionalService!.name,
+    if (suggestedTasks.isNotEmpty)
+      'suggestedTasks': [for (final task in suggestedTasks) task.toJson()],
   };
 
   factory AssistChatMessage.fromJson(Map<String, dynamic> json) =>
@@ -55,6 +65,7 @@ class AssistChatMessage {
         professionalNote: json['professionalNote'] as String?,
         professionalService: ServiceType.values
             .asNameMap()[json['professionalService']],
+        suggestedTasks: SuggestedTask.listFrom(json['suggestedTasks']),
       );
 }
 

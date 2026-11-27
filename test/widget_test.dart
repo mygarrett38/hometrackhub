@@ -16,6 +16,7 @@ import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
 import 'package:hometrackhub/models/maintenance_task.dart';
 import 'package:hometrackhub/models/service_type.dart';
+import 'package:hometrackhub/models/suggested_task.dart';
 import 'package:hometrackhub/models/task_reminder.dart';
 import 'package:hometrackhub/models/technical_level.dart';
 import 'package:hometrackhub/services/calendar_service.dart';
@@ -2139,6 +2140,93 @@ void main() {
     expect(find.text('Clean the P-trap.'), findsOneWidget);
     // The question is asked again rather than added a second time.
     expect(assistant.conversations.last.length, 1);
+  });
+
+  testWidgets('a task the assistant suggests can be added to a home item', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantReply(
+        answer: 'A clogged filter makes the furnace work harder.',
+        suggestedTasks: [
+          SuggestedTask(
+            title: 'Replace furnace filter',
+            description: 'Slide out the old filter and put in a new one.',
+            interval: MaintenanceInterval.months(3),
+          ),
+        ],
+      );
+    await pumpApp(tester, assistant: assistant);
+    // A home item named House.
+    await addTasks(tester, const []);
+    await openNewConversation(tester);
+    await askAssistant(tester, 'How often should I change my filter?');
+
+    expect(find.text('Add to your schedule'), findsOneWidget);
+    expect(find.text('Every 3 months'), findsOneWidget);
+    await tester.tap(find.text('Replace furnace filter'));
+    await tester.pumpAndSettle();
+
+    // Its own screen asks which home item, grouped by room, with the task
+    // at the top.
+    expect(find.widgetWithText(AppBar, 'Choose home item'), findsOneWidget);
+    expect(find.text('Replace furnace filter'), findsOneWidget);
+    expect(find.text('Every 3 months'), findsOneWidget);
+    expect(find.text('Unknown'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ListTile, 'House'));
+    await tester.pumpAndSettle();
+
+    // The task form opens filled in, for the user to check.
+    expect(find.widgetWithText(AppBar, 'Add task'), findsOneWidget);
+    expect(find.text('Replace furnace filter'), findsOneWidget);
+    expect(
+      find.text('Slide out the old filter and put in a new one.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    // Back in the chat, it says where the task went.
+    expect(find.text('Add to your schedule'), findsOneWidget);
+    expect(
+      find.text('Added "Replace furnace filter" to House.'),
+      findsOneWidget,
+    );
+    final task = tester
+        // Under the chat's screen.
+        .element(find.byType(HomeShell, skipOffstage: false))
+        .read<HomeItemController>()
+        .findById('house')!
+        .tasks
+        .single;
+    expect(task.title, 'Replace furnace filter');
+    expect(task.interval, const MaintenanceInterval.months(3));
+    expect(task.description, 'Slide out the old filter and put in a new one.');
+  });
+
+  testWidgets('a suggested task without home items says to add one', (
+    tester,
+  ) async {
+    final assistant = FakeAssistantClient()
+      ..reply = const AssistantReply(
+        answer: 'Test them every month.',
+        suggestedTasks: [
+          SuggestedTask(
+            title: 'Test smoke alarms',
+            interval: MaintenanceInterval.months(1),
+          ),
+        ],
+      );
+    await pumpApp(tester, assistant: assistant);
+    await openNewConversation(tester);
+    await askAssistant(tester, 'How often should I test my alarms?');
+
+    await tester.tap(find.text('Test smoke alarms'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining("don't have any home items"), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Add to your schedule'), findsOneWidget);
   });
 
   testWidgets('a professional the assistant suggests can be found nearby', (

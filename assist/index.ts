@@ -61,7 +61,15 @@ set "professionalService" to the kind of business to hire: "plumbing", \
 "roofing", "landscaping" (lawn and landscaping), "pestControl", "handyman" or \
 "auto" (auto repair). Pick "handyman" for general repairs that fit none of the \
 others. Otherwise set "recommendProfessional" to false, leave \
-"professionalReason" empty and set "professionalService" to "none".`;
+"professionalReason" empty and set "professionalService" to "none".
+
+In "suggestedTasks", list up to 3 maintenance tasks your answer recommends \
+repeating on a schedule, such as replacing a furnace filter every 3 months, \
+so the user can add them to their maintenance schedule. Give each a short \
+"title" that starts with a verb, such as "Replace furnace filter", one \
+sentence of instructions in "description", and how often to repeat it: \
+"every" and "unit", such as 3 and "months". Leave "suggestedTasks" empty for \
+one-off repairs, or when you don't recommend doing anything on a schedule.`;
 
 // What to tell Claude for each technical level the app can send. Anything
 // else is ignored in favour of the middle level, so the instructions can't
@@ -103,6 +111,19 @@ const PROFESSIONAL_SERVICES = [
   "auto",
 ] as const;
 
+/** The units a suggested task can repeat in, as the app names them. */
+const INTERVAL_UNITS = ["days", "weeks", "months", "years"] as const;
+
+/** The most tasks one answer can suggest. */
+const MAX_SUGGESTED_TASKS = 3;
+
+interface SuggestedTask {
+  title: string;
+  description: string;
+  every: number;
+  unit: (typeof INTERVAL_UNITS)[number];
+}
+
 const REPLY_SCHEMA = {
   type: "object",
   properties: {
@@ -113,12 +134,27 @@ const REPLY_SCHEMA = {
       type: "string",
       enum: [...PROFESSIONAL_SERVICES, "none"],
     },
+    suggestedTasks: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          description: { type: "string" },
+          every: { type: "integer" },
+          unit: { type: "string", enum: INTERVAL_UNITS },
+        },
+        required: ["title", "description", "every", "unit"],
+        additionalProperties: false,
+      },
+    },
   },
   required: [
     "answer",
     "recommendProfessional",
     "professionalReason",
     "professionalService",
+    "suggestedTasks",
   ],
   additionalProperties: false,
 };
@@ -187,6 +223,7 @@ export default {
           recommendProfessional: false,
           professionalReason: null,
           professionalService: null,
+          suggestedTasks: [],
         });
       }
       if (response.stop_reason === "max_tokens") {
@@ -202,6 +239,7 @@ export default {
         recommendProfessional: boolean;
         professionalReason: string;
         professionalService: (typeof PROFESSIONAL_SERVICES)[number] | "none";
+        suggestedTasks: SuggestedTask[];
       };
       return json({
         answer: reply.answer,
@@ -212,6 +250,7 @@ export default {
           reply.recommendProfessional && reply.professionalService !== "none"
             ? reply.professionalService
             : null,
+        suggestedTasks: usableTasks(reply.suggestedTasks),
       });
     } catch (err) {
       if (err instanceof Anthropic.RateLimitError) {
@@ -240,6 +279,29 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * The tasks Claude suggested that the app can add: with a title and a
+ * repeat of at least one, and no more than MAX_SUGGESTED_TASKS. The schema
+ * can't limit numbers or lengths, so that's checked here.
+ */
+function usableTasks(tasks: SuggestedTask[]): SuggestedTask[] {
+  return tasks
+    .map((task) => ({
+      title: task.title.trim().slice(0, 80),
+      description: task.description.trim().slice(0, 500),
+      every: task.every,
+      unit: task.unit,
+    }))
+    .filter(
+      (task) =>
+        task.title !== "" &&
+        Number.isInteger(task.every) &&
+        task.every >= 1 &&
+        task.every <= 1_000,
+    )
+    .slice(0, MAX_SUGGESTED_TASKS);
+}
 
 /**
  * Checks the request body and turns it into messages for Claude, or returns
