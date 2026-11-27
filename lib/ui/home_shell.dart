@@ -30,6 +30,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   /// The Overview tab, in the middle, is shown first.
+  static const _calendarIndex = 1;
   static const _overviewIndex = 2;
   static const _assistIndex = 3;
 
@@ -38,6 +39,10 @@ class _HomeShellState extends State<HomeShell> {
   /// The tasks the Overview was last asked to show, after a reminder was
   /// tapped.
   ShowTasksRequest? _showTasks;
+
+  /// What the Calendar was last asked to show, after the Overview's spending
+  /// was tapped.
+  ShowExpensesRequest? _showExpenses;
   StreamSubscription<ReminderKind>? _tappedReminders;
 
   /// The Overview tab is shown as the app's logo in a circle instead, so it
@@ -143,9 +148,13 @@ class _HomeShellState extends State<HomeShell> {
       index: _selectedIndex,
       children: [
         const HomeItemListScreen(),
-        const MaintenanceCalendarScreen(),
+        MaintenanceCalendarScreen(showExpenses: _showExpenses),
         DashboardScreen(
           onAssistPressed: () => _select(_assistIndex),
+          onShowExpenses: (period) => setState(() {
+            _selectedIndex = _calendarIndex;
+            _showExpenses = ShowExpensesRequest(period);
+          }),
           isShown: _selectedIndex == _overviewIndex,
           showTasks: _showTasks,
         ),

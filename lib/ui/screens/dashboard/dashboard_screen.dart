@@ -4,14 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/calendar_period.dart';
-import '../../../models/home_expense.dart';
-import '../../../models/home_item.dart';
 import '../../../models/home_item_task.dart';
 import '../../../services/reminder_planner.dart';
 import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
-import '../../../utils/id_generator.dart';
 import '../../widgets/task_section_card.dart';
 import 'dashboard_setup_card.dart';
 
@@ -34,11 +31,16 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     super.key,
     required this.onAssistPressed,
+    this.onShowExpenses,
     this.isShown = true,
     this.showTasks,
   });
 
   final VoidCallback onAssistPressed;
+
+  /// Shows the expenses of the current month or year, the period that
+  /// spending is counted over here.
+  final ValueChanged<CalendarPeriod>? onShowExpenses;
 
   /// Whether this is the tab being shown. Leaving it lists all the tasks
   /// again, rather than only those of the summary card that was tapped.
@@ -265,21 +267,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                         value: '\$${spentInPeriod.toStringAsFixed(2)}',
                         icon: Icons.account_balance_wallet_outlined,
                         color: colors.tertiary,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => budgetPeriod == CalendarPeriod.year
-                                ? _YearlyExpensesScreen(
-                                    initialYear: now.year,
-                                    onRecordExpense: () =>
-                                        _recordExpense(context, controller),
-                                  )
-                                : _MonthlyExpensesScreen(
-                                    month: now,
-                                    onRecordExpense: () =>
-                                        _recordExpense(context, controller),
-                                  ),
-                          ),
-                        ),
+                        // The calendar's expenses, for the month or year
+                        // counted here.
+                        onTap: () => widget.onShowExpenses?.call(budgetPeriod),
                       ),
                     ],
                   ),
@@ -317,18 +307,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _recordExpense(
-    BuildContext context,
-    HomeItemController controller,
-  ) async {
-    final entry = await showDialog<_ExpenseEntry>(
-      context: context,
-      builder: (_) => _RecordExpenseDialog(items: controller.homeItems),
-    );
-    if (entry == null || !context.mounted) return;
-    await controller.addExpense(entry.homeItemId, entry.expense);
   }
 
   /// The overdue, upcoming and completed tasks, in that order, each in a
@@ -409,13 +387,6 @@ String _greetingFor(DateTime time) {
   return 'Good Evening!';
 }
 
-class _ExpenseEntry {
-  const _ExpenseEntry(this.homeItemId, this.expense);
-
-  final String homeItemId;
-  final HomeExpense expense;
-}
-
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.label,
@@ -480,371 +451,6 @@ class _SummaryCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ExpenseDetailEntry {
-  const _ExpenseDetailEntry(this.item, this.expense);
-
-  final HomeItem item;
-  final HomeExpense expense;
-}
-
-class _MonthlyExpensesScreen extends StatelessWidget {
-  const _MonthlyExpensesScreen({
-    required this.month,
-    required this.onRecordExpense,
-  });
-
-  final DateTime month;
-  final VoidCallback onRecordExpense;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = context.watch<HomeItemController>();
-    final now = DateTime.now();
-    final isCurrentMonth = month.year == now.year && month.month == now.month;
-    final monthStart = DateTime(month.year, month.month);
-    final nextMonth = DateTime(month.year, month.month + 1);
-    final entries = [
-      for (final item in controller.homeItems)
-        for (final expense in item.expenses)
-          if (!expense.date.isBefore(monthStart) &&
-              expense.date.isBefore(nextMonth))
-            _ExpenseDetailEntry(item, expense),
-    ]..sort((a, b) => b.expense.date.compareTo(a.expense.date));
-    final total = entries.fold<double>(
-      0,
-      (sum, entry) => sum + entry.expense.amount,
-    );
-    final monthName = MaterialLocalizations.of(context).formatMonthYear(month);
-    return Scaffold(
-      appBar: AppBar(title: Text('$monthName Expenses')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => _YearlyExpensesScreen(
-                        initialYear: month.year,
-                        onRecordExpense: onRecordExpense,
-                      ),
-                    ),
-                  ),
-                  child: const Text(
-                    'Yearly History',
-                    maxLines: 1,
-                    softWrap: false,
-                  ),
-                ),
-              ),
-              if (isCurrentMonth) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: FilledButton.icon(
-                    onPressed: controller.homeItems.isEmpty
-                        ? null
-                        : onRecordExpense,
-                    icon: const Icon(Icons.add_card_outlined),
-                    label: const Text(
-                      'Record an expense',
-                      maxLines: 1,
-                      softWrap: false,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: const Text('Total spent'),
-              trailing: Text(
-                '\$${total.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-          if (entries.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('No expenses recorded this month.')),
-            )
-          else ...[
-            const SizedBox(height: 8),
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: [
-                  for (var i = 0; i < entries.length; i++) ...[
-                    if (i > 0) const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.receipt_long_outlined),
-                      title: Text(entries[i].expense.description),
-                      subtitle: Text(
-                        '${entries[i].item.name} · ${MaterialLocalizations.of(context).formatMediumDate(entries[i].expense.date)}',
-                      ),
-                      trailing: Text(
-                        '\$${entries[i].expense.amount.toStringAsFixed(2)}',
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _YearlyExpensesScreen extends StatefulWidget {
-  const _YearlyExpensesScreen({
-    required this.initialYear,
-    required this.onRecordExpense,
-  });
-
-  final int initialYear;
-  final VoidCallback onRecordExpense;
-
-  @override
-  State<_YearlyExpensesScreen> createState() => _YearlyExpensesScreenState();
-}
-
-class _YearlyExpensesScreenState extends State<_YearlyExpensesScreen> {
-  late int _year = widget.initialYear;
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = context.watch<HomeItemController>();
-    final localizations = MaterialLocalizations.of(context);
-    final entriesByMonth = <int, List<_ExpenseDetailEntry>>{
-      for (var month = 1; month <= 12; month++) month: <_ExpenseDetailEntry>[],
-    };
-    for (final item in controller.homeItems) {
-      for (final expense in item.expenses) {
-        if (expense.date.year == _year) {
-          entriesByMonth[expense.date.month]!.add(
-            _ExpenseDetailEntry(item, expense),
-          );
-        }
-      }
-    }
-    for (final entries in entriesByMonth.values) {
-      entries.sort((a, b) => b.expense.date.compareTo(a.expense.date));
-    }
-    final yearlyTotal = entriesByMonth.values
-        .expand((entries) => entries)
-        .fold<double>(0, (total, entry) => total + entry.expense.amount);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('$_year Expense History'),
-        actions: [
-          IconButton(
-            tooltip: 'Previous year',
-            onPressed: () => setState(() => _year--),
-            icon: const Icon(Icons.chevron_left),
-          ),
-          IconButton(
-            tooltip: 'Next year',
-            onPressed: _year >= DateTime.now().year
-                ? null
-                : () => setState(() => _year++),
-            icon: const Icon(Icons.chevron_right),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.account_balance_wallet_outlined),
-              title: const Text('Year total'),
-              trailing: Text(
-                '\$${yearlyTotal.toStringAsFixed(2)}',
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                for (var month = 1; month <= 12; month++) ...[
-                  if (month > 1) const Divider(height: 1),
-                  ListTile(
-                    title: Text(
-                      localizations.formatMonthYear(DateTime(_year, month)),
-                    ),
-                    subtitle: Text('${entriesByMonth[month]!.length} expenses'),
-                    trailing: Text(
-                      '\$${entriesByMonth[month]!.fold<double>(0, (total, entry) => total + entry.expense.amount).toStringAsFixed(2)}',
-                    ),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => _MonthlyExpensesScreen(
-                          month: DateTime(_year, month),
-                          onRecordExpense: widget.onRecordExpense,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordExpenseDialog extends StatefulWidget {
-  const _RecordExpenseDialog({required this.items});
-
-  final List<HomeItem> items;
-
-  @override
-  State<_RecordExpenseDialog> createState() => _RecordExpenseDialogState();
-}
-
-class _RecordExpenseDialogState extends State<_RecordExpenseDialog> {
-  final _description = TextEditingController();
-  final _amount = TextEditingController();
-  late String _itemId;
-  DateTime _date = dateOnly(DateTime.now());
-
-  /// Shown under a field after trying to save without filling it in
-  /// properly, until the field is changed.
-  String? _descriptionError;
-  String? _amountError;
-
-  @override
-  void initState() {
-    super.initState();
-    _itemId = widget.items.first.id;
-  }
-
-  void _save() {
-    final description = _description.text.trim();
-    final amount = double.tryParse(_amount.text.trim());
-    final validAmount = amount != null && amount > 0;
-    if (description.isEmpty || !validAmount) {
-      setState(() {
-        _descriptionError = description.isEmpty ? 'Enter a description' : null;
-        _amountError = validAmount ? null : 'Enter an amount above \$0';
-      });
-      return;
-    }
-    Navigator.of(context).pop(
-      _ExpenseEntry(
-        _itemId,
-        HomeExpense(
-          id: generateId(),
-          description: description,
-          amount: amount,
-          date: _date,
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _description.dispose();
-    _amount.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Record an expense'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _itemId,
-              decoration: const InputDecoration(labelText: 'Home item'),
-              items: [
-                for (final item in widget.items)
-                  DropdownMenuItem<String>(
-                    value: item.id,
-                    child: Text(item.name, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (value) => setState(() => _itemId = value!),
-            ),
-            TextField(
-              controller: _description,
-              decoration: InputDecoration(
-                labelText: 'Description',
-                errorText: _descriptionError,
-              ),
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) {
-                if (_descriptionError != null) {
-                  setState(() => _descriptionError = null);
-                }
-              },
-            ),
-            TextField(
-              controller: _amount,
-              decoration: InputDecoration(
-                labelText: 'Amount',
-                prefixText: '\$',
-                errorText: _amountError,
-              ),
-              onChanged: (_) {
-                if (_amountError != null) setState(() => _amountError = null);
-              },
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () async {
-                final selected = await showDatePicker(
-                  context: context,
-                  initialDate: _date,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime.now(),
-                );
-                if (selected != null) {
-                  setState(() => _date = dateOnly(selected));
-                }
-              },
-              icon: const Icon(Icons.calendar_today),
-              label: Text(
-                MaterialLocalizations.of(context).formatMediumDate(_date),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Save expense')),
-      ],
     );
   }
 }

@@ -11,6 +11,7 @@ import 'package:hometrackhub/data/settings_repository.dart';
 import 'package:hometrackhub/models/app_settings.dart';
 import 'package:hometrackhub/models/assist_chat.dart';
 import 'package:hometrackhub/models/calendar_period.dart';
+import 'package:hometrackhub/models/home_expense.dart';
 import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/models/maintenance_interval.dart';
@@ -37,6 +38,7 @@ import 'package:hometrackhub/ui/screens/assist/assist_widgets.dart';
 import 'package:hometrackhub/ui/screens/assist/nearby_services_screen.dart';
 import 'package:hometrackhub/ui/screens/launch/launch_screen.dart';
 import 'package:hometrackhub/ui/screens/settings/assistant_settings_screen.dart';
+import 'package:hometrackhub/ui/screens/upcoming/maintenance_calendar_screen.dart';
 import 'package:hometrackhub/ui/widgets/form_rows.dart';
 import 'package:hometrackhub/utils/date_utils.dart';
 import 'package:provider/provider.dart';
@@ -1189,38 +1191,205 @@ void main() {
     expect(find.text('Recently completed (1)'), findsOneWidget);
   });
 
-  testWidgets('an incomplete expense is explained under its fields', (
-    tester,
-  ) async {
-    await pumpApp(tester);
-    await addTasks(tester, []);
+  group('expenses on the calendar', () {
+    /// Whether the calendar is showing expenses rather than tasks.
+    bool showingExpenses(WidgetTester tester) =>
+        tester
+            .widget<SegmentedButton<CalendarView>>(
+              find.byType(SegmentedButton<CalendarView>),
+            )
+            .selected
+            .single ==
+        CalendarView.expenses;
 
-    // Expenses are recorded from this month's spending on the Overview.
-    await scrollTo(tester, find.text('Spent This Month'));
-    await tester.tap(find.text('Spent This Month'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Record an expense'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save expense'));
-    await tester.pumpAndSettle();
-    expect(find.byType(SnackBar), findsNothing);
-    expect(find.text('Enter a description'), findsOneWidget);
-    expect(find.text('Enter an amount above \$0'), findsOneWidget);
+    /// Records [amount] spent on House on [date], described as [what].
+    Future<void> spend(
+      WidgetTester tester,
+      String what,
+      double amount,
+      DateTime date,
+    ) async {
+      await tester
+          .element(find.byType(HomeShell, skipOffstage: false))
+          .read<HomeItemController>()
+          .addExpense(
+            'house',
+            HomeExpense(
+              id: what,
+              description: what,
+              amount: amount,
+              date: date,
+            ),
+          );
+      await tester.pumpAndSettle();
+    }
 
-    // Each message goes away once its field is changed.
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Description'),
-      'New filter',
-    );
-    await tester.pump();
-    expect(find.text('Enter a description'), findsNothing);
-    expect(find.text('Enter an amount above \$0'), findsOneWidget);
+    testWidgets("are opened from the Overview's spending, and added with +", (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await addTasks(tester, []);
 
-    await tester.enterText(find.widgetWithText(TextField, 'Amount'), '25');
-    await tester.tap(find.text('Save expense'));
-    await tester.pumpAndSettle();
-    expect(find.byType(Dialog), findsNothing);
-    expect(find.text('New filter'), findsOneWidget);
+      // The Overview's spending opens the calendar's expenses, this month.
+      await scrollTo(tester, find.text('Spent This Month'));
+      await tester.tap(find.text('Spent This Month'));
+      await tester.pumpAndSettle();
+      expect(showingExpenses(tester), isTrue);
+      expect(find.text('No expenses this month'), findsOneWidget);
+
+      // The total is at the top right, above the calendar, with what it's
+      // of read aloud rather than shown.
+      final total = find.text(r'$0.00');
+      final calendar = tester.getRect(find.byType(PageView));
+      expect(tester.getBottomLeft(total).dy, lessThan(calendar.top));
+      expect(
+        tester.getTopRight(total).dx,
+        greaterThan(
+          tester.view.physicalSize.width / tester.view.devicePixelRatio / 2,
+        ),
+      );
+      expect(find.text('Spent this month'), findsNothing);
+      expect(find.bySemanticsLabel(r'Spent this month, $0.00'), findsOneWidget);
+
+      // Between the calendar and the list is the switch, with + beside it to
+      // add an expense, which is a screen of its own.
+      final toggle = tester.getRect(find.byType(SegmentedButton<CalendarView>));
+      final add = find.byTooltip('Add expense');
+      expect(toggle.top, greaterThan(calendar.bottom));
+      expect(
+        tester.getTopLeft(find.text('No expenses this month')).dy,
+        greaterThan(toggle.bottom),
+      );
+      expect(tester.getCenter(add).dy, closeTo(toggle.center.dy, 1));
+      expect(tester.getTopLeft(add).dx, greaterThan(toggle.right));
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Add expense'), findsOneWidget);
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a description'), findsOneWidget);
+      expect(find.text(r'Enter an amount above $0'), findsOneWidget);
+
+      // Each message goes away once its field is fixed.
+      Finder field(String label) => find.descendant(
+        of: find.widgetWithText(InlineTextRow, label),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(field('Description'), 'New filter');
+      await tester.pump();
+      expect(find.text('Enter a description'), findsNothing);
+      expect(find.text(r'Enter an amount above $0'), findsOneWidget);
+
+      await tester.enterText(field('Amount'), '25');
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      // Back on the calendar, it's counted and listed, and marked on its day.
+      expect(showingExpenses(tester), isTrue);
+      expect(find.text('New filter'), findsOneWidget);
+      expect(find.text(r'$25.00'), findsNWidgets(2));
+      final today = DateTime.now();
+      expect(
+        find.bySemanticsLabel(
+          '${monthName(today.month)} ${today.day}, 1 expense',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('work like tasks: by week, month or year, or one day', (
+      tester,
+    ) async {
+      final now = DateTime.now();
+      await pumpApp(tester);
+      await addTasks(tester, []);
+      await spend(tester, 'New filter', 25, now);
+      await spend(tester, 'Roof repair', 400, DateTime(now.year - 1, 6, 10));
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+
+      // The calendar starts on tasks, and switches to expenses.
+      expect(showingExpenses(tester), isFalse);
+      expect(find.byTooltip('Add expense'), findsNothing);
+      await tester.tap(find.text('Expenses'));
+      await tester.pumpAndSettle();
+      expect(showingExpenses(tester), isTrue);
+
+      // The total is at the top, large, and the expenses under the calendar.
+      final total = find.text(r'$25.00').first;
+      final calendar = tester.getRect(find.byType(PageView));
+      expect(find.bySemanticsLabel(r'Spent this month, $25.00'), findsOne);
+      expect(tester.getBottomLeft(total).dy, lessThan(calendar.top));
+      expect(
+        tester.getTopLeft(find.text('New filter')).dy,
+        greaterThan(calendar.bottom),
+      );
+      expect(
+        tester.widget<Text>(total).style!.fontSize,
+        greaterThanOrEqualTo(22),
+      );
+
+      expect(find.text('Roof repair'), findsNothing);
+
+      // A day narrows it to that day.
+      await tester.tap(
+        find.bySemanticsLabel('${monthName(now.month)} ${now.day}, 1 expense'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel(r'Spent this day, $25.00'), findsOne);
+      expect(find.text('New filter'), findsOneWidget);
+      await tester.tap(find.text('Show whole month'));
+      await tester.pumpAndSettle();
+
+      // A year lists each month so far, which opens to show its expenses.
+      await showPeriod(tester, 'Year');
+      expect(find.bySemanticsLabel(r'Spent this year, $25.00'), findsOne);
+      await scrollTo(tester, find.text(monthName(now.month)));
+      expect(find.text('1 expense'), findsOneWidget);
+      expect(find.text('New filter'), findsNothing);
+      await tester.tap(find.text(monthName(now.month)));
+      await tester.pumpAndSettle();
+      expect(find.text('New filter'), findsOneWidget);
+
+      // Earlier years are a swipe away, with what each month cost on the
+      // calendar too.
+      await tester.dragUntilVisible(
+        find.byTooltip('Show week, month or year'),
+        find.byType(ListView).first,
+        const Offset(0, 300),
+      );
+      await swipeCalendar(tester, back: true);
+      // The title names the year, so the total is just the total.
+      expect(find.text('${now.year - 1}'), findsOneWidget);
+      expect(find.bySemanticsLabel(r'Total spent, $400.00'), findsOne);
+      expect(find.bySemanticsLabel(r'June, $400.00 spent'), findsOneWidget);
+      expect(find.text(r'$400.00'), findsNWidgets(3));
+
+      // And back to tasks, which has no total or +.
+      await tester.dragUntilVisible(
+        find.text('Tasks'),
+        find.byType(ListView).first,
+        const Offset(0, -300),
+      );
+      await tester.tap(find.text('Tasks'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel(RegExp('^Total spent')), findsNothing);
+      expect(find.byTooltip('Add expense'), findsNothing);
+    });
+
+    testWidgets('need a home item to add an expense to', (tester) async {
+      await pumpApp(tester);
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Expenses'));
+      await tester.pumpAndSettle();
+
+      final add = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.add),
+      );
+      expect(add.onPressed, isNull);
+      expect(find.textContaining('Add a home item'), findsOneWidget);
+    });
   });
 
   testWidgets('turning on a reminder with notifications blocked says so', (

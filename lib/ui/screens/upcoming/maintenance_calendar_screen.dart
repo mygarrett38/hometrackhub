@@ -7,15 +7,43 @@ import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../widgets/task_section_card.dart';
+import '../expenses/add_expense_screen.dart';
+import '../expenses/expense_views.dart';
 
-/// Calendar tab: a week, month or year of maintenance, with every task due
-/// or completed in that time listed below it. Tapping a day narrows the list
-/// to that day.
+/// What the calendar shows: maintenance tasks, or money spent.
+enum CalendarView {
+  tasks('Tasks', Icons.task_alt),
+  expenses('Expenses', Icons.payments_outlined);
+
+  const CalendarView(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
+/// Asks the calendar to show the expenses of the current month or year
+/// ([period]), as when the Overview's spending is tapped. Each request is
+/// acted on once, so asking again takes a new one.
+class ShowExpensesRequest {
+  ShowExpensesRequest(this.period);
+
+  final CalendarPeriod period;
+}
+
+/// Calendar tab: a week, month or year of maintenance or of spending. For
+/// tasks, every task due or completed in that time is listed below the
+/// calendar. For expenses, the total spent is
+/// at the top right, and the expenses are listed below the calendar. The
+/// switch between them is between the calendar and the list, with + beside
+/// it to add an expense. Tapping a day narrows the list to that day.
 ///
 /// Its data comes directly from [HomeItemController], so adding or editing an
 /// appliance/task is reflected as soon as this screen rebuilds.
 class MaintenanceCalendarScreen extends StatefulWidget {
-  const MaintenanceCalendarScreen({super.key});
+  const MaintenanceCalendarScreen({super.key, this.showExpenses});
+
+  /// The latest request to show expenses.
+  final ShowExpensesRequest? showExpenses;
 
   @override
   State<MaintenanceCalendarScreen> createState() =>
@@ -43,6 +71,9 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
   /// The day the list is narrowed to, or `null` to list the whole period.
   DateTime? _selectedDay;
 
+  /// Whether tasks or expenses are shown.
+  CalendarView _view = CalendarView.tasks;
+
   late final PageController _pages;
 
   @override
@@ -52,6 +83,19 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
     _focusDay = _anchorDay;
     _pages = PageController(initialPage: _anchorPage);
     _period = context.read<SettingsController>().settings.calendarPeriod;
+  }
+
+  @override
+  void didUpdateWidget(MaintenanceCalendarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final request = widget.showExpenses;
+    if (request != null && !identical(request, oldWidget.showExpenses)) {
+      _view = CalendarView.expenses;
+      // Once built, as moving the pages changes them.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _show(dateOnly(DateTime.now()), request.period);
+      });
+    }
   }
 
   @override
@@ -153,11 +197,15 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
     final today = dateOnly(DateTime.now());
     final range = _periodOf(_focusDay);
     final selectedDay = _selectedDay;
-    final listed = _ListedTasks.between(
-      controller,
-      selectedDay == null ? range : _DayRange.days(selectedDay, 1),
-      today,
-    );
+    // The period, or the day picked in it.
+    final listRange = selectedDay == null
+        ? range
+        : _DayRange.days(selectedDay, 1);
+    final listed = _ListedTasks.between(controller, listRange, today);
+    final showExpenses = _view == CalendarView.expenses;
+    final spending = showExpenses
+        ? spendingOn(controller.homeItems, listRange.contains)
+        : const <Spending>[];
     final sections = {
       'Overdue': listed.overdue,
       'Due': listed.due,
@@ -216,6 +264,14 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
                       ),
                     ),
                   ),
+                  if (showExpenses) ...[
+                    _SpentTotal(
+                      label: _spentLabel(listRange, today),
+                      total: totalOf(spending),
+                    ),
+                    // Lined up with the cards below, 16 from the edge.
+                    const SizedBox(width: 12),
+                  ],
                 ],
               ),
             ),
@@ -231,6 +287,47 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
               ),
             ),
             const Divider(height: 12),
+            // Switches between tasks and expenses, with + beside it to add
+            // an expense.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<CalendarView>(
+                      segments: [
+                        for (final view in CalendarView.values)
+                          ButtonSegment(
+                            value: view,
+                            icon: Icon(view.icon),
+                            label: Text(view.label),
+                          ),
+                      ],
+                      selected: {_view},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (views) =>
+                          setState(() => _view = views.single),
+                    ),
+                  ),
+                  if (showExpenses) ...[
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Add expense',
+                      icon: const Icon(Icons.add),
+                      // Expenses are spent on a home item, so there must be
+                      // one.
+                      onPressed: controller.homeItems.isEmpty
+                          ? null
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const AddExpenseScreen(),
+                              ),
+                            ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
             if (selectedDay != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
@@ -250,7 +347,9 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
                   ],
                 ),
               ),
-            if (controller.hasNoTasks)
+            if (showExpenses)
+              ..._expenses(controller, listRange, spending, today)
+            else if (controller.hasNoTasks)
               const _EmptyMessage(
                 'No maintenance scheduled yet.\n\n'
                 'Add your appliances, vehicles and other home items on the '
@@ -288,6 +387,55 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
     );
   }
 
+  /// What the total at the top right is of, read aloud with it: the day
+  /// picked, this week, month or year, or another one, which the title
+  /// names.
+  String _spentLabel(_DayRange range, DateTime today) {
+    if (_selectedDay != null) return 'Spent this day';
+    if (range.contains(today)) return 'Spent this ${_period.name}';
+    return 'Total spent';
+  }
+
+  /// Under the calendar for expenses: what was spent in [range], the period
+  /// or the day picked in it. For a whole year, each month's total, which
+  /// opens to list its expenses.
+  List<Widget> _expenses(
+    HomeItemController controller,
+    _DayRange range,
+    List<Spending> spending,
+    DateTime today,
+  ) {
+    final selectedDay = _selectedDay;
+    return [
+      if (controller.homeItems.isEmpty)
+        const _EmptyMessage(
+          'Add a home item on the My Home tab, then record what you spend '
+          'on it here.',
+        )
+      else if (_period == CalendarPeriod.year && selectedDay == null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ExpensesByMonth(
+            year: range.start.year,
+            spending: spending,
+            // Months still to come this year are left out.
+            months: range.start.year == today.year ? today.month : 12,
+          ),
+        )
+      else if (spending.isEmpty)
+        _EmptyMessage(
+          selectedDay != null
+              ? 'No expenses on this day'
+              : 'No expenses this ${_period.name}',
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: ExpenseList(spending: spending),
+        ),
+    ];
+  }
+
   String _title(_DayRange range) {
     final start = range.start;
     switch (_period) {
@@ -316,11 +464,28 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
     DateTime today,
   ) {
     final range = _periodOf(_dayOnPage(page));
+    final colors = Theme.of(context).colorScheme;
+    final showExpenses = _view == CalendarView.expenses;
     if (_period == CalendarPeriod.year) {
+      final year = range.start.year;
       return _YearGrid(
-        year: range.start.year,
+        year: year,
         controller: controller,
         today: today,
+        spentByMonth: showExpenses
+            ? {
+                for (var month = 1; month <= 12; month++)
+                  month: totalOf(
+                    spendingOn(
+                      controller.homeItems,
+                      _DayRange(
+                        DateTime(year, month),
+                        DateTime(year, month + 1),
+                      ).contains,
+                    ),
+                  ),
+              }
+            : null,
         onMonthTap: (month) => _show(
           month.year == today.year && month.month == today.month
               ? today
@@ -342,10 +507,49 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
             range.start.month,
             range.start.day + 3,
           ).month;
+    // A dot under a day for each task due or done on it, or each expense.
+    final Map<DateTime, List<Color>> dots;
+    final String Function(DateTime day) describe;
+    if (showExpenses) {
+      final perDay = <DateTime, int>{};
+      for (final (:expense, homeItem: _) in spendingOn(
+        controller.homeItems,
+        days.contains,
+      )) {
+        final day = dateOnly(expense.date);
+        perDay[day] = (perDay[day] ?? 0) + 1;
+      }
+      dots = {
+        for (final MapEntry(key: day, value: count) in perDay.entries)
+          day: List.filled(count, colors.tertiary),
+      };
+      describe = (day) {
+        final count = perDay[day] ?? 0;
+        return '${monthName(day.month)} ${day.day}, '
+            '$count ${count == 1 ? 'expense' : 'expenses'}';
+      };
+    } else {
+      final markers = _DayMarkers.between(controller, days, today);
+      dots = {
+        for (final day in {...markers.dueByDay.keys, ...markers.doneByDay.keys})
+          day: [
+            // Due dots come first, then completed ones.
+            for (var i = 0; i < (markers.dueByDay[day] ?? 0); i++)
+              day.isBefore(today) ? colors.error : colors.primary,
+            for (var i = 0; i < (markers.doneByDay[day] ?? 0); i++)
+              colors.outline,
+          ],
+      };
+      describe = (day) =>
+          '${monthName(day.month)} ${day.day}, '
+          '${markers.dueByDay[day] ?? 0} due, '
+          '${markers.doneByDay[day] ?? 0} completed';
+    }
     return _DayGrid(
       days: days,
       month: month,
-      markers: _DayMarkers.between(controller, days, today),
+      dots: dots,
+      describe: describe,
       today: today,
       selectedDay: _selectedDay,
       onDayTap: (day) {
@@ -356,6 +560,33 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
           setState(() => _selectedDay = _selectedDay == day ? null : day);
         }
       },
+    );
+  }
+}
+
+/// What was spent, at the top right of the calendar, in large type. The
+/// title beside it says when, so [label], such as "Spent this month", is
+/// only read aloud.
+class _SpentTotal extends StatelessWidget {
+  const _SpentTotal({required this.label, required this.total});
+
+  final String label;
+  final double total;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      // Read on its own, rather than run together with the title.
+      container: true,
+      label: '$label, ${formatMoney(total)}',
+      excludeSemantics: true,
+      child: Text(
+        formatMoney(total),
+        style: theme.textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
@@ -403,13 +634,14 @@ class _WeekdayLabels extends StatelessWidget {
   }
 }
 
-/// The days of a week or month, with dots under each day for the tasks due
-/// or completed on it. Days from other months are faded.
+/// The days of a week or month, with [dots] under each day, such as for the
+/// tasks due or completed on it. Days from other months are faded.
 class _DayGrid extends StatelessWidget {
   const _DayGrid({
     required this.days,
     required this.month,
-    required this.markers,
+    required this.dots,
+    required this.describe,
     required this.today,
     required this.selectedDay,
     required this.onDayTap,
@@ -429,7 +661,13 @@ class _DayGrid extends StatelessWidget {
 
   /// The month being shown. Days in other months are faded.
   final int month;
-  final _DayMarkers markers;
+
+  /// The colors of the dots under each day, three at most shown.
+  final Map<DateTime, List<Color>> dots;
+
+  /// What a day has on it, read aloud, such as "March 3, 2 due, 1
+  /// completed".
+  final String Function(DateTime day) describe;
   final DateTime today;
   final DateTime? selectedDay;
   final ValueChanged<DateTime> onDayTap;
@@ -454,8 +692,6 @@ class _DayGrid extends StatelessWidget {
             days.start.month,
             days.start.day + index,
           );
-          final due = markers.dueByDay[day] ?? 0;
-          final done = markers.doneByDay[day] ?? 0;
           final selected = day == selectedDay;
           final isToday = day == today;
           final color = selected
@@ -463,19 +699,12 @@ class _DayGrid extends StatelessWidget {
               : isToday
               ? colors.primaryContainer
               : Colors.transparent;
-          // Due dots come first, then completed ones, three at most.
-          final dueColor = day.isBefore(today) ? colors.error : colors.primary;
-          final dotColors = [
-            for (var i = 0; i < due; i++) dueColor,
-            for (var i = 0; i < done; i++) colors.outline,
-          ].take(3);
+          final dotColors = (dots[day] ?? const <Color>[]).take(3);
 
           return Semantics(
             button: true,
             selected: selected,
-            label:
-                '${monthName(day.month)} ${day.day}, $due due, '
-                '$done completed',
+            label: describe(day),
             excludeSemantics: true,
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -535,13 +764,15 @@ class _DayGrid extends StatelessWidget {
 }
 
 /// The twelve months of a year, each showing how many tasks are due and
-/// completed in it. Tapping a month opens it.
+/// completed in it, or with [spentByMonth], how much was spent in it.
+/// Tapping a month opens it.
 class _YearGrid extends StatelessWidget {
   const _YearGrid({
     required this.year,
     required this.controller,
     required this.today,
     required this.onMonthTap,
+    this.spentByMonth,
   });
 
   static const _cardHeight = 60.0;
@@ -555,6 +786,10 @@ class _YearGrid extends StatelessWidget {
   final HomeItemController controller;
   final DateTime today;
   final ValueChanged<DateTime> onMonthTap;
+
+  /// What was spent in each month, from 1 for January, to show instead of
+  /// tasks.
+  final Map<int, double>? spentByMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -580,12 +815,15 @@ class _YearGrid extends StatelessWidget {
           );
           final due = listed.overdue.length + listed.due.length;
           final done = listed.completed.length;
+          final spent = spentByMonth?[month.month];
           final isThisMonth =
               month.year == today.year && month.month == today.month;
 
           return Semantics(
             button: true,
-            label: '${monthName(month.month)}, $due due, $done completed',
+            label: spent != null
+                ? '${monthName(month.month)}, ${formatMoney(spent)} spent'
+                : '${monthName(month.month)}, $due due, $done completed',
             excludeSemantics: true,
             child: Material(
               // Other months match the cards used on the other screens.
@@ -614,32 +852,42 @@ class _YearGrid extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      // Both counts share one line to keep the card short.
-                      Text.rich(
-                        TextSpan(
-                          children: [
-                            if (due > 0)
-                              TextSpan(
-                                text: '$due due',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurface,
+                      if (spent != null)
+                        Text(
+                          spent > 0 ? formatMoney(spent) : '',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      else
+                        // Both counts share one line to keep the card short.
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              if (due > 0)
+                                TextSpan(
+                                  text: '$due due',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onSurface,
+                                  ),
                                 ),
-                              ),
-                            if (due > 0 && done > 0)
-                              const TextSpan(text: ' · '),
-                            if (done > 0)
-                              TextSpan(
-                                text: '$done done',
-                                style: TextStyle(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                              if (due > 0 && done > 0)
+                                const TextSpan(text: ' · '),
+                              if (done > 0)
+                                TextSpan(
+                                  text: '$done done',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
+                          style: theme.textTheme.bodySmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        style: theme.textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ],
                   ),
                 ),

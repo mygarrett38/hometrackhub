@@ -37,6 +37,9 @@ Future<DateTime?> pickPastDate(BuildContext context, {DateTime? initialDate}) {
 ///
 /// If [onHelp] is given, a help button next to the label calls it, for
 /// example to explain why the field can't be changed.
+///
+/// [keyboardType] and [prefixText] suit the field to what's typed, such as
+/// a number keyboard and "$" for an amount of money.
 class InlineTextRow extends StatelessWidget {
   const InlineTextRow({
     super.key,
@@ -49,6 +52,8 @@ class InlineTextRow extends StatelessWidget {
     this.onObscureTextChanged,
     this.readOnly = false,
     this.onHelp,
+    this.keyboardType,
+    this.prefixText,
   });
 
   final String label;
@@ -60,6 +65,8 @@ class InlineTextRow extends StatelessWidget {
   final ValueChanged<bool>? onObscureTextChanged;
   final bool readOnly;
   final VoidCallback? onHelp;
+  final TextInputType? keyboardType;
+  final String? prefixText;
 
   @override
   Widget build(BuildContext context) {
@@ -92,8 +99,10 @@ class InlineTextRow extends StatelessWidget {
               textCapitalization: TextCapitalization.sentences,
               obscureText: obscureText,
               readOnly: readOnly,
+              keyboardType: keyboardType,
               decoration: InputDecoration(
                 hintText: hint,
+                prefixText: prefixText,
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -128,6 +137,7 @@ class InlineDateRow extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.emptyText = 'Unknown',
+    this.canClear = true,
   });
 
   final String label;
@@ -137,10 +147,14 @@ class InlineDateRow extends StatelessWidget {
   /// Shown when [value] is `null`.
   final String emptyText;
 
+  /// Whether a button clears the date. False for a date that's required.
+  final bool canClear;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final date = value;
+    final showClear = date != null && canClear;
 
     return InkWell(
       onTap: () async {
@@ -150,7 +164,7 @@ class InlineDateRow extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: formRowHeight),
         child: Padding(
-          padding: EdgeInsets.only(left: 16, right: date == null ? 16 : 4),
+          padding: EdgeInsets.only(left: 16, right: showClear ? 4 : 16),
           child: Row(
             children: [
               Text(label, style: theme.textTheme.bodyLarge),
@@ -167,7 +181,7 @@ class InlineDateRow extends StatelessWidget {
                       : null,
                 ),
               ),
-              if (date != null)
+              if (showClear)
                 IconButton(
                   icon: const Icon(Icons.clear),
                   tooltip: 'Clear date',
