@@ -33,6 +33,7 @@ class AppSettings {
     this.overdueReminderDays = 1,
     this.themeMode = ThemeMode.system,
     this.calendarPeriod = CalendarPeriod.month,
+    this.expensesEnabled = false,
     this.networkDiscoveryEnabled = true,
     this.hideDetailsInNotifications = false,
     this.hideSerialNumbers = true,
@@ -91,6 +92,11 @@ class AppSettings {
   /// month or year.
   /// The Spent card counts this month or year.
   final CalendarPeriod calendarPeriod;
+
+  /// Whether the user tracks what they spend on their home items: on the
+  /// Overview's Spent card, and as the calendar's expenses. Off by default.
+  /// Expenses already recorded are kept while it's off.
+  final bool expensesEnabled;
 
   // Privacy
   /// Whether the app may scan the local network for smart devices.
@@ -176,6 +182,7 @@ class AppSettings {
     int? overdueReminderDays,
     ThemeMode? themeMode,
     CalendarPeriod? calendarPeriod,
+    bool? expensesEnabled,
     bool? networkDiscoveryEnabled,
     bool? hideDetailsInNotifications,
     bool? hideSerialNumbers,
@@ -202,6 +209,7 @@ class AppSettings {
       overdueReminderDays: overdueReminderDays ?? this.overdueReminderDays,
       themeMode: themeMode ?? this.themeMode,
       calendarPeriod: calendarPeriod ?? this.calendarPeriod,
+      expensesEnabled: expensesEnabled ?? this.expensesEnabled,
       networkDiscoveryEnabled:
           networkDiscoveryEnabled ?? this.networkDiscoveryEnabled,
       hideDetailsInNotifications:
@@ -233,6 +241,7 @@ class AppSettings {
     'overdueReminderDays': overdueReminderDays,
     'themeMode': themeMode.name,
     'calendarPeriod': calendarPeriod.name,
+    'expensesEnabled': expensesEnabled,
     'networkDiscoveryEnabled': networkDiscoveryEnabled,
     'hideDetailsInNotifications': hideDetailsInNotifications,
     'hideSerialNumbers': hideSerialNumbers,
@@ -281,6 +290,8 @@ class AppSettings {
       calendarPeriod: periodName == null
           ? defaults.calendarPeriod
           : CalendarPeriod.values.byName(periodName),
+      expensesEnabled:
+          json['expensesEnabled'] as bool? ?? defaults.expensesEnabled,
       networkDiscoveryEnabled:
           json['networkDiscoveryEnabled'] as bool? ??
           defaults.networkDiscoveryEnabled,

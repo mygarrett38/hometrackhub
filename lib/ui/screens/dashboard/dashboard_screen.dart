@@ -263,10 +263,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                         onTap: () => _toggleSection(_TaskSection.completed),
                       ),
                       _SummaryCard(
-                        label: 'Spent This ${budgetPeriod.label}',
+                        label: settings.expensesEnabled
+                            ? 'Spent This ${budgetPeriod.label}'
+                            : 'Expense tracking disabled',
                         value: '\$${spentInPeriod.toStringAsFixed(2)}',
                         icon: Icons.account_balance_wallet_outlined,
                         color: colors.tertiary,
+                        // Turned on in Appearance settings.
+                        enabled: settings.expensesEnabled,
                         // The calendar's expenses, for the month or year
                         // counted here.
                         onTap: () => widget.onShowExpenses?.call(budgetPeriod),
@@ -394,6 +398,7 @@ class _SummaryCard extends StatelessWidget {
     required this.icon,
     required this.color,
     this.selected = false,
+    this.enabled = true,
     this.onTap,
   });
 
@@ -402,6 +407,10 @@ class _SummaryCard extends StatelessWidget {
   final IconData icon;
   final Color color;
 
+  /// Whether what the card counts is turned on. When it isn't, the card is
+  /// greyed out with only its [label], which says so, and can't be tapped.
+  final bool enabled;
+
   /// Whether only this card's tasks are listed below the cards. A selected
   /// card is outlined in its [color].
   final bool selected;
@@ -409,6 +418,9 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final disabledColor = theme.colorScheme.onSurface.withValues(alpha: 0.38);
+    final color = enabled ? this.color : disabledColor;
     return Card(
       clipBehavior: Clip.antiAlias,
       // The same corners as other cards.
@@ -417,9 +429,10 @@ class _SummaryCard extends StatelessWidget {
         side: selected ? BorderSide(color: color, width: 2) : BorderSide.none,
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         child: Semantics(
           selected: selected,
+          enabled: enabled,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -430,20 +443,29 @@ class _SummaryCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        value,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: color,
-                            ),
+                    // Left out when turned off, but its space is kept so
+                    // the cards line up.
+                    Visibility.maintain(
+                      visible: enabled,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          value,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: color,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(label, style: Theme.of(context).textTheme.labelLarge),
+                    Text(
+                      label,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: enabled ? null : disabledColor,
+                      ),
+                    ),
                   ],
                 ),
               ],

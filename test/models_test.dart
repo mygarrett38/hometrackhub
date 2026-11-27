@@ -143,6 +143,13 @@ void main() {
     expect(AppSettings.fromJson(settings.toJson()).hideSerialNumbers, isFalse);
   });
 
+  test('expense tracking is off until turned on, and is saved', () {
+    expect(const AppSettings().expensesEnabled, isFalse);
+    expect(AppSettings.fromJson({}).expensesEnabled, isFalse);
+    const settings = AppSettings(expensesEnabled: true);
+    expect(AppSettings.fromJson(settings.toJson()).expensesEnabled, isTrue);
+  });
+
   test('the calendar view setting survives a JSON round trip', () {
     const settings = AppSettings(calendarPeriod: CalendarPeriod.year);
     expect(

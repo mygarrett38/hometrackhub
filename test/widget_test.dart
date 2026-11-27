@@ -193,6 +193,18 @@ Future<void> pumpApp(
   await tester.pumpAndSettle();
 }
 
+/// Starts the app as [pumpApp] does, with expense tracking turned on in
+/// Appearance settings.
+Future<void> pumpAppTrackingExpenses(WidgetTester tester) => pumpApp(
+  tester,
+  savedData: {
+    'settings_v1': jsonEncode({
+      ...const AppSettings().toJson(),
+      'expensesEnabled': true,
+    }),
+  },
+);
+
 /// Starts the app with fake services, leaving the launch animation at its
 /// first frame.
 ///
@@ -1227,7 +1239,7 @@ void main() {
     testWidgets("are opened from the Overview's spending, and added with +", (
       tester,
     ) async {
-      await pumpApp(tester);
+      await pumpAppTrackingExpenses(tester);
       await addTasks(tester, []);
 
       // The Overview's spending opens the calendar's expenses, this month.
@@ -1301,7 +1313,7 @@ void main() {
       tester,
     ) async {
       final now = DateTime.now();
-      await pumpApp(tester);
+      await pumpAppTrackingExpenses(tester);
       await addTasks(tester, []);
       await spend(tester, 'New filter', 25, now);
       await spend(tester, 'Roof repair', 400, DateTime(now.year - 1, 6, 10));
@@ -1341,15 +1353,12 @@ void main() {
       await tester.tap(find.text('Show whole month'));
       await tester.pumpAndSettle();
 
-      // A year lists each month so far, which opens to show its expenses.
+      // A year lists all its expenses, not grouped by month.
       await showPeriod(tester, 'Year');
       expect(find.bySemanticsLabel(r'Spent this year, $25.00'), findsOne);
-      await scrollTo(tester, find.text(monthName(now.month)));
-      expect(find.text('1 expense'), findsOneWidget);
-      expect(find.text('New filter'), findsNothing);
-      await tester.tap(find.text(monthName(now.month)));
-      await tester.pumpAndSettle();
+      await scrollTo(tester, find.text('New filter'));
       expect(find.text('New filter'), findsOneWidget);
+      expect(find.text('1 expense'), findsNothing);
 
       // Earlier years are a swipe away, with what each month cost on the
       // calendar too.
@@ -1377,8 +1386,61 @@ void main() {
       expect(find.byTooltip('Add expense'), findsNothing);
     });
 
-    testWidgets('need a home item to add an expense to', (tester) async {
+    testWidgets('are off until turned on in Appearance settings', (
+      tester,
+    ) async {
       await pumpApp(tester);
+      await addTasks(tester, []);
+
+      // The Overview's spending card is greyed out, and does nothing.
+      final card = find.text('Expense tracking disabled');
+      expect(card, findsOneWidget);
+      expect(find.text('Spent This Month'), findsNothing);
+      await scrollTo(tester, card);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      expect(find.text('Your home at a glance'), findsOneWidget);
+
+      // The calendar only has tasks.
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedButton<CalendarView>), findsNothing);
+      expect(find.byTooltip('Add expense'), findsNothing);
+
+      Future<void> setTracking() async {
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Appearance'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Track expenses'));
+        await tester.pumpAndSettle();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+
+      // Turned on, the calendar can show expenses, and the Overview counts
+      // them.
+      await setTracking();
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Expenses'));
+      await tester.pumpAndSettle();
+      expect(showingExpenses(tester), isTrue);
+      await tester.tap(find.byTooltip('Overview'));
+      await tester.pumpAndSettle();
+      expect(find.text('Spent This Month'), findsOneWidget);
+
+      // Turned off again, the calendar goes back to tasks.
+      await setTracking();
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SegmentedButton<CalendarView>), findsNothing);
+      expect(find.text('No expenses this month'), findsNothing);
+      expect(find.textContaining('No maintenance scheduled'), findsOneWidget);
+    });
+
+    testWidgets('need a home item to add an expense to', (tester) async {
+      await pumpAppTrackingExpenses(tester);
       await tester.tap(find.text('Calendar'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Expenses'));
@@ -3224,7 +3286,7 @@ void main() {
     bool showsWeek() =>
         tester.widget<Text>(calendarTitle.first).data!.contains(' – ');
 
-    await pumpApp(tester);
+    await pumpAppTrackingExpenses(tester);
     expect(find.text('Recently Completed'), findsOneWidget);
     expect(find.text('Spent This Month'), findsOneWidget);
 

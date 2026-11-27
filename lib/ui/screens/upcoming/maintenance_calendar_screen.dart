@@ -202,7 +202,12 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
         ? range
         : _DayRange.days(selectedDay, 1);
     final listed = _ListedTasks.between(controller, listRange, today);
-    final showExpenses = _view == CalendarView.expenses;
+    // Expenses can be turned off in Appearance settings, which leaves just
+    // the tasks.
+    final expensesEnabled = context.select<SettingsController, bool>(
+      (controller) => controller.settings.expensesEnabled,
+    );
+    final showExpenses = expensesEnabled && _view == CalendarView.expenses;
     final spending = showExpenses
         ? spendingOn(controller.homeItems, listRange.contains)
         : const <Spending>[];
@@ -289,45 +294,46 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
             const Divider(height: 12),
             // Switches between tasks and expenses, with + beside it to add
             // an expense.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SegmentedButton<CalendarView>(
-                      segments: [
-                        for (final view in CalendarView.values)
-                          ButtonSegment(
-                            value: view,
-                            icon: Icon(view.icon),
-                            label: Text(view.label),
-                          ),
-                      ],
-                      selected: {_view},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (views) =>
-                          setState(() => _view = views.single),
-                    ),
-                  ),
-                  if (showExpenses) ...[
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: 'Add expense',
-                      icon: const Icon(Icons.add),
-                      // Expenses are spent on a home item, so there must be
-                      // one.
-                      onPressed: controller.homeItems.isEmpty
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const AddExpenseScreen(),
-                              ),
+            if (expensesEnabled)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<CalendarView>(
+                        segments: [
+                          for (final view in CalendarView.values)
+                            ButtonSegment(
+                              value: view,
+                              icon: Icon(view.icon),
+                              label: Text(view.label),
                             ),
+                        ],
+                        selected: {_view},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (views) =>
+                            setState(() => _view = views.single),
+                      ),
                     ),
+                    if (showExpenses) ...[
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: 'Add expense',
+                        icon: const Icon(Icons.add),
+                        // Expenses are spent on a home item, so there must be
+                        // one.
+                        onPressed: controller.homeItems.isEmpty
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const AddExpenseScreen(),
+                                ),
+                              ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
             if (selectedDay != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
@@ -348,7 +354,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
                 ),
               ),
             if (showExpenses)
-              ..._expenses(controller, listRange, spending, today)
+              ..._expenses(controller, spending)
             else if (controller.hasNoTasks)
               const _EmptyMessage(
                 'No maintenance scheduled yet.\n\n'
@@ -396,14 +402,11 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
     return 'Total spent';
   }
 
-  /// Under the calendar for expenses: what was spent in [range], the period
-  /// or the day picked in it. For a whole year, each month's total, which
-  /// opens to list its expenses.
+  /// Under the calendar for expenses: [spending], what was spent in the
+  /// period or the day picked in it, latest first.
   List<Widget> _expenses(
     HomeItemController controller,
-    _DayRange range,
     List<Spending> spending,
-    DateTime today,
   ) {
     final selectedDay = _selectedDay;
     return [
@@ -411,16 +414,6 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
         const _EmptyMessage(
           'Add a home item on the My Home tab, then record what you spend '
           'on it here.',
-        )
-      else if (_period == CalendarPeriod.year && selectedDay == null)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: ExpensesByMonth(
-            year: range.start.year,
-            spending: spending,
-            // Months still to come this year are left out.
-            months: range.start.year == today.year ? today.month : 12,
-          ),
         )
       else if (spending.isEmpty)
         _EmptyMessage(
@@ -465,7 +458,9 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
   ) {
     final range = _periodOf(_dayOnPage(page));
     final colors = Theme.of(context).colorScheme;
-    final showExpenses = _view == CalendarView.expenses;
+    final showExpenses =
+        _view == CalendarView.expenses &&
+        context.read<SettingsController>().settings.expensesEnabled;
     if (_period == CalendarPeriod.year) {
       final year = range.start.year;
       return _YearGrid(

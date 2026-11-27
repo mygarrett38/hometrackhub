@@ -7,8 +7,9 @@ import '../../widgets/screen_padding.dart';
 import '../../widgets/settings_card.dart';
 import '../../widgets/settings_dropdown_row.dart';
 
-/// Lets the user choose light mode, dark mode, or follow the device, and
-/// how much time the calendar and Overview show.
+/// Lets the user choose light mode, dark mode, or follow the device, how
+/// much time the calendar and Overview show, and whether expenses are
+/// tracked.
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
 
@@ -57,6 +58,21 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 },
                 onChanged: (period) => controller.update(
                   settings.copyWith(calendarPeriod: period),
+                ),
+              ),
+            ],
+          ),
+          SettingsCard(
+            children: [
+              SwitchListTile(
+                secondary: const Icon(Icons.payments_outlined),
+                title: const Text('Track expenses'),
+                subtitle: const Text(
+                  'Record what you spend on your home items.',
+                ),
+                value: settings.expensesEnabled,
+                onChanged: (enabled) => controller.update(
+                  settings.copyWith(expensesEnabled: enabled),
                 ),
               ),
             ],
