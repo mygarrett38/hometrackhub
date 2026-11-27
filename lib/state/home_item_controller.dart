@@ -143,6 +143,37 @@ class HomeItemController extends ChangeNotifier {
     );
   }
 
+  /// Adds [expense] to the home item, or replaces the expense with the same
+  /// id, moving it there if it was recorded on another home item.
+  Future<void> saveExpense(String homeItemId, HomeExpense expense) async {
+    if (findById(homeItemId) == null) return;
+
+    bool hasIt(HomeItem item) =>
+        item.expenses.any((existing) => existing.id == expense.id);
+    _homeItems = [
+      for (final item in _homeItems)
+        if (item.id == homeItemId)
+          item.copyWith(
+            expenses: hasIt(item)
+                ? [
+                    for (final existing in item.expenses)
+                      existing.id == expense.id ? expense : existing,
+                  ]
+                : [...item.expenses, expense],
+          )
+        else if (hasIt(item))
+          item.copyWith(
+            expenses: [
+              for (final existing in item.expenses)
+                if (existing.id != expense.id) existing,
+            ],
+          )
+        else
+          item,
+    ];
+    await _saveAndNotify();
+  }
+
   Future<void> deleteExpense(String homeItemId, String expenseId) async {
     final homeItem = findById(homeItemId);
     if (homeItem == null) return;

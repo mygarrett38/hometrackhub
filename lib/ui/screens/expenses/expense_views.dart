@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/home_expense.dart';
 import '../../../models/home_item.dart';
 import '../../../utils/date_utils.dart';
+import 'expense_form_screen.dart';
 
 /// One expense and the home item it was spent on.
 typedef Spending = ({HomeItem homeItem, HomeExpense expense});
@@ -26,7 +27,8 @@ double totalOf(Iterable<Spending> spending) =>
 /// An amount of money, such as "$25.00".
 String formatMoney(double amount) => '\$${amount.toStringAsFixed(2)}';
 
-/// [spending] in a card, one expense to a row, in the order given.
+/// [spending] in a card, one expense to a row, in the order given. Each
+/// opens to be edited or deleted.
 class ExpenseList extends StatelessWidget {
   const ExpenseList({super.key, required this.spending});
 
@@ -49,6 +51,7 @@ class ExpenseList extends StatelessWidget {
 }
 
 /// One expense: what it was for, the home item and date, and how much.
+/// Tapped, it opens to be edited or deleted.
 class _ExpenseTile extends StatelessWidget {
   const _ExpenseTile({required this.spending});
 
@@ -66,6 +69,11 @@ class _ExpenseTile extends StatelessWidget {
       trailing: Text(
         formatMoney(expense.amount),
         style: Theme.of(context).textTheme.titleMedium,
+      ),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ExpenseFormScreen(existing: spending),
+        ),
       ),
     );
   }

@@ -1386,6 +1386,121 @@ void main() {
       expect(find.byTooltip('Add expense'), findsNothing);
     });
 
+    testWidgets('can be changed, saving as they are, or deleted', (
+      tester,
+    ) async {
+      final now = DateTime.now();
+      await pumpAppTrackingExpenses(tester);
+      await addTasks(tester, []);
+      await tester
+          .element(find.byType(HomeShell))
+          .read<HomeItemController>()
+          .addHomeItem(
+            const HomeItem(
+              id: 'garage',
+              name: 'Garage',
+              category: HomeItemCategory.custom,
+            ),
+          );
+      await spend(tester, 'New filter', 25, now);
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Expenses'));
+      await tester.pumpAndSettle();
+
+      Finder field(String label) => find.descendant(
+        of: find.widgetWithText(InlineTextRow, label),
+        matching: find.byType(TextField),
+      );
+      Future<void> open() async {
+        await scrollTo(tester, find.text('New filter'));
+        await tester.tap(find.text('New filter'));
+        await tester.pumpAndSettle();
+      }
+
+      // Tapping it opens it, filled in as it was recorded.
+      await open();
+      expect(find.widgetWithText(AppBar, 'Edit expense'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(field('Description')).controller!.text,
+        'New filter',
+      );
+      expect(
+        tester.widget<TextField>(field('Amount')).controller!.text,
+        '25.00',
+      );
+
+      // There's nothing to tap to save it: changes are saved as they're
+      // made, once the user pauses typing.
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Add'), findsNothing);
+      HomeExpense saved(String homeItemId) => tester
+          .element(find.byType(HomeShell, skipOffstage: false))
+          .read<HomeItemController>()
+          .findById(homeItemId)!
+          .expenses
+          .single;
+      await tester.enterText(field('Description'), 'Air filter');
+      await tester.pump();
+      expect(saved('house').description, 'New filter');
+      await tester.pump(autosaveDelay);
+      expect(saved('house').description, 'Air filter');
+
+      // A mistake is pointed out, rather than saved.
+      await tester.enterText(field('Amount'), '0');
+      await tester.pump(autosaveDelay);
+      expect(find.text(r'Enter an amount above $0'), findsOneWidget);
+      expect(saved('house').amount, 25);
+
+      // Choosing another home item moves it there straight away, and typing
+      // still waiting to be saved is saved on going back.
+      await tester.enterText(field('Amount'), '30');
+      await tester.tap(find.text('House'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Garage').last);
+      await tester.pumpAndSettle();
+      expect(saved('garage').amount, 30);
+      expect(
+        tester
+            .element(find.byType(HomeShell, skipOffstage: false))
+            .read<HomeItemController>()
+            .findById('house')!
+            .expenses,
+        isEmpty,
+      );
+      await tester.enterText(field('Amount'), '35');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('New filter'), findsNothing);
+      expect(find.text('Air filter'), findsOneWidget);
+      expect(find.text(r'$35.00'), findsNWidgets(2));
+      expect(find.textContaining('Garage · '), findsOneWidget);
+      expect(saved('garage').id, 'New filter');
+
+      // Deleting it asks first.
+      await scrollTo(tester, find.text('Air filter'));
+      await tester.tap(find.text('Air filter'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Delete expense'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete "Air filter"?'), findsOneWidget);
+      expect(
+        find.text(r'$35.00 spent on Garage will no longer be counted.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Edit expense'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Delete expense'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(showingExpenses(tester), isTrue);
+      expect(find.text('Air filter'), findsNothing);
+      expect(find.text('No expenses this month'), findsOneWidget);
+    });
+
     testWidgets('are off until turned on in Appearance settings', (
       tester,
     ) async {

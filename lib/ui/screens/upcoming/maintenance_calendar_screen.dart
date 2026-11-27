@@ -7,7 +7,7 @@ import '../../../state/home_item_controller.dart';
 import '../../../state/settings_controller.dart';
 import '../../../utils/date_utils.dart';
 import '../../widgets/task_section_card.dart';
-import '../expenses/add_expense_screen.dart';
+import '../expenses/expense_form_screen.dart';
 import '../expenses/expense_views.dart';
 
 /// What the calendar shows: maintenance tasks, or money spent.
@@ -326,7 +326,7 @@ class _MaintenanceCalendarScreenState extends State<MaintenanceCalendarScreen>
                             ? null
                             : () => Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                  builder: (_) => const AddExpenseScreen(),
+                                  builder: (_) => const ExpenseFormScreen(),
                                 ),
                               ),
                       ),

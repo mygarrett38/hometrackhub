@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hometrackhub/data/home_item_catalog.dart';
 import 'package:hometrackhub/data/home_item_repository.dart';
+import 'package:hometrackhub/models/home_expense.dart';
 import 'package:hometrackhub/models/home_item.dart';
 import 'package:hometrackhub/models/home_item_category.dart';
 import 'package:hometrackhub/state/home_item_controller.dart';
@@ -52,6 +53,45 @@ void main() {
     expect(updated.lastCompleted, DateTime(2026, 3, 5));
     expect(updated.nextDueDate, task.interval.addTo(DateTime(2026, 3, 5)));
   });
+
+  test(
+    'saving an expense replaces it, or moves it to another home item',
+    () async {
+      final controller = createController();
+      await controller.addHomeItem(dishwasher());
+      await controller.addHomeItem(
+        const HomeItem(
+          id: 'furnace',
+          name: 'Furnace',
+          category: HomeItemCategory.custom,
+        ),
+      );
+      HomeExpense expense(String description, double amount) => HomeExpense(
+        id: description == 'Third' ? 'third' : 'repair',
+        description: description,
+        amount: amount,
+        date: DateTime(2026, 3, 5),
+      );
+      await controller.saveExpense('dishwasher', expense('Repair', 80));
+      await controller.saveExpense('dishwasher', expense('Third', 5));
+
+      // Changed in place, ahead of the one added after it.
+      await controller.saveExpense('dishwasher', expense('Pump repair', 90));
+      expect(
+        controller.findById('dishwasher')!.expenses.map((e) => e.description),
+        ['Pump repair', 'Third'],
+      );
+
+      // Moved, and saved for the next launch.
+      await controller.saveExpense('furnace', expense('Pump repair', 90));
+      final reloaded = createController();
+      expect(
+        reloaded.findById('dishwasher')!.expenses.map((e) => e.description),
+        ['Third'],
+      );
+      expect(reloaded.findById('furnace')!.expenses.single.amount, 90);
+    },
+  );
 
   test('allTasks lists the soonest due task first', () async {
     final controller = createController();
