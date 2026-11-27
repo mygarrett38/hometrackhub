@@ -717,10 +717,7 @@ void main() {
         await expectInDetails('Spark Electric', find.text('Closed today'));
         // Open or closed depending on when the test runs, but always with
         // today's hours.
-        await expectInDetails(
-          'Desk Hours Repair',
-          find.textContaining('· 8 AM – 5:30 PM'),
-        );
+        await expectInDetails('Desk Hours Repair', find.text('8 AM – 5:30 PM'));
       },
     );
 
@@ -731,9 +728,118 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('503 Main St, Springfield, IL'), findsOneWidget);
-      expect(find.text('Call'), findsOneWidget);
-      expect(find.text('Website'), findsOneWidget);
+      // The call button shows the number, and directions the distance, so
+      // they aren't listed separately too.
+      final call = find.text('(555) 555-0103');
+      final directions = find.text('2.1 miles');
+      final website = find.text('Website');
+      final pin = find.text('Pin to top');
+      expect(call, findsOneWidget);
+      expect(directions, findsOneWidget);
+      expect(find.textContaining('away'), findsNothing);
+      // Read aloud with what they do.
+      expect(find.bySemanticsLabel('Call (555) 555-0103'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Directions, 2.1 miles away'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Pin to top of results'), findsOneWidget);
+      // What it does is said by the rating and its name, not by tags.
+      expect(find.byType(Chip), findsNothing);
+
+      // One card: what the business is, then under a line, where it is.
+      Finder inDetails(Finder finder) =>
+          find.descendant(of: find.byType(BottomSheet), matching: finder);
+      final cards = inDetails(find.byType(Card));
+      expect(cards, findsOneWidget);
+      Finder inCard(Finder finder) =>
+          find.descendant(of: cards, matching: finder);
+      final name = inCard(find.text('BrightLine Electric'));
+      final address = inCard(find.text('503 Main St, Springfield, IL'));
+      final line = inCard(find.byType(Divider));
+      expect(inCard(find.text('4.9')), findsOneWidget);
+      expect(line, findsOneWidget);
+      expect(
+        tester.getCenter(line).dy,
+        allOf(
+          greaterThan(tester.getBottomLeft(name).dy),
+          lessThan(tester.getTopLeft(address).dy),
+        ),
+      );
+
+      // The buttons are below the cards. Calling and directions share the
+      // first line, half each, and the others are on lines of their own,
+      // as wide as the cards.
+      final detailsWidth = tester.getSize(cards).width;
+      Rect button(Finder label) => tester.getRect(
+        find.ancestor(of: label, matching: find.byType(FilledButton)),
+      );
+      expect(button(directions).center.dy, button(call).center.dy);
+      expect(button(directions).left, greaterThan(button(call).right));
+      expect(
+        button(call).width + button(directions).width,
+        lessThan(detailsWidth),
+      );
+      expect(button(call).top, greaterThan(tester.getRect(cards).bottom));
+      expect(button(website).top, greaterThan(button(call).bottom));
+      expect(button(pin).top, greaterThan(button(website).bottom));
+      expect(button(website).width, detailsWidth);
+      expect(button(pin).width, detailsWidth);
+      for (final label in [call, directions, website, pin]) {
+        expect(
+          inDetails(find.ancestor(of: label, matching: find.byType(Card))),
+          findsNothing,
+        );
+      }
+
+      // The rating and number of reviews are above the stars, and whether
+      // it's open is on the right.
+      final rating = inDetails(find.text('4.9'));
+      final status = inDetails(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Text &&
+              ['Open now', 'Closed', 'Closed today'].contains(widget.data),
+        ),
+      );
+      expect(
+        tester.getCenter(rating).dy,
+        lessThan(tester.getCenter(inDetails(find.byIcon(Icons.star)).first).dy),
+      );
+      final reviews = inDetails(find.text(' (87)'));
+      expect(
+        tester.getBottomLeft(reviews).dy,
+        closeTo(tester.getBottomLeft(rating).dy, 4),
+      );
+      expect(
+        tester.getTopLeft(reviews).dx,
+        greaterThanOrEqualTo(tester.getTopRight(rating).dx),
+      );
+      expect(
+        tester.getTopLeft(status).dx,
+        greaterThan(tester.getTopRight(reviews).dx),
+      );
+    });
+
+    testWidgets('a business without a known distance or phone still has '
+        'directions', (tester) async {
+      await pumpScreen(
+        tester,
+        providers: const [
+          ServiceProvider(
+            id: 'far',
+            name: 'Somewhere Repairs',
+            services: [ServiceType.handyman],
+            address: '9 Far Rd',
+          ),
+        ],
+      );
+
+      await tester.tap(find.text('Somewhere Repairs'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Directions'), findsOneWidget);
+      expect(find.byIcon(Icons.call), findsNothing);
     });
 
     testWidgets('a business pinned from its details is listed first', (
@@ -761,7 +867,7 @@ void main() {
       expect(top('Fix It All'), greaterThan(top('Pipe Pros')));
       expect(find.byIcon(Icons.push_pin), findsNothing);
 
-      await togglePin('Fix It All', 'Pin');
+      await togglePin('Fix It All', 'Pin to top');
       expect(top('Fix It All'), lessThan(top('Spark Electric')));
       // Read out with the card.
       expect(find.bySemanticsLabel(RegExp('Pinned')), findsOneWidget);

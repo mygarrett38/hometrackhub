@@ -27,7 +27,24 @@ class LocationException implements Exception {
 /// Finds the device's location with its location services. Only an
 /// approximate location is asked for, since that's enough to find
 /// businesses nearby.
+///
+/// Finding a fresh location can take several seconds, so a location found
+/// within the last [recentEnough] is used instead when there is one: one
+/// this found itself, or the last one the device knows of.
 class DeviceLocationService implements LocationService {
+  DeviceLocationService({DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
+
+  /// How old a location can be and still be used, rather than waiting for
+  /// a fresh one. Close enough to find businesses unless the user has
+  /// driven a long way since.
+  static const recentEnough = Duration(minutes: 10);
+
+  final DateTime Function() _clock;
+
+  /// The location this last found, and when.
+  ({Coordinates where, DateTime at})? _lastFound;
+
   @override
   Future<Coordinates> currentLocation() async {
     try {
@@ -74,20 +91,29 @@ class DeviceLocationService implements LocationService {
         break;
     }
 
+    // Checked after the permission, so a location isn't used once the
+    // user has taken it away.
+    if (_lastFound case final found? when _isRecent(found.at)) {
+      return found.where;
+    }
+    final last = await _lastKnownPosition();
+    if (last != null && _isRecent(last.timestamp)) return _remember(last);
+
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: Duration(seconds: 15),
+      return _remember(
+        await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 15),
+          ),
         ),
       );
-      return (latitude: position.latitude, longitude: position.longitude);
     } on TimeoutException {
       // Indoors a fresh location can take a while, and where the phone
-      // last was is close enough to find businesses.
-      final last = await Geolocator.getLastKnownPosition();
-      if (last != null) {
-        return (latitude: last.latitude, longitude: last.longitude);
+      // last was, however long ago, is better than nothing. It may have
+      // found one while this waited.
+      if (await _lastKnownPosition() ?? last case final latest?) {
+        return (latitude: latest.latitude, longitude: latest.longitude);
       }
       throw const LocationException(_notFound);
     } on LocationServiceDisabledException {
@@ -101,5 +127,24 @@ class DeviceLocationService implements LocationService {
         'Allow it, or search near a ZIP code instead.',
       );
     }
+  }
+
+  /// The last location the device knows of, or `null` if it doesn't know
+  /// one or can't say.
+  Future<Position?> _lastKnownPosition() async {
+    try {
+      return await Geolocator.getLastKnownPosition();
+    } on Exception {
+      return null;
+    }
+  }
+
+  bool _isRecent(DateTime time) => _clock().difference(time) <= recentEnough;
+
+  /// Keeps [position] to use again while it's recent, and returns it.
+  Coordinates _remember(Position position) {
+    final where = (latitude: position.latitude, longitude: position.longitude);
+    _lastFound = (where: where, at: position.timestamp);
+    return where;
   }
 }

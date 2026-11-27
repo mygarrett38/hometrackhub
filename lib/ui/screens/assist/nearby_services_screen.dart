@@ -28,9 +28,10 @@ import '../settings/nearby_services_settings_screen.dart';
 /// a search finds them.
 ///
 /// Where to search around and the order the results start in come from the
-/// Nearby services settings. The search starts out for [initialService],
-/// such as the kind of business the assistant suggested hiring. Changing them while the screen is open, such as
-/// from the Settings tab, searches again or reorders the results.
+/// Nearby services settings. Changing them while the screen is open, such as
+/// from the Settings tab, searches again or reorders the results. The search
+/// starts out for [initialService], such as the kind of business the
+/// assistant suggested hiring.
 class NearbyServicesScreen extends StatelessWidget {
   const NearbyServicesScreen({super.key, this.initialService});
 
@@ -306,6 +307,9 @@ class _NearbyServicesViewState extends State<_NearbyServicesView> {
   void _showDetails(ServiceProvider provider, DateTime now) {
     showModalBottomSheet<void>(
       context: context,
+      // The screens' own background, so the cards in it stand out as they
+      // do on every other screen.
+      backgroundColor: Theme.of(context).colorScheme.surface,
       showDragHandle: true,
       isScrollControlled: true,
       useSafeArea: true,
@@ -711,9 +715,9 @@ class _CompactRating extends StatelessWidget {
   }
 }
 
-/// A business's stars, average rating and number of reviews, for its
-/// details, or "No reviews yet". Read aloud as one phrase, such as "Rated
-/// 4.5 out of 5 from 120 reviews".
+/// A business's average rating and number of reviews, with its stars under
+/// them, for its details, or "No reviews yet". Read aloud as one phrase,
+/// such as "Rated 4.5 out of 5 from 120 reviews".
 class _Rating extends StatelessWidget {
   const _Rating({required this.provider});
 
@@ -732,32 +736,48 @@ class _Rating extends StatelessWidget {
     return Semantics(
       label: _ratingLabel(rating, _reviews(count)),
       excludeSemantics: true,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          for (var star = 0; star < 5; star++)
-            Icon(
-              // Rounded to the nearest half star.
-              switch (rating - star) {
-                >= 0.75 => Icons.star,
-                >= 0.25 => Icons.star_half,
-                _ => Icons.star_border,
-              },
-              size: 18,
-              color: theme.colorScheme.tertiary,
-            ),
-          const SizedBox(width: 6),
-          Text(rating.toStringAsFixed(1), style: theme.textTheme.labelLarge),
-          Text(' ($count)', style: muted),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                rating.toStringAsFixed(1),
+                style: theme.textTheme.titleLarge,
+              ),
+              Text(' ($count)', style: muted),
+            ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var star = 0; star < 5; star++)
+                Icon(
+                  // Rounded to the nearest half star.
+                  switch (rating - star) {
+                    >= 0.75 => Icons.star,
+                    >= 0.25 => Icons.star_half,
+                    _ => Icons.star_border,
+                  },
+                  size: 18,
+                  color: theme.colorScheme.tertiary,
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// Whether a business is open at [now], and its hours that day only, on
-/// one line: "Open now · 8 AM – 5 PM", "Closed · 8 AM – 5 PM",
-/// "Closed today" or "Open 24 hours". Only for a business whose hours are
-/// known.
+/// Whether a business is open at [now], with its hours that day only under
+/// it, lined up on the right: "Open now" or "Closed" over "8 AM – 5 PM", or
+/// just "Closed today" or "Open 24 hours". Only for a business whose hours
+/// are known.
 class _OpenStatus extends StatelessWidget {
   const _OpenStatus({required this.provider, required this.now});
 
@@ -776,26 +796,24 @@ class _OpenStatus extends StatelessWidget {
         '${_time(context, today.opens)} – ${_time(context, today.closes)}',
       ),
     };
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: status,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: open ? theme.colorScheme.primary : theme.colorScheme.error,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          status,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: open ? theme.colorScheme.primary : theme.colorScheme.error,
+          ),
+        ),
+        if (hours != null)
+          Text(
+            hours,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          if (hours != null)
-            TextSpan(
-              text: ' · $hours',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-        ],
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+      ],
     );
   }
 
@@ -810,9 +828,10 @@ class _OpenStatus extends StatelessWidget {
   }
 }
 
-/// The details of one business, in a sheet that slides up from the bottom,
-/// with buttons to call it, open its website, get directions in a maps app,
-/// or pin it to the top of the results.
+/// The details of one business, in a sheet that slides up from the bottom:
+/// a card with its name, rating, hours and address, then buttons to call it,
+/// get directions in a maps app, open its website, or pin it to the top of
+/// the results.
 class _ProviderDetails extends StatelessWidget {
   const _ProviderDetails({required this.provider, required this.now});
 
@@ -841,49 +860,98 @@ class _ProviderDetails extends StatelessWidget {
             _CreditedPhoto(photo: photo, credits: provider.photoCredits),
             const SizedBox(height: 16),
           ],
-          Text(provider.name, style: theme.textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          _Rating(provider: provider),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final service in provider.services)
-                Chip(avatar: Icon(service.icon), label: Text(service.label)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _DetailRow(icon: Icons.place_outlined, text: provider.address),
-          if (provider.distanceMiles case final miles?)
-            _DetailRow(
-              icon: Icons.near_me_outlined,
-              text: '${_miles(miles)} away',
-            ),
-          if (provider.hours != null)
-            _DetailRow(
-              icon: Icons.schedule,
-              child: _OpenStatus(provider: provider, now: now),
-            ),
-          if (phone != null)
-            _DetailRow(icon: Icons.phone_outlined, text: phone),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              if (phone != null)
-                _ActionButton(
-                  icon: Icons.call,
-                  label: 'Call',
-                  filled: true,
-                  onPressed: () => _open(
-                    context,
-                    Uri(
-                      scheme: 'tel',
-                      path: phone.replaceAll(RegExp(r'[^0-9+]'), ''),
-                    ),
-                    'the phone app',
+          // What the business is and how it's rated, then, under a line,
+          // where it is.
+          Card(
+            margin: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(provider.name, style: theme.textTheme.headlineSmall),
+                      const SizedBox(height: 8),
+                      // The rating on the left, and whether it's open on the
+                      // right.
+                      Row(
+                        children: [
+                          _Rating(provider: provider),
+                          const Spacer(),
+                          if (provider.hours != null)
+                            _OpenStatus(provider: provider, now: now),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+                  child: _DetailRow(
+                    icon: Icons.place_outlined,
+                    text: provider.address,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Below the cards: calling, which shows the phone number, and
+          // directions, which show how far away it is, side by side, then
+          // the website and pinning, each on a line of its own.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              Row(
+                spacing: 8,
+                children: [
+                  if (phone != null)
+                    Expanded(
+                      child: _ActionButton(
+                        icon: Icons.call,
+                        label: phone,
+                        semanticsLabel: 'Call $phone',
+                        filled: true,
+                        onPressed: () => _open(
+                          context,
+                          Uri(
+                            scheme: 'tel',
+                            path: phone.replaceAll(RegExp(r'[^0-9+]'), ''),
+                          ),
+                          'the phone app',
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: _ActionButton(
+                      icon: Icons.directions_outlined,
+                      label: switch (provider.distanceMiles) {
+                        final miles? => _miles(miles),
+                        null => 'Directions',
+                      },
+                      semanticsLabel: switch (provider.distanceMiles) {
+                        final miles? => 'Directions, ${_miles(miles)} away',
+                        null => null,
+                      },
+                      onPressed: () => _open(
+                        context,
+                        // The business's own Google Maps page when there is
+                        // one.
+                        provider.mapsLink ??
+                            Uri.https('www.google.com', '/maps/search/', {
+                              'api': '1',
+                              'query': '${provider.name}, ${provider.address}',
+                            }),
+                        'directions',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               if (website != null)
                 _ActionButton(
                   icon: Icons.language,
@@ -891,22 +959,10 @@ class _ProviderDetails extends StatelessWidget {
                   onPressed: () => _open(context, website, 'the website'),
                 ),
               _ActionButton(
-                icon: Icons.directions_outlined,
-                label: 'Directions',
-                onPressed: () => _open(
-                  context,
-                  // The business's own Google Maps page when there is one.
-                  provider.mapsLink ??
-                      Uri.https('www.google.com', '/maps/search/', {
-                        'api': '1',
-                        'query': '${provider.name}, ${provider.address}',
-                      }),
-                  'directions',
-                ),
-              ),
-              _ActionButton(
                 icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                label: pinned ? 'Unpin' : 'Pin',
+                label: pinned ? 'Unpin' : 'Pin to top',
+                // Says what it's pinned to the top of.
+                semanticsLabel: pinned ? null : 'Pin to top of results',
                 onPressed: () => settings.update(
                   settings.settings.withBusinessPinned(provider.id, !pinned),
                 ),
@@ -1041,53 +1097,50 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// One of the evenly spaced buttons under a business's details, with its
-/// label under its icon. [filled] is for the main action.
+/// One of the buttons under a business's details, as wide as the space it's
+/// given, with its icon before its label. [filled] is for the main
+/// action. [semanticsLabel] is read aloud in place of [label] when the
+/// label alone doesn't say what the button does, such as a phone number.
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.semanticsLabel,
     this.filled = false,
   });
 
   final IconData icon;
   final String label;
+  final String? semanticsLabel;
   final VoidCallback onPressed;
   final bool filled;
 
   @override
   Widget build(BuildContext context) {
-    final content = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon),
-          const SizedBox(height: 4),
-          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ],
-      ),
+    final style = FilledButton.styleFrom(
+      minimumSize: const Size.fromHeight(48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     );
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
+    final text = Text(
+      label,
+      semanticsLabel: semanticsLabel,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: filled
-            ? FilledButton(
-                style: FilledButton.styleFrom(shape: shape),
-                onPressed: onPressed,
-                child: content,
-              )
-            : FilledButton.tonal(
-                style: FilledButton.styleFrom(shape: shape),
-                onPressed: onPressed,
-                child: content,
-              ),
-      ),
-    );
+    return filled
+        ? FilledButton.icon(
+            style: style,
+            onPressed: onPressed,
+            icon: Icon(icon),
+            label: text,
+          )
+        : FilledButton.tonalIcon(
+            style: style,
+            onPressed: onPressed,
+            icon: Icon(icon),
+            label: text,
+          );
   }
 }
 
@@ -1123,8 +1176,8 @@ class _Message extends StatelessWidget {
   }
 }
 
-/// A distance such as "2.4 mi".
-String _miles(double miles) => '${miles.toStringAsFixed(1)} mi';
+/// A distance such as "2.4 miles".
+String _miles(double miles) => '${miles.toStringAsFixed(1)} miles';
 
 /// A number of reviews such as "120 reviews".
 String _reviews(int count) => '$count ${count == 1 ? 'review' : 'reviews'}';
