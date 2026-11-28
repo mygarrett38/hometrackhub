@@ -1922,6 +1922,8 @@ void main() {
           name: name,
           category: HomeItemCategory.custom,
           location: location,
+          manufacturer: 'Acme',
+          modelNumber: 'X$id',
           tasks: [
             MaintenanceTask(
               id: 't$id',
@@ -1952,8 +1954,10 @@ void main() {
     // "kitchen" and "Kitchen" are the same room.
     expect(find.text('kitchen'), findsNothing);
     expect(find.textContaining('task'), findsNWidgets(4));
-    // Only when the next task is due, without counting the tasks.
+    // Only the name and when the next task is due, without counting the
+    // tasks or showing other details such as the make and model.
     expect(find.text('Next task due in 3 weeks'), findsNWidgets(4));
+    expect(find.textContaining('Acme'), findsNothing);
     // Each room's heading shows how many items are in it.
     expect(find.text('2'), findsOneWidget);
     expect(find.text('1'), findsNWidgets(2));

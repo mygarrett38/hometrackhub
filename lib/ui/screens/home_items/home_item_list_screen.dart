@@ -158,6 +158,8 @@ DateTime? _nextDueDate(HomeItem homeItem) => homeItem.tasks.isEmpty
           .map((task) => task.nextDueDate)
           .reduce((a, b) => a.isBefore(b) ? a : b);
 
+/// A home item's name and when its next task is due. Its other details
+/// are on the screen it opens.
 class _HomeItemTile extends StatelessWidget {
   const _HomeItemTile({required this.homeItem});
 
@@ -168,20 +170,12 @@ class _HomeItemTile extends StatelessWidget {
     final today = dateOnly(DateTime.now());
     final nextDue = _nextDueDate(homeItem);
 
-    final makeAndModel = [
-      homeItem.manufacturer,
-      homeItem.modelNumber,
-    ].where((part) => part.isNotEmpty).join(' ');
-    // The room is already the heading above.
-    final subtitle = [
-      if (makeAndModel.isNotEmpty) makeAndModel,
-      if (nextDue != null) describeNextTaskDue(nextDue, today),
-    ].join(' · ');
-
     return ListTile(
       leading: Icon(homeItem.category.icon),
       title: Text(homeItem.name),
-      subtitle: subtitle.isEmpty ? null : Text(subtitle),
+      subtitle: nextDue == null
+          ? null
+          : Text(describeNextTaskDue(nextDue, today)),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
